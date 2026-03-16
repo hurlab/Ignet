@@ -163,7 +163,7 @@ Ignet 2.0 will be the premier open-access platform for biomedical literature-dri
 | **Backend services** | PHP + 2 Python services | Python microservices (Flask + Waitress) | Consistent stack, easier to maintain |
 | **Database** | MySQL (single instance, no optimization) | MySQL with read replicas + Redis cache | Performance at scale |
 | **Search** | SQL MATCH/AGAINST | Elasticsearch (optional) | Full-text search at scale |
-| **Pipeline** | IgnetSciMiner (Perl/Python/Shell) | IgnetSciMiner + PubTator API + PMC pipeline | Dual-corpus, enhanced NER |
+| **Pipeline** | IgnetSciMiner (Perl/Python/Shell) | IgnetSciMiner enhanced + PMC pipeline | Dual-corpus, 5-filter ontology mining |
 | **LLM** | GPT-4o only | GPT-4o + Llama 3.2 (fine-tuned) | Cost reduction + domain specialization |
 | **Deployment** | Manual Apache + systemd | Docker Compose + Nginx | Reproducible, portable |
 | **Monitoring** | None | Prometheus + Grafana | Observability |
@@ -224,7 +224,7 @@ POST   /api/v1/admin/pipeline/trigger  # Manual pipeline run
 services/
   api_gateway.py          # Flask app, route registration, auth middleware
   network_service.py      # Network construction, centrality, export
-  entity_service.py       # Entity extraction (PubTator + local NER)
+  entity_service.py       # Entity extraction (SciMiner 5-filter NER)
   llm_service.py          # LLM routing (GPT-4o, Llama 3.2)
   ontology_service.py     # Ontology lookup, term expansion
   user_service.py         # Auth, profiles, saved queries
@@ -322,22 +322,58 @@ NCBI FTP → XML Download → Stream Parse → Sentence Split
 
 **Status:** Built, tested with sample data. Needs: live NCBI download test, daily cron setup.
 
-**Enhancements for 2.0:**
-- Add PubTator API integration for enhanced NER (see Section 12)
-- Add abbreviation resolution (Ab3P or similar)
-- Add negation detection (NegEx or transformer-based)
-- Parallelize across multiple XML files (currently sequential)
+#### PubMed Baseline vs Update File Strategy
 
-### 6.3 PMC Open Access Pipeline (New)
+NCBI releases an **annual baseline** (complete PubMed corpus) in December, then **daily update files** continuing from the baseline's last file number.
 
 ```
+2026 Baseline (released Dec 2025):
+  pubmed26n0001.xml through pubmed26n1334.xml  (all 40M+ citations)
+
+2026 Daily Updates (started Jan 30, 2026):
+  pubmed26n1335.xml (first update) through pubmed26n1384.xml (latest, Mar 15)
+  One file per day, ~20-80MB each
+  Contains: new, revised, and deleted citations
+```
+
+**Current state:**
+- Existing DB has 15.8M gene pairs from prior baseline processing
+- Pipeline was configured for `pubmed25n` (2025 baseline)
+- The `pubmed25n` files have been absorbed into the `pubmed26n` baseline
+- NCBI only serves `pubmed26n*` files now
+
+**Activation plan:**
+1. Change `PUBMED_FILE_PREFIX` from `"pubmed25n"` → `"pubmed26n"` in `config.env`
+2. Set `last_processed_number.txt` to `1334` (baseline end; next download = 1335)
+3. Set `DB_ENABLED="yes"` in `config.env`
+4. Ensure `~/.my.cnf` exists with DB credentials (already created)
+5. **Catch-up:** Process ~50 files (1335-1384) sequentially over several days
+6. **Daily cron:** `0 2 * * *` runs `--download` mode for ongoing updates
+7. The pipeline's delete-then-insert strategy handles revised/corrected articles
+
+**Enhancements for 2.0:**
+- Add abbreviation resolution (Ab3P or similar)
+- Add negation detection (NegEx or transformer-based)
+- Parallelize across multiple XML files for catch-up processing
+- Update ontology dictionaries (especially INO from 2016, HUGO/HGNC from ~2018)
+
+### 6.3 PMC Open Access Pipeline (Future — Separate Server)
+
+> **Note:** PMCOA processing is resource-intensive and will run on a **separate server**
+> on the same network. The current Ignet server has limited disk/compute for full-text
+> processing. A portable folder (`IgnetSciMiner-PMCOA/`) will be created for deployment
+> to the processing server, which ships results back via rsync/scp for DB loading.
+
+```
+[Separate Processing Server]
 PMC OA Bulk Download (ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/)
   → XML/JATS Parse (full text sections)
   → Section-aware sentence splitting (Methods, Results, Discussion)
   → Entity extraction (enhanced with section context)
   → Relation extraction (full-text context improves precision)
-  → Separate table set: t_sentence_hit_gene2gene_Host_PMCOA
-  → MySQL
+  → Output: TSV mining results (same format as PubMed pipeline)
+  → rsync/scp → Ignet server
+  → DB load into: t_sentence_hit_gene2gene_Host_PMCOA
 ```
 
 **Key Differences from Abstract Pipeline:**
@@ -345,6 +381,7 @@ PMC OA Bulk Download (ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/)
 - Section awareness allows weighting (Results > Methods > Introduction)
 - Larger corpus per article → more compute, need batch processing
 - PMC OA updates weekly (not daily like PubMed)
+- **Runs on separate server** — only DB loading happens on Ignet server
 
 ### 6.4 Pipeline Scheduling
 
@@ -352,7 +389,7 @@ PMC OA Bulk Download (ftp.ncbi.nlm.nih.gov/pub/pmc/oa_bulk/)
 |----------|-----------|---------|-------------------|
 | PubMed abstracts | Daily (2 AM CDT) | Cron + `--download` | 1-2 hours/file |
 | PMC OA full-text | Weekly (Sunday 2 AM) | Cron + bulk download | 8-12 hours |
-| PubTator refresh | Monthly | Manual/cron | 4-6 hours |
+| Ontology dictionary refresh | Quarterly | Manual | 1-2 hours |
 | Ontology updates | Quarterly | Manual | 30 minutes |
 
 ---
@@ -527,8 +564,7 @@ User enters keywords/genes/custom text
   ├─ Source Selection: [PubMed Abstracts] [PMC Full-Text] [Both] [Custom Text]
   │
   ├─ Entity Extraction (enhanced):
-  │   ├─ PubTator API (genes, chemicals, diseases, species, mutations)
-  │   ├─ Local NER (INO, VO, HDO, OAE terms)
+  │   ├─ SciMiner 5-filter NER (Host genes, VO, INO, HDO, DrugBank)
   │   ├─ Abbreviation resolution (Ab3P)
   │   └─ Negation filtering (NegEx)
   │
@@ -601,12 +637,12 @@ User Input:
          │
          ▼
    Entity Extraction:
-     ├─ Gene/protein recognition (PubTator + BioBERT NER)
-     ├─ Chemical/drug recognition
-     ├─ Disease recognition (HDO)
-     ├─ Species recognition
-     ├─ Ontology term matching (INO, VO, OAE)
-     └─ Abbreviation expansion
+     ├─ Gene/protein recognition (SciMiner Host filter — 25,256 HUGO genes)
+     ├─ Drug recognition (SciMiner DrugBank filter — 153K terms)
+     ├─ Disease recognition (SciMiner HDO filter — 11,840 DOID terms)
+     ├─ Vaccine recognition (SciMiner VO filter — 3,454 terms)
+     ├─ Interaction typing (SciMiner INO filter — 1,051 terms)
+     └─ Abbreviation expansion (future enhancement)
          │
          ▼
    Network Construction:
@@ -675,7 +711,7 @@ User Input:
 ### 10.3 Llama 3.2 (Local) — Batch Processing & Domain Tasks
 
 - **Fine-tuned variants:**
-  - `ignet-llama-3.2-ner` — Biomedical NER (trained on PubTator + manual annotations)
+  - `ignet-llama-3.2-ner` — Biomedical NER (trained on SciMiner output + manual annotations)
   - `ignet-llama-3.2-re` — Relation extraction (trained on interaction data)
   - `vignet-llama-3.2-vaccine` — Vaccine candidate prediction (trained on VIOLIN)
 - **Benefits:** No API costs for batch processing, data stays on-premises
@@ -713,93 +749,189 @@ Provide:
 
 ## 11. Ontology Framework
 
-### 11.1 Current Ontology Integration
+### 11.1 Current Ontology & Dictionary Integration (SciMiner Pipeline)
 
-| Ontology | Abbreviation | Current Use | Coverage |
-|----------|-------------|-------------|----------|
-| Interaction Network Ontology | INO | Interaction type classification | 800+ terms |
-| Vaccine Ontology | VO | Vaccine mention detection | Binary flag |
-| Human Disease Ontology | HDO | Disease term extraction | Full HDO |
-| Ontology of Adverse Events | OAE | Dev module only | Limited |
-| Information Artifact Ontology | IAO | Referenced in dev | Not active |
+The daily processing pipeline (IgnetSciMiner) runs **5 parallel mining filters**, each backed by curated ontology dictionaries. These are the actual resources in production:
 
-### 11.2 Enhanced Ontology Strategy for 2.0
+| Filter | Ontology/Database | Dictionary File | Terms | DB Table | DB Rows |
+|--------|------------------|----------------|-------|----------|---------|
+| **Host Genes** | HUGO Gene Nomenclature (HGNC) | `HUGO_trimmed_final_default` | 25,256 genes | `t_sentence_hit_gene2gene_Host` | 15.8M |
+| **INO** | Interaction Network Ontology | `INO_Unique_Terms_IDs_only_20160224.txt` | 1,051 interaction terms | `ino_host25` | 7.4M |
+| **VO** | Vaccine Ontology | `VO_term_updated_250403.txt` + hierarchy | 3,454 vaccines + 120 pathogen strains | `vo_host25` | (active) |
+| **HDO** | Human Disease Ontology | `HDO_Unique_Terms_20250307.txt` | 11,840 disease terms (DOID) | `hdo_host` | (active) |
+| **DrugBank** | DrugBank Database (v5.1) | `drugbank_name_to_ID_v5.1.txt` | 153,055 drug names/synonyms | `drug_host` | (active) |
 
-**Goal:** Deep, systematic ontology integration across all modules.
+**Supporting resources in Host gene filter:**
+- `HUGO_2_external_default` — 25,254 gene entries with Ensembl, UniProt, GO, KEGG, Reactome cross-references
+- `ENGDICTIONARY_default` — 134,996 English words (ignore list to filter common words from gene symbols)
+- `DUPLICATENAME_default` — 932 ambiguous gene name mappings
+- `PARTNAMEMIDDLE_default`, `UNIQUESYMBOL_default`, `EXCLUDE_additional` — Additional filtering rules
 
-#### INO (Interaction Network Ontology) — Expanded Role
+**Supporting resources in VO filter:**
+- `VO_hierarchy_updated_250328.txt` — Parent-child hierarchy for vaccine classification
+- `Strains_fullnames_250403.txt` — 120 pathogen strain full names
+- `Synonyms.txt` — Vaccine name synonyms
+- `VO_terms_to_ignore_190510.txt` — False-positive exclusion list
 
-Currently: keyword matching for interaction type detection.
-**2.0:** Full INO hierarchy for typed edges in networks.
+**Supporting resources in DrugBank filter:**
+- `drugbank_IGNORE.txt` — 1,230 common terms to ignore (glucose, sucrose, thrombin, etc.)
+
+### 11.2 How Each Filter Works in the Pipeline
+
+```
+For each sentence in the PubMed article:
+  │
+  ├─ Host Gene Filter:
+  │   Match against 25,256 HUGO gene symbols + synonyms
+  │   Filter out English dictionary words (134K terms)
+  │   Resolve duplicate/ambiguous names (932 entries)
+  │   If 2+ genes found in same sentence → record as gene-gene interaction
+  │   Output: gene pairs with sentence IDs and PMIDs
+  │
+  ├─ INO Filter:
+  │   Match against 1,051 interaction terms (e.g., "phosphorylation",
+  │   "binding", "activation", "inhibition")
+  │   Record: sentence_id, PMID, INO term ID, matching phrase
+  │   Used to TYPE gene-gene interactions (what kind of interaction)
+  │
+  ├─ VO Filter:
+  │   Match against 3,454 vaccine terms with hierarchy
+  │   Also matches 120 pathogen strain names
+  │   Record: sentence_id, PMID, VO term ID, matching phrase
+  │   Used to flag vaccine-relevant sentences
+  │
+  ├─ HDO Filter:
+  │   Match against 11,840 human disease terms (DOID identifiers)
+  │   Record: PMID, HDO term ID, disease term
+  │   Used for disease context in gene networks
+  │
+  └─ DrugBank Filter:
+      Match against 153,055 drug names/synonyms
+      Filter out 1,230 common false-positive terms
+      Record: PMID, DrugBank ID, drug term
+      Used for drug context in gene networks
+```
+
+### 11.3 Enhanced Ontology Strategy for 2.0
+
+**Goal:** Deeper, more systematic ontology integration across all modules — moving from simple dictionary matching to hierarchical, relationship-aware ontology use.
+
+#### INO (Interaction Network Ontology) — From Keywords to Typed Edges
+
+**Current:** 1,051 terms matched as keywords, stored in `ino_host25`.
+**2.0 Enhancement:**
+- Load full INO OWL hierarchy into lookup table
+- Classify each gene-gene interaction by INO subclass
+- Display interaction types as **edge labels** in network visualization
+- Allow filtering by interaction type (e.g., "show only phosphorylation edges")
+- Dictionary update: INO terms file is from 2016 — update to latest INO release
 
 ```
 Example: "BRCA1 phosphorylates BARD1"
   → Edge type: INO:0000123 (phosphorylation)
   → Parent: INO:0000100 (post-translational modification)
   → Grandparent: INO:0000001 (interaction)
+  → Network display: BRCA1 --[phosphorylation]--> BARD1
 ```
 
-**Implementation:**
-- Load full INO OWL into lookup table
-- Classify each extracted interaction by INO subclass
-- Display interaction types as edge labels in network
-- Allow filtering by interaction type (e.g., "show only phosphorylation edges")
+#### VO (Vaccine Ontology) — Full Hierarchy for Vignet
 
-#### VO (Vaccine Ontology) — Enhanced for Vignet
+**Current:** 3,454 vaccine terms + 120 pathogen strains + hierarchy.
+**2.0 Enhancement:**
+- Expose VO hierarchy in web UI (tree browser)
+- Link vaccine terms to gene networks (which genes are discussed alongside each vaccine)
+- Cross-reference VO terms with INO interaction types for vaccine mechanism networks
+- Core resource for Vignet sister platform
 
-Currently: binary `hasVaccine` flag.
-**2.0:** Full VO term extraction with hierarchy.
+#### HDO (Human Disease Ontology) — Disease-Centric Network Views
 
-```
-Example: "BCG vaccine protects against tuberculosis"
-  → VO:0000731 (BCG vaccine)
-  → Disease: tuberculosis
-  → Mechanism: protection
-```
+**Current:** 11,840 disease terms with DOID identifiers.
+**2.0 Enhancement:**
+- Enable **disease-centric network views**: "Show me the gene network for [disease]"
+- Disease-gene association scoring using network centrality within disease-specific sub-networks
+- Cross-reference with VO for vaccine-disease connections
+- Enable multi-disease comparison networks
 
-#### HDO (Human Disease Ontology) — Contextual Disease Mapping
+#### DrugBank — Drug-Gene-Disease Triangulation
 
-Expand from simple term extraction to **disease-gene association scoring** using network centrality within disease-specific sub-networks.
+**Current:** 153,055 drug name/synonym entries with DrugBank IDs.
+**2.0 Enhancement:**
+- Link drug mentions to gene networks for drug-gene interaction views
+- Cross-reference DrugBank IDs with external databases (ChEBI, PubChem)
+- Enable drug repurposing queries: "What genes targeted by [drug] appear in [disease] networks?"
+- Drug-gene-disease triangulation: combine all three entity types in network visualization
 
 #### OAE (Ontology of Adverse Events) — New Integration
 
-- Extract adverse event mentions from vaccine literature
+- Extract adverse event mentions from vaccine/drug literature
 - Link to VO terms for vaccine-AE associations
+- Link to DrugBank terms for drug-AE associations
 - Critical for Vignet (vaccine safety analysis)
+- Currently in `dev/` modules only — promote to production filter
 
 #### Gene Ontology (GO) — New Integration
 
-- Annotate extracted genes with GO terms (biological process, molecular function, cellular component)
+- The HUGO external dictionary already contains GO annotations for each gene
+- Expose GO terms in gene profile pages (biological process, molecular function, cellular component)
 - Enable GO enrichment analysis on extracted networks
-- Source: GOA (Gene Ontology Annotation) database
+- Group network nodes by GO biological process for pathway-level views
 
-### 11.3 Ontology Service Architecture
+### 11.4 Dictionary Update Strategy
+
+| Dictionary | Current Version | Update Frequency | Source |
+|-----------|----------------|-----------------|--------|
+| HUGO/HGNC | ~2018 (25,256 genes) | Quarterly | genenames.org |
+| INO | 2016-02-24 (1,051 terms) | **Needs update** | ontobee.org/ontology/INO |
+| VO | 2025-04-03 (3,454 terms) | Recent/current | violinet.org/vaccineontology |
+| HDO | 2025-03-07 (11,840 terms) | Recent/current | disease-ontology.org |
+| DrugBank | v5.1 (153,055 entries) | Annually | drugbank.com |
+
+**Priority updates needed:**
+1. **INO** — 10 years old, likely missing many newer interaction terms
+2. **HUGO/HGNC** — ~8 years old, missing recently approved gene symbols
+3. **DrugBank** — v5.1 may be outdated; check for latest version
+
+### 11.5 Ontology Service Architecture (2.0)
 
 ```python
 class OntologyService:
     """Unified ontology lookup and annotation service."""
 
     def __init__(self):
-        self.ino = load_ontology('INO')    # ~800 terms
-        self.vo = load_ontology('VO')      # ~10,000 terms
-        self.hdo = load_ontology('HDO')    # ~12,000 terms
-        self.oae = load_ontology('OAE')    # ~4,000 terms
-        self.go = load_ontology('GO')      # ~45,000 terms
+        self.ino = load_ontology('INO')        # 1,051 terms (to update)
+        self.vo = load_ontology('VO')          # 3,454 vaccines + hierarchy
+        self.hdo = load_ontology('HDO')        # 11,840 disease terms
+        self.drugbank = load_ontology('DrugBank')  # 153,055 drug entries
+        self.hugo = load_ontology('HUGO')      # 25,256 genes + GO/KEGG
+        self.oae = load_ontology('OAE')        # Future: adverse events
+        self.go = load_ontology('GO')          # Via HUGO cross-references
 
     def annotate_interaction(self, sentence, gene1, gene2):
         """Classify interaction type using INO hierarchy."""
         ...
 
     def annotate_genes(self, gene_list):
-        """Add GO annotations to genes."""
+        """Add GO, pathway, and disease annotations to genes."""
         ...
 
     def annotate_diseases(self, text):
-        """Extract HDO terms from text."""
+        """Extract HDO terms from text with DOID identifiers."""
+        ...
+
+    def annotate_drugs(self, text):
+        """Extract DrugBank terms from text with DB identifiers."""
+        ...
+
+    def annotate_vaccines(self, text):
+        """Extract VO terms with hierarchy classification."""
         ...
 
     def get_term_hierarchy(self, ontology, term_id):
-        """Return parent chain for a term."""
+        """Return parent chain for a term (VO, INO, HDO)."""
+        ...
+
+    def cross_reference(self, entity_type, entity_id, target_ontology):
+        """Cross-reference between ontologies (e.g., drug → gene → disease)."""
         ...
 ```
 
@@ -807,10 +939,10 @@ class OntologyService:
 
 ## 12. Entity Extraction & Relation Mining
 
-### 12.1 Current Approach (SciMiner)
+### 12.1 Current Approach (SciMiner Pipeline)
 
-- **Dictionary-based** matching with pre-compiled term lists
-- **Co-occurrence** within sentences → gene-gene interactions
+- **Dictionary-based** matching with 5 curated ontology/database dictionaries (see Section 11.1)
+- **Co-occurrence** within sentences → gene-gene interactions (2+ genes per sentence)
 - **Keyword-based** interaction type detection (INO terms)
 
 **Limitations:**
@@ -822,61 +954,48 @@ class OntologyService:
 ### 12.2 Enhanced Extraction Pipeline (2.0)
 
 ```
-Input Text
+Input Text (PubMed XML, PMC full-text, or user-supplied)
   │
-  ├─ Step 1: PubTator API (NCBI) ──────────── Pre-annotated entities
-  │   Returns: genes, chemicals, diseases,      for PubMed articles
-  │            species, mutations, cell lines    (instant, no compute)
+  ├─ Step 1: SciMiner 5-Filter NER ─────────── Core entity extraction
+  │   ├─ Host gene filter (25,256 HUGO genes + synonyms)
+  │   ├─ VO filter (3,454 vaccine terms + hierarchy)
+  │   ├─ INO filter (1,051 interaction types)
+  │   ├─ HDO filter (11,840 disease terms with DOID)
+  │   └─ DrugBank filter (153,055 drug names/synonyms)
   │
-  ├─ Step 2: Local NER (supplement PubTator) ── For user text &
-  │   ├─ Abbreviation resolution (Ab3P)          PMC full-text
-  │   ├─ Ontology term matching (INO, VO, OAE)
-  │   └─ Custom BioBERT NER (domain entities)
+  ├─ Step 2: Enhancement Layer (new) ────────── Improve recall & precision
+  │   ├─ Abbreviation resolution (Ab3P or similar)
+  │   ├─ Negation detection (NegEx — filter "does NOT interact")
+  │   └─ Updated dictionaries (INO from 2016 → latest, HUGO refresh)
   │
-  ├─ Step 3: Negation Detection ─────────────── Filter false positives
-  │   ├─ NegEx algorithm (rule-based, fast)
-  │   └─ Transformer-based (optional, higher accuracy)
+  ├─ Step 3: Relation Extraction ────────────── Beyond co-occurrence
+  │   ├─ Co-occurrence baseline (existing SciMiner)
+  │   ├─ BioBERT PPI prediction (existing, port 9635)
+  │   ├─ INO-guided classification (new) — type the interaction
+  │   ├─ Dependency parse patterns (new) — e.g., "X activates Y"
+  │   └─ Cross-sentence coreference (future) — "It" → BRCA1
   │
-  ├─ Step 4: Relation Extraction ────────────── Beyond co-occurrence
-  │   ├─ Co-occurrence baseline (existing)
-  │   ├─ BioBERT PPI prediction (existing)
-  │   ├─ Dependency parse patterns (new)        e.g., "X activates Y"
-  │   ├─ INO-guided classification (new)        Interaction type
-  │   └─ Cross-sentence coreference (new)       "It" → BRCA1
-  │
-  └─ Step 5: Confidence Scoring ─────────────── Prioritize results
+  └─ Step 4: Confidence Scoring ─────────────── Prioritize results
       ├─ BioBERT score (0-1)
       ├─ Evidence count (# supporting sentences)
-      ├─ Source weight (PMC full-text > abstract)
-      └─ Section weight (Results > Methods > Intro)
+      ├─ Source weight (PMC full-text > abstract, if dual-corpus)
+      └─ Section weight (Results > Methods > Intro, if full-text)
 ```
 
-### 12.3 PubTator Integration
+### 12.3 Reference: PubTator (Inspiration, Not Dependency)
 
-[PubTator](https://www.ncbi.nlm.nih.gov/research/pubtator3/) provides pre-annotated biomedical entities for PubMed articles.
+[PubTator3](https://www.ncbi.nlm.nih.gov/research/pubtator3/) is NCBI's entity annotation tool for biomedical literature. SciMiner already performs comparable entity recognition with our own ontology dictionaries. PubTator is referenced here as a **benchmark and inspiration** — not as an integration dependency.
 
-**API Integration:**
+**Features worth studying from PubTator:**
+- Entity normalization to standard IDs (NCBI Gene ID, MeSH) — we could adopt similar normalization for our SciMiner output
+- Mutation entity detection — not currently in SciMiner's 5 filters
+- Cell line entity detection — not currently in SciMiner's 5 filters
+- Relation extraction between tagged entities — PubTator uses ML-based relation extraction
 
-```python
-import requests
-
-def get_pubtator_annotations(pmids):
-    """Fetch PubTator3 annotations for a list of PMIDs."""
-    url = "https://www.ncbi.nlm.nih.gov/research/pubtator3-api/publications/export/biocjson"
-    params = {"pmids": ",".join(map(str, pmids))}
-    response = requests.get(url, params=params)
-    return response.json()
-    # Returns: genes, chemicals, diseases, species, mutations, cell lines
-    # with offsets, normalized IDs (NCBI Gene, MeSH, etc.)
-```
-
-**Benefits:**
-- Zero compute cost (NCBI provides pre-annotations)
-- High-quality NER (trained on manually curated data)
-- Normalized entity IDs (NCBI Gene ID, MeSH ID)
-- Covers 36M+ PubMed articles
-
-**Strategy:** Use PubTator as the primary NER layer for PubMed articles. Supplement with local NER for user-supplied text and PMC full-text (PubTator coverage is lower for PMC).
+**Possible future adoption (if gaps identified):**
+- If SciMiner misses entity types that PubTator covers (mutations, cell lines), consider adding new SciMiner filters rather than API dependency
+- PubTator API could serve as a validation/benchmarking tool to measure SciMiner's recall/precision
+- No hard dependency on PubTator is planned — SciMiner is the authoritative NER layer
 
 ---
 
@@ -1140,7 +1259,7 @@ Text:       #1a202c (Near-black — readable)
 
 | Task | Priority | Effort | Dependencies |
 |------|----------|--------|-------------|
-| PubTator API integration | P0 | 1 day | API layer |
+| SciMiner dictionary updates (INO, HUGO) | P1 | 1 day | Dictionary files |
 | Dignet 2.0 (dual-corpus mode) | P0 | 2 days | PMC pipeline started |
 | User text analysis endpoint | P1 | 2 days | Entity extraction |
 | LLM network interpretation | P1 | 1 day | API layer + LLM service |
@@ -1179,7 +1298,7 @@ Text:       #1a202c (Near-black — readable)
 | PMC OA pipeline complexity (full-text parsing) | Medium | High | Start with structured XML sections; skip poorly formatted articles |
 | LLM cost (GPT-4o at scale) | Medium | Medium | Cache responses; use Llama 3.2 for batch tasks; rate limiting |
 | Frontend migration breaks existing users | Low | High | Progressive migration; keep old URLs working; redirect map |
-| PubTator API rate limits | Medium | Medium | Cache annotations; batch requests; fallback to local NER |
+| SciMiner dictionary staleness | Medium | Medium | Update INO (2016→latest), HUGO (2018→latest) before go-live |
 | Fine-tuning Llama 3.2 quality | Medium | Medium | Start with GPT-4o; fine-tune iteratively; human evaluation |
 | Team bandwidth (2-week timeline) | High | High | Prioritize ruthlessly; P0 items first; defer P2+ |
 | Server resources (CPU inference for Llama) | Medium | Medium | Quantize model (GGUF 4-bit); test on current hardware first |
@@ -1204,20 +1323,156 @@ Text:       #1a202c (Near-black — readable)
 | Ab3P | ncbi.nlm.nih.gov/research/bionlp/Tools/Ab3P | Abbreviation resolution |
 | NegEx | github.com/chapmanbe/negex | Negation detection |
 
-## Appendix B: Existing Infrastructure
+## Appendix B: Current Infrastructure Inventory
 
-| Resource | Details |
-|----------|---------|
-| Server | RHEL 9, 244G disk, no GPU |
-| Python | 3.12.12 (Flask + Waitress) |
-| PHP | 8.x (PHP-FPM) |
-| MySQL/MariaDB | Production instance (ignet database) |
-| Apache | HTTPS (Let's Encrypt), PrivateTmp |
-| Domain | ignet.org (active) |
-| GitHub | github.com/hurlab/Ignet (4 commits on main) |
-| SciMiner | /home/juhur/IgnetSciMiner/ (tested, not yet in daily production) |
-| BioBERT | Port 9635 (Flask + Waitress, Python 3.12) |
-| BioSummarAI | Port 9636 (Flask + Waitress, Python 3.12) |
+| Resource | Version/Details | Status |
+|----------|----------------|--------|
+| **OS** | RHEL 9.7 (kernel 5.14) | Active |
+| **CPU** | 4 cores | Limited for heavy compute |
+| **RAM** | 16GB (11GB available) | Adequate for current load |
+| **Disk** | 244GB total, **52GB free** | Tight — needs monitoring |
+| **Swap** | 5GB | Active |
+| **GPU** | None | No local ML training |
+| **Apache** | 2.4.62 (HTTPS, Let's Encrypt, PrivateTmp) | Active |
+| **PHP** | 8.0.30 (PHP-FPM) | Active |
+| **MariaDB** | 10.5.29 | Active (ignet DB: 15.8M gene pairs) |
+| **Python** | 3.12.12 + 3.9.25 | Active (3.12 for services) |
+| **Perl** | 5.32.1 | Active (SciMiner pipeline) |
+| **Java** | OpenJDK 11.0.25 | Active (SciMiner sentence splitter) |
+| **Node.js** | 24.9.0 (via conda) | Available |
+| **npm** | Available (via conda) | Available |
+| **Redis** | **NOT INSTALLED** | Needed for 2.0 |
+| **Nginx** | **NOT INSTALLED** | Optional (Apache works) |
+| **Docker** | **NOT INSTALLED** | Optional for 2.0 |
+| **Celery** | **NOT INSTALLED** | Needed for async tasks |
+| **Domain** | ignet.org | Active |
+| **GitHub** | github.com/hurlab/Ignet | Active (6 commits) |
+| **SciMiner** | /home/juhur/IgnetSciMiner/ | Built, not yet daily |
+| **BioBERT** | Port 9635 (Flask + Waitress) | Running |
+| **BioSummarAI** | Port 9636 (Flask + Waitress) | Running |
+
+---
+
+## Appendix C: Infrastructure Requirements for Ignet 2.0
+
+### What Needs to Be Installed/Provisioned BEFORE Implementation
+
+#### Required (Must-Have)
+
+| # | Component | Purpose | Install Method | Notes |
+|---|-----------|---------|---------------|-------|
+| 1 | **Redis** | Caching layer (query cache, LLM response cache, session data, Celery broker) | `sudo dnf install redis` | ~5MB, minimal resource use. Runs as systemd service. Critical for DB performance at scale. |
+| 2 | **Celery** (Python) | Async task processing (LLM calls, network analysis, PubMed searches) | `pip install celery[redis]` in service venvs | Uses Redis as message broker. Prevents blocking web requests on 10-60s LLM calls. |
+| 3 | **Disk space cleanup** | Current 52GB free is tight for catch-up processing (50 XML files ~3GB) + future growth | Clean old data, or expand volume | Monitor with `df -h`. SciMiner temp files can be large during processing. |
+| 4 | **Daily cron** for SciMiner | Automated PubMed updates | `crontab -e` | No install needed — just configuration. |
+
+#### Recommended (High Value)
+
+| # | Component | Purpose | Install Method | Notes |
+|---|-----------|---------|---------------|-------|
+| 5 | **Nginx** (reverse proxy) | Unified entry point for Apache + Flask services, WebSocket support, rate limiting | `sudo dnf install nginx` | Can proxy to Apache (:80/443) + BioBERT (:9635) + BioSummarAI (:9636) + future API. Or keep Apache and use it as reverse proxy (also works). |
+| 6 | **Additional RAM** | Llama 3.2 8B quantized needs ~8GB RAM for inference; current 16GB shared with DB + services | Hardware upgrade or use smaller model | Only needed if running local LLM. GPT-4o cloud requires no local RAM. |
+| 7 | **systemd service files** | Auto-restart BioBERT + BioSummarAI on reboot | Create .service files | No install needed — just configuration. Currently services die on reboot. |
+| 8 | **Prometheus + Grafana** | Monitoring (API response times, DB query latency, pipeline status) | `sudo dnf install` or Docker | Nice-to-have for production observability. |
+
+#### For PMCOA Processing (Separate Server)
+
+| # | Component | Purpose | Notes |
+|---|-----------|---------|-------|
+| 9 | **Separate server** | PMC OA full-text processing (compute-intensive) | On same network. Needs: Python 3.12, Perl, Java, 100GB+ disk, 4+ cores |
+| 10 | **rsync/scp access** | Ship PMCOA results back to Ignet server for DB loading | SSH key setup between servers |
+
+#### For Frontend Modernization
+
+| # | Component | Purpose | Notes |
+|---|-----------|---------|-------|
+| 11 | **Node.js + npm** | React build toolchain (already available via conda) | Already installed: Node 24.9.0 |
+| 12 | **React + Tailwind + Cytoscape.js** | Frontend stack | Installed via npm during build. No server-side install needed. |
+
+#### Optional (Future)
+
+| # | Component | Purpose | Notes |
+|---|-----------|---------|-------|
+| 13 | **Docker + Docker Compose** | Containerized deployment for reproducibility | Nice-to-have. Not required for initial 2.0 launch. |
+| 14 | **Elasticsearch** | Full-text search at scale (alternative to MySQL FULLTEXT) | Only if MySQL FULLTEXT becomes a bottleneck. |
+| 15 | **GPU server** | ML model training (BioBERT fine-tuning, Llama fine-tuning) | Only for training, not inference. Could use cloud GPU (Lambda, RunPod). |
+
+### Installation Quick-Start (Run Before Implementation)
+
+```bash
+# 1. Install Redis
+sudo dnf install redis -y
+sudo systemctl enable --now redis
+redis-cli ping   # Should return PONG
+
+# 2. Install Celery in both Python service venvs
+/data/var/www/html/ignet/genepair/bert_files/ignet_cpu/bin/pip install celery[redis]
+/data/var/www/html/ignet/biosummarAI/venv312/bin/pip install celery[redis]
+
+# 3. Create systemd service files for Python services
+sudo tee /etc/systemd/system/ignet-biobert.service <<'EOF'
+[Unit]
+Description=Ignet BioBERT Prediction Service
+After=network.target
+
+[Service]
+Type=simple
+User=apache
+Group=webapps
+WorkingDirectory=/data/var/www/html/ignet/genepair/bert_files
+ExecStart=/data/var/www/html/ignet/genepair/bert_files/ignet_cpu/bin/python biobert_prediction.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo tee /etc/systemd/system/ignet-biosummarai.service <<'EOF'
+[Unit]
+Description=Ignet BioSummarAI Service
+After=network.target
+
+[Service]
+Type=simple
+User=apache
+Group=webapps
+WorkingDirectory=/data/var/www/html/ignet/biosummarAI
+ExecStart=/data/var/www/html/ignet/biosummarAI/venv312/bin/python api_biosummary.py
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable ignet-biobert ignet-biosummarai
+
+# 4. Verify disk space
+df -h /
+# If <30GB free, consider cleaning old data or expanding volume
+
+# 5. Configure SciMiner daily cron (after testing one file manually)
+# crontab -e
+# 0 2 * * * /home/juhur/IgnetSciMiner/automation_scripts/single_xml_pipeline.sh --download >> /home/juhur/IgnetSciMiner/automation_scripts/logs_single/cron.log 2>&1
+```
+
+### Resource Budget Estimate
+
+| Component | RAM | Disk | CPU | Network |
+|-----------|-----|------|-----|---------|
+| Apache + PHP-FPM | 500MB | — | 0.5 core | — |
+| MariaDB | 2-4GB | 20GB+ (data) | 1 core | — |
+| BioBERT (torch CPU) | 2GB | 1.2GB (venv + model) | 1 core (burst) | — |
+| BioSummarAI | 500MB | 300MB (venv) | 0.2 core | OpenAI API |
+| Redis | 100MB | 50MB | 0.1 core | — |
+| Celery workers (x2) | 500MB | — | 0.5 core | — |
+| SciMiner pipeline (when running) | 2-4GB | 3-5GB temp | 4 cores | NCBI FTP |
+| **Total (steady state)** | **~8GB** | **~25GB** | **~3 cores** | — |
+| **Total (pipeline running)** | **~12GB** | **~30GB** | **4 cores** | — |
+
+Current server has 16GB RAM and 4 cores — **adequate for everything except simultaneous pipeline + local LLM inference**. Llama 3.2 (if used locally) would need RAM upgrade or a dedicated inference server.
 
 ---
 

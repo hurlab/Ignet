@@ -700,28 +700,104 @@ User Input:
      └───────────────┘ └──────────┘ └─────────────┘
 ```
 
-### 10.2 GPT-4o (Cloud) — Complex Reasoning
+### 10.2 LLM Access Strategy — Tiered Model
 
-- Network interpretation and hypothesis generation
-- Interactive chat about results
-- Comparison with known biology
-- Cost: ~$2.50/1M input tokens, $10/1M output tokens
-- Rate limit: Managed via queue
+Users get LLM access through a flexible, tiered approach that minimizes cost
+to the project while maximizing availability.
 
-### 10.3 Llama 3.2 (Local) — Batch Processing & Domain Tasks
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                      LLM Access Tiers                            │
+├──────────────┬──────────────┬──────────────┬─────────────────────┤
+│  Tier 1      │  Tier 2      │  Tier 3      │  Tier 4             │
+│  Free/Default│  Registered  │  BYOK        │  Admin/Internal     │
+│              │  Users       │  (Bring Your │                     │
+│              │              │  Own Key)    │                     │
+├──────────────┼──────────────┼──────────────┼─────────────────────┤
+│ Institutional│ Free open-   │ User's own   │ Project-funded      │
+│ open-weight  │ weight model │ API key      │ GPT-4o key          │
+│ LLM (DGX    │ via Open-    │ (OpenAI,     │ (unlimited for      │
+│ Spark or     │ Router free  │ Anthropic,   │ admin + research)   │
+│ similar)     │ tier models  │ OpenRouter)  │                     │
+├──────────────┼──────────────┼──────────────┼─────────────────────┤
+│ ~120B param  │ Varies       │ User choice  │ GPT-4o              │
+│ No API key   │ Free models  │ Best quality │ Best quality        │
+│ needed       │ on OpenRouter│ User pays    │ Project pays        │
+│ Rate limited │ Account req. │ Their limits │ No limits           │
+└──────────────┴──────────────┴──────────────┴─────────────────────┘
+```
 
-- **Fine-tuned variants:**
-  - `ignet-llama-3.2-ner` — Biomedical NER (trained on SciMiner output + manual annotations)
-  - `ignet-llama-3.2-re` — Relation extraction (trained on interaction data)
-  - `vignet-llama-3.2-vaccine` — Vaccine candidate prediction (trained on VIOLIN)
-- **Benefits:** No API costs for batch processing, data stays on-premises
-- **Hardware:** CPU inference (quantized 8B model fits in 16GB RAM)
+**Tier 1 — Institutional Open-Weight LLM (Default for all users):**
+- An open-weight model (e.g., Llama 3.3 70B, Qwen 2.5 72B, or similar ~120B parameter model)
+  hosted on institutional GPU infrastructure (DGX Spark or similar server on the university network)
+- **No API key required** — free for all users
+- Rate limited per IP/session to prevent abuse
+- Suitable for: summarization, network interpretation, basic chat
+- Endpoint: internal university network URL (e.g., `http://dgx-spark.local:8080/v1/chat/completions`)
+
+**Tier 2 — Free Models via OpenRouter (Registered users):**
+- Registered users can connect to [OpenRouter](https://openrouter.ai/) free-tier models
+- We provide instructions for: sign up, get free API key, select free models
+- Free models on OpenRouter include: Llama, Mistral, Gemma variants (changes over time)
+- User stores their OpenRouter key in their Ignet profile (encrypted in DB)
+
+**Tier 3 — Bring Your Own Key (BYOK — Registered users):**
+- Power users who want premium models (GPT-4o, Claude, etc.) can enter their own API keys
+- Supported providers: OpenAI, Anthropic, OpenRouter (any model), or any OpenAI-compatible API
+- Key stored encrypted in user profile; transmitted only to the selected provider
+- User bears the cost; Ignet just routes the request
+- Guidance provided: "We recommend OpenRouter for flexibility and free model access"
+
+**Tier 4 — Admin/Internal (Project-funded):**
+- Project's own GPT-4o API key for: admin operations, pipeline summarization, research use
+- Not exposed to public users
+- Budget-controlled with spending alerts
+
+### 10.3 LLM Router Architecture
+
+```python
+class LLMRouter:
+    """Routes LLM requests to the appropriate provider based on user tier."""
+
+    def route(self, user, prompt, task_type):
+        # Priority: user's BYOK > user's OpenRouter > institutional LLM > fallback
+        if user.has_byok_key():
+            return self.call_byok(user.api_key, user.provider, prompt)
+        elif user.has_openrouter_key():
+            return self.call_openrouter(user.openrouter_key, prompt)
+        else:
+            return self.call_institutional_llm(prompt)  # Free, rate-limited
+
+    def call_institutional_llm(self, prompt):
+        """Call the on-network open-weight LLM (DGX Spark or similar)."""
+        # OpenAI-compatible API endpoint
+        url = INSTITUTIONAL_LLM_ENDPOINT  # e.g., http://dgx-spark.local:8080/v1
+        ...
+
+    def call_byok(self, api_key, provider, prompt):
+        """Call user's own API (OpenAI, Anthropic, OpenRouter, etc.)."""
+        ...
+
+    def call_openrouter(self, key, prompt):
+        """Call OpenRouter with user's free-tier key."""
+        url = "https://openrouter.ai/api/v1/chat/completions"
+        ...
+```
 
 ### 10.4 BioBERT (Local) — Interaction Scoring
 
 - Existing `metalrt/ignet-biobert` model for PPI prediction
 - Already deployed on port 9635
 - Enhancement: retrain with newer data, add multi-class output (interaction type)
+- Not an LLM — specialized ML model, always available, no API key needed
+
+### 10.5 Llama 3.2 Fine-Tuned Variants (Future — Deferred)
+
+When GPU resources become available (DGX Spark or cloud):
+- `ignet-llama-3.2-ner` — Biomedical NER (trained on SciMiner output + manual annotations)
+- `ignet-llama-3.2-re` — Relation extraction (trained on interaction data)
+- `vignet-llama-3.2-vaccine` — Vaccine candidate prediction (trained on VIOLIN)
+- These would supplement/replace the institutional general-purpose LLM for domain-specific tasks
 
 ### 10.5 Prompt Engineering Templates
 

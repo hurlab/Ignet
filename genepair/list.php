@@ -77,19 +77,18 @@ if (!$rs->EOF) {
     if ($currPage == '' || $currPage > $numOfPage || $numOfPage < 1) $currPage = 1;
 
     $score = 0;
-    $params = "list.php?geneSymbol1=$geneSymbol1&geneSymbol2=$geneSymbol2&score=$score&hasVaccine=$hasVaccine&keywords=$keywords";
-    $params = addslashes($params);
+    $params = "list.php?geneSymbol1=" . urlencode($geneSymbol1) . "&geneSymbol2=" . urlencode($geneSymbol2) . "&score=" . urlencode($score) . "&hasVaccine=" . urlencode($hasVaccine) . "&keywords=" . urlencode($keywords);
 
     $a_ignets = array();
     for ($i = ($currPage-1)*$recordsPerPage; $i < $currPage*$recordsPerPage && $i < $numOfRecords; $i++) {
-        $a_ignets[] = $array_c_hit_ids[$i]['c_hit_id'];
+        $a_ignets[] = intval($array_c_hit_ids[$i]['c_hit_id']);
     }
 
-    $ignets = implode("','", $a_ignets);
-    $strSql = "SELECT t_sentence_hit_gene2gene_Host.*, t_sentence_hit_gene2gene_Host.sentenceID AS sentenceID, sentences25_genepair.sentence 
-               FROM t_sentence_hit_gene2gene_Host 
-               LEFT JOIN sentences25_genepair ON t_sentence_hit_gene2gene_Host.sentenceID = sentences25_genepair.sentenceID 
-               WHERE gene2gene_host_id IN ('$ignets') 
+    $ignets = implode(",", $a_ignets);
+    $strSql = "SELECT t_sentence_hit_gene2gene_Host.*, t_sentence_hit_gene2gene_Host.sentenceID AS sentenceID, sentences25_genepair.sentence
+               FROM t_sentence_hit_gene2gene_Host
+               LEFT JOIN sentences25_genepair ON t_sentence_hit_gene2gene_Host.sentenceID = sentences25_genepair.sentenceID
+               WHERE gene2gene_host_id IN ($ignets)
                GROUP BY sentences25_genepair.sentence, t_sentence_hit_gene2gene_Host.PMID";
 
     if ($orderBy != '' && in_array($orderBy, $allowedOrderColumns, true)) {

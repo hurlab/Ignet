@@ -62,6 +62,13 @@ Thumbs.db
 .vscode/
 *.sublime-*
 
+# --- Test/Debug files ---
+test_exec.php
+biosummarAI/test_debug.php
+
+# --- SPEC files (local only) ---
+.moai/
+
 # --- Project Management (local only) ---
 PROJECT_HANDOFF.md
 PROJECT_LOG.md

@@ -5,13 +5,8 @@
 ini_set('display_errors', 0);
 error_reporting(0);
 
-// Use environment variable for password, fall back to hash of legacy password
-$admin_password_hash = getenv('ADMIN_PASSWORD')
-    ? password_hash(getenv('ADMIN_PASSWORD'), PASSWORD_DEFAULT)
-    : '$2y$10$VzFkHQqJK8xRXqJZ5v7KxOJZz1Y7kGfRnE3sW5bK2cYl5r8T6WxPu'; // hash of legacy password
-// If ADMIN_PASSWORD env var is set, we hash it each time for verification;
-// for constant-time comparison we use password_verify against a stored hash.
-// To keep backward compat, verify against env var first, then legacy hash.
+// Admin password: set ADMIN_PASSWORD environment variable.
+// Legacy fallback uses a bcrypt hash for constant-time comparison.
 
 session_start();
 
@@ -22,11 +17,11 @@ if (!isset($_SESSION['chat_admin_logged_in'])) {
         $env_pw = getenv('ADMIN_PASSWORD');
         $authenticated = false;
         if ($env_pw !== false && $env_pw !== '') {
-            // Verify against env var directly
             $authenticated = hash_equals($env_pw, $submitted_pw);
         } else {
-            // Legacy: verify against hardcoded old password using constant-time comparison
-            $authenticated = hash_equals('m!1@2#3', $submitted_pw);
+            // Legacy: verify against bcrypt hash of old password
+            $legacy_hash = '$2y$10$3DRBx4I5xe2BgH22FP3Lje4BMsQewsMgoE0Fx6JdwawIFFCDL/K6y';
+            $authenticated = password_verify($submitted_pw, $legacy_hash);
         }
         if ($authenticated) {
             $_SESSION['chat_admin_logged_in'] = true;

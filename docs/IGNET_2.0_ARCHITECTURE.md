@@ -727,13 +727,14 @@ to the project while maximizing availability.
 └──────────────┴──────────────┴──────────────┴─────────────────────┘
 ```
 
-**Tier 1 — Institutional Open-Weight LLM (Default for all users):**
-- An open-weight model (e.g., Llama 3.3 70B, Qwen 2.5 72B, or similar ~120B parameter model)
-  hosted on institutional GPU infrastructure (DGX Spark or similar server on the university network)
-- **No API key required** — free for all users
+**Tier 1 — Project-Funded LLM (Default for all users):**
+- **Current:** OpenAI GPT-4.1-nano (fast, cheap, good for summarization and chat)
+  - Same API key pattern as BioSummarAI (`.env` with `OPENAI_API_KEY`)
+  - Cost-effective for high volume (~$0.10/1M input tokens)
+- **Future:** Institutional open-weight LLM on DGX Spark (e.g., Llama 3.3 70B)
+  when GPU infrastructure becomes available — eliminates API costs entirely
 - Rate limited per IP/session to prevent abuse
 - Suitable for: summarization, network interpretation, basic chat
-- Endpoint: internal university network URL (e.g., `http://dgx-spark.local:8080/v1/chat/completions`)
 
 **Tier 2 — Free Models via OpenRouter (Registered users):**
 - Registered users can connect to [OpenRouter](https://openrouter.ai/) free-tier models
@@ -1454,14 +1455,34 @@ done
 
 ### Pre-Implementation Checklist
 
-Before starting any coding, these items must be ready:
+| # | Item | Status | Notes |
+|---|------|--------|-------|
+| 1 | **Redis installed** | DONE (installed 2026-03-15) | Needs: `sudo systemctl enable --now redis` to start |
+| 2 | **systemd services** for BioBERT + BioSummarAI | To create during WS1 | Claude Code will create .service files |
+| 3 | **Disk space** >30GB free | OK (~52GB free) | Monitor during pipeline catch-up |
+| 4 | **LLM endpoint** | Use OpenAI GPT-4.1-nano for now | Same pattern as BioSummarAI (.env with OPENAI_API_KEY). Institutional LLM (DGX Spark) deferred. |
+| 5 | **Frontend design direction** | Claude Code leads (Option B) | Phase 1: CSS reskin. Phase 2: React SPA. Phase 3: Team visual polish. |
+| 6 | **PubMed pipeline strategy** | Keep pubmed25n series | See details below. HOLD on actual processing until system is stable. |
 
-- [ ] **Redis installed** (`sudo dnf install redis -y && sudo systemctl enable --now redis`)
-- [ ] **systemd services created** for BioBERT + BioSummarAI (so they survive reboots)
-- [ ] **Disk space verified** (`df -h` — need at least 30GB free for pipeline catch-up)
-- [ ] **Institutional LLM endpoint URL** known (DGX Spark or similar — needed for Tier 1 LLM access)
-- [ ] **Team alignment** on design direction (review color palette, layout mockups)
-- [ ] **SciMiner config updated** (`pubmed26n` prefix, `DB_ENABLED=yes`)
+#### PubMed Pipeline Strategy (Resolved)
+
+**Decision:** Continue using the `pubmed25n` series. Do NOT switch to `pubmed26n` yet.
+
+**Current state:**
+- Database has 15.8M gene pairs from 2.65M unique PMIDs (PMID range: 31 to 40,478,615)
+- Last processed file: `pubmed25n1654`
+- NCBI no longer hosts `pubmed25n` files (replaced by `pubmed26n` baseline in Jan 2026)
+- The `pubmed26n` baseline (files 0001-1334) contains ALL prior data including what we missed
+- The `pubmed26n` daily updates (files 1335-1384) contain only NEW articles since Jan 30, 2026
+
+**What we missed:** Files `pubmed25n1655` through the end of the 25n series (~150 files). This data is now folded into the `pubmed26n` baseline.
+
+**Plan (HOLD — do not execute until system is stable):**
+1. Keep current DB data intact (15.8M gene pairs from prior processing)
+2. When ready, start processing `pubmed26n` daily updates (1335 onwards) for new articles
+3. The ~150 missed pubmed25n files' data is in the 26n baseline — we can optionally reprocess the baseline later for completeness, but it's not urgent since the core data is already in the DB
+4. Update `config.env` to `PUBMED_FILE_PREFIX="pubmed26n"` and `last_processed_number.txt` to `1334` when ready to go live
+5. Daily cron setup happens AFTER system is stable and tested
 
 ---
 

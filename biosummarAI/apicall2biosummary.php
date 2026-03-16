@@ -30,7 +30,7 @@ $jsonDataToSend = json_encode($forwardData);
 
 // cURL initialization
 $ch = curl_init();
-$url = 'http://localhost:9635/biobert/'; // Python backend endpoint
+$url = 'http://localhost:9636/biobert/'; // BioSummarAI Python backend endpoint
 
 // cURL options
 curl_setopt($ch, CURLOPT_URL, $url);

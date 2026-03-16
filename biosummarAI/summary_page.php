@@ -31,7 +31,7 @@ if (isset($_POST['sentences_json'])) {
 
         // Use cURL to call your Python API endpoint
         $ch_summary = curl_init();
-        $url_summary = 'http://localhost:9635/biobert/'; // Your Python endpoint
+        $url_summary = 'http://localhost:9636/biobert/'; // BioSummarAI Python endpoint
 
         curl_setopt($ch_summary, CURLOPT_URL, $url_summary);
         curl_setopt($ch_summary, CURLOPT_POST, true);

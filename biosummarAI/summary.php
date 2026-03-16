@@ -20,7 +20,7 @@ $genes = json_decode($_POST['genes'], true);
     const genes = <?= json_encode($genes) ?>;
     const summaryBox = document.getElementById('summaryBox');
 
-    fetch('http://127.0.0.1:9635/summarize', {
+    fetch('http://127.0.0.1:9636/summarize', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ genes: genes })
@@ -37,7 +37,7 @@ $genes = json_decode($_POST['genes'], true);
         if (!msg) return;
         const ctx = summaryBox.innerText;
 
-        fetch('http://127.0.0.1:9635/chat', {
+        fetch('http://127.0.0.1:9636/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ genes: genes, context: msg + '\\nBased on: ' + ctx })

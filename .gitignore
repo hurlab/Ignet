@@ -13,6 +13,7 @@ inc/adodb5/t3.php
 # --- Python Virtual Environments ---
 venv/
 venv_new/
+venv312/
 ignet_cpu/
 ignet_cpu_old/
 .venv/

@@ -1,9 +1,26 @@
 <?php
 // apicall2biosummary.php
+// Use output buffering to catch any PHP warnings that fire before our code
+// (e.g., "Unable to create temporary file" from PrivateTmp issues)
+ob_start();
+
+ini_set('display_errors', 0);
+error_reporting(0);
+
+// Discard any warning output that PHP emitted during POST parsing
+ob_end_clean();
+
+// Now start clean output
 header("Content-Type: application/json");
 
 // Get raw JSON input from request body
 $input = file_get_contents("php://input");
+
+// Handle empty input (can happen if PHP temp file creation fails for large POST bodies)
+if ($input === false || $input === '') {
+    echo json_encode(["status" => "error", "message" => "Empty request body. The request may be too large for server temp storage."]);
+    exit;
+}
 
 // Decode the JSON into an associative array
 $data = json_decode($input, true);
@@ -20,7 +37,7 @@ $forwardData = [
     'conversation_history' => isset($data['conversation_history']) ? $data['conversation_history'] : null,
     'prompt' => isset($data['prompt']) ? $data['prompt'] : null,
     'raw_sentences' => isset($data['raw_sentences']) ? $data['raw_sentences'] : null,
-    'prompt_instructions' => isset($data['prompt_instructions']) ? $data['prompt_instructions'] : null // Pass instructions
+    'prompt_instructions' => isset($data['prompt_instructions']) ? $data['prompt_instructions'] : null
 ];
 
 // Remove null keys before encoding
@@ -54,7 +71,7 @@ if (curl_errno($ch)) {
     $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     if ($httpcode >= 200 && $httpcode < 300) {
         // Attempt to decode the JSON response from Python
-        $response_decoded = json_decode($response_raw, true); // Decode as assoc array
+        $response_decoded = json_decode($response_raw, true);
 
         if (json_last_error() === JSON_ERROR_NONE && isset($response_decoded['Summary'])) {
             // Forward the 'Summary' part from the Python response
@@ -63,14 +80,14 @@ if (curl_errno($ch)) {
              echo json_encode([
                  "status" => "error",
                  "message" => "Invalid response received from backend service.",
-                 "backend_response" => substr($response_raw, 0, 500) // Show partial raw response
+                 "backend_response" => substr($response_raw, 0, 500)
              ]);
         }
     } else {
          echo json_encode([
             "status" => "error",
             "message" => "Backend service returned HTTP status code " . $httpcode,
-            "backend_response" => substr($response_raw, 0, 500) // Show partial raw response
+            "backend_response" => substr($response_raw, 0, 500)
          ]);
     }
 }

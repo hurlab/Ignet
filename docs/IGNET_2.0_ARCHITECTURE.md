@@ -1457,7 +1457,7 @@ done
 
 | # | Item | Status | Notes |
 |---|------|--------|-------|
-| 1 | **Redis installed** | DONE (installed 2026-03-15) | Needs: `sudo systemctl enable --now redis` to start |
+| 1 | **Redis installed & running** | DONE (2026-03-16, verified PONG) | `systemctl enable --now redis` completed |
 | 2 | **systemd services** for BioBERT + BioSummarAI | To create during WS1 | Claude Code will create .service files |
 | 3 | **Disk space** >30GB free | OK (~52GB free) | Monitor during pipeline catch-up |
 | 4 | **LLM endpoint** | Use OpenAI GPT-4.1-nano for now | Same pattern as BioSummarAI (.env with OPENAI_API_KEY). Institutional LLM (DGX Spark) deferred. |

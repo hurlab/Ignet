@@ -1,0 +1,14 @@
+
+module efetch_policy 1.0;
+
+require {
+	type user_home_t;
+	type httpd_t;
+	class file { execute read };
+}
+
+#============= httpd_t ==============
+allow httpd_t user_home_t:file execute;
+
+#!!!! This avc can be allowed using the boolean 'httpd_read_user_content'
+allow httpd_t user_home_t:file read;

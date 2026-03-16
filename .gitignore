@@ -1,0 +1,66 @@
+# ========================
+# Ignet Project .gitignore
+# ========================
+
+# --- Credentials & Secrets ---
+.env
+.env.*
+*.env
+# ADOdb test files with hardcoded DB credentials
+inc/adodb5/t1.php
+inc/adodb5/t3.php
+
+# --- Python Virtual Environments ---
+venv/
+venv_new/
+ignet_cpu/
+ignet_cpu_old/
+.venv/
+env/
+
+# --- Python Cache & Bytecode ---
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+
+# --- HuggingFace & ML Model Cache ---
+.hf_cache/
+
+# --- Database Files ---
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Logs ---
+*.log
+
+# --- Temporary & Generated Files ---
+tmp/
+
+# --- Backup Files ---
+*.bak
+*.bak.*
+*.bak_*
+*_backup_*
+*-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_*
+
+# --- Nohup & misc output ---
+nohup.out
+
+# --- OS & Editor Files ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
+*.sublime-*
+
+# --- Project Management (local only) ---
+PROJECT_HANDOFF.md
+PROJECT_LOG.md

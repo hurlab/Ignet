@@ -1,0 +1,10 @@
+nohup: ignoring input
+None of PyTorch, TensorFlow >= 2.0, or Flax have been found. Models won't be available and only tokenizers, configuration and file/data utilities can be used.
+127.0.0.1:44018 - - [10/May/2025 12:35:08] "HTTP/1.1 POST /biobert/" - 200 OK
+127.0.0.1:57416 - - [10/May/2025 12:35:36] "HTTP/1.1 POST /biobert/" - 200 OK
+127.0.0.1:54992 - - [10/May/2025 12:35:54] "HTTP/1.1 POST /biobert/" - 200 OK
+127.0.0.1:33470 - - [10/May/2025 12:36:07] "HTTP/1.1 POST /biobert/" - 200 OK
+127.0.0.1:48542 - - [11/May/2025 12:21:15] "HTTP/1.1 POST /biobert/" - 200 OK
+127.0.0.1:53210 - - [11/May/2025 12:21:49] "HTTP/1.1 POST /biobert/" - 200 OK
+127.0.0.1:54200 - - [13/May/2025 15:15:02] "HTTP/1.1 POST /biobert/" - 200 OK
+Token indices sequence length is longer than the specified maximum sequence length for this model (1249 > 1024). Running this sequence through the model will result in indexing errors

@@ -1,0 +1,7 @@
+<ENTREZ_DIRECT>
+  <Db>pubmed</Db>
+  <Count>86023</Count>
+  <Query>"Chronic Kidney Disease"</Query>
+  <Step>1</Step>
+  <Elapsed>1</Elapsed>
+</ENTREZ_DIRECT>

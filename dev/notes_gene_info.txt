@@ -1,0 +1,3 @@
+t_gene_info data: ftp://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz
+load data local infile 'e:\\temp\\Homo_sapiens.gene_info' replace into table t_gene_info  ignore 1 lines;
+

@@ -1,0 +1,9 @@
+<IfModule mod_authz_core.c>
+    <DirectoryMatch "\.hf_cache">
+        Require all denied
+    </DirectoryMatch>
+</IfModule>
+
+<FilesMatch "\.(py|pyc|cache)$">
+    Require all denied
+</FilesMatch>

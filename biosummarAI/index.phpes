@@ -1,0 +1,210 @@
+<?php
+// index.php
+// --- START: Crucial Error Reporting ---
+// These lines MUST be at the very top to catch early errors.
+ini_set('display_errors', 1); // Show errors on screen (for debugging)
+ini_set('display_startup_errors', 1); // Show errors during PHP startup
+error_reporting(E_ALL); // Report all errors and warnings
+// --- END: Crucial Error Reporting ---
+
+// --- Include functions.php with Path Check ---
+$functions_path = __DIR__ . '/../inc/functions.php'; // Use absolute path based on current file
+if (file_exists($functions_path)) {
+    include_once($functions_path);
+} else {
+    // If functions.php is missing, stop immediately with a clear error
+    die("FATAL ERROR: Required file functions.php not found at expected location: " . htmlspecialchars($functions_path));
+}
+// --- End Include ---
+
+
+// --- Fetch Gene List for Dropdown ---
+$geneSymbols = [];
+$db_error = '';
+$db = null; // Initialize $db
+
+// Check if necessary DB variables and functions are loaded AFTER including functions.php
+if (!isset($driver) || !isset($host) || !isset($username) || !isset($password) || !isset($database)) {
+    $db_error = "Database configuration variables (\$driver, \$host, etc.) are not defined. Check included functions.php.";
+} elseif (!function_exists('ADONewConnection')) {
+    $db_error = "ADOdb library function ADONewConnection() not found. Check include path for adodb.inc.php within functions.php.";
+} else {
+    // Proceed with database connection only if setup seems okay
+    try {
+        $db = ADONewConnection($driver);
+        // Use PConnect for persistent connection? Might help performance slightly. Use Connect if unsure.
+        // $db->PConnect($host, $username, $password, $database);
+        $db->Connect($host, $username, $password, $database);
+        $db->SetFetchMode(ADODB_FETCH_ASSOC);
+
+        if ($db->IsConnected()) {
+            // Option 2: Using t_gene_list (Preferred) - Ensure this table exists and has 'gene_symbol' column
+             $sqlGenes = "SELECT DISTINCT gene_symbol FROM t_gene_list WHERE gene_symbol IS NOT NULL AND gene_symbol != '' ORDER BY gene_symbol ASC LIMIT 15000"; // Added LIMIT
+             $geneSymbols = $db->GetCol($sqlGenes);
+             if ($geneSymbols === false) { // Check if query failed
+                  $db_error = "Error fetching gene list from t_gene_list: " . $db->ErrorMsg();
+                  $geneSymbols = [];
+             } elseif (empty($geneSymbols)) {
+                 // Don't report as an error, just note that the list is empty
+                 // $db_error = "Warning: No gene symbols found in t_gene_list.";
+             }
+
+        } else {
+             $db_error = "Database connection failed in index.php: " . ($db->ErrorMsg() ?: 'Unknown ADOdb connection error');
+        }
+         // Close connection ONLY if it was successfully opened
+         if ($db && $db->IsConnected()) $db->Close();
+    } catch (Exception $e) {
+        $db_error = "Database Exception in index.php: " . $e->getMessage();
+         $geneSymbols = []; // Ensure it's an array on error
+    }
+}
+// --- End Fetch Gene List ---
+
+// ***** Now start HTML output *****
+?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <title>Ignet - BioSummarAI Search</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <link rel="shortcut icon" href="/favicon.ico"/>
+    <link href="../css/bmain.css" rel="stylesheet" type="text/css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <style>
+        .search-container { padding: 20px; background-color: #F5FAF7; border: 1px solid #A5C3D6; border-radius: 5px; max-width: 700px; }
+        .select2-container--default .select2-selection--multiple { border: 1px solid #ccc !important; min-height: 40px; }
+        .select2-container { width: 100% !important; margin-bottom: 15px; }
+        .btn-container { display: flex; gap: 10px; margin-top: 15px;}
+        .search-btn { padding: 10px 20px; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 16px; transition: opacity 0.2s; }
+        .search-btn:hover { opacity: 0.9; }
+        .btn-common { background-color: #007bff; }
+        .btn-related { background-color: #28a745; }
+        .db-error { color: #dc3545; background-color: #f8d7da; border: 1px solid #f5c6cb; padding: 10px; border-radius: 4px; margin-bottom: 15px; }
+    </style>
+</head>
+<body style="margin:0px; background-image:url(../images/bg_2008-08-21.2.gif)" id="main_body">
+
+<?php
+// Include header template - use __DIR__ for robust path
+$template_top_path = __DIR__ . '/../inc/template_top.php';
+if (file_exists($template_top_path)) {
+    include($template_top_path);
+} else {
+    echo "<p style='color:red;'>Error: template_top.php not found!</p>";
+}
+?>
+
+<table width="100%" border="0" cellpadding="0" cellspacing="0">
+    <tr>
+        <td width="160" valign="top" style="min-width:160px">
+            <?php
+            // Include left nav template - use __DIR__ for robust path
+            $template_left_path = __DIR__ . '/../inc/template_left.php';
+            if (file_exists($template_left_path)) {
+                include($template_left_path);
+            } else {
+                echo "<p style='color:red;'>Error: template_left.php not found!</p>";
+            }
+            ?>
+        </td>
+        <td valign="top">
+            <div style="margin:6px 10px 16px 10px; border-top:2px #4A2F65 solid">
+                <h3>BioSummarAI Gene Search</h3>
+
+                <?php
+                // Display DB error prominently if it occurred
+                if (!empty($db_error)) {
+                    echo '<p class="db-error">Warning: Could not load gene list. ' . htmlspecialchars($db_error) . '</p>';
+                }
+                ?>
+
+                <div class="search-container">
+                    <form action="searchgenes.php" method="POST">
+                        <p><strong>Select or Enter Gene Symbols:</strong><br>
+                        <span style="font-size: 0.9em; color: #666;">(Start typing to search, or enter new genes separated by commas/spaces)</span></p>
+
+                        <select class="genes-select2" name="genes[]" multiple="multiple" style="width: 100%;">
+                            <?php if (!empty($geneSymbols)): ?>
+                                <?php foreach ($geneSymbols as $symbol): ?>
+                                    <option value="<?php echo htmlspecialchars($symbol); ?>"><?php echo htmlspecialchars($symbol); ?></option>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <?php if (empty($db_error)): ?>
+                                <option value="" disabled>No genes found in list</option>
+                                <?php else: ?>
+                                <option value="" disabled>Gene list unavailable due to error</option>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </select>
+
+                        <input type="hidden" name="genes_raw_text" id="genes_raw_text_input">
+
+                        <div class="btn-container">
+                            <button type="submit" name="search_type" value="intersection" class="search-btn btn-common">
+                                🔍 Search Common<br><span style="font-size:0.8em">(Intersection: contains ALL genes)</span>
+                            </button>
+                            <button type="submit" name="search_type" value="union" class="search-btn btn-related">
+                                📑 Search Related<br><span style="font-size:0.8em">(Union: contains ANY gene)</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <p>&nbsp;</p>
+            </div>
+        </td>
+    </tr>
+</table>
+
+<?php
+// Include footer template if needed
+// $template_footer_path = __DIR__ . '/../inc/template_footer.php';
+// if (file_exists($template_footer_path)) { include($template_footer_path); }
+?>
+
+<script>
+$(document).ready(function() {
+    // Initialize Select2
+    const select2Element = $('.genes-select2');
+    if(select2Element.length > 0) {
+        try {
+            select2Element.select2({
+                placeholder: "Select or type gene symbols...",
+                tags: true,
+                tokenSeparators: [',', ' ', '\\n', '\\t'],
+                width: '100%'
+            });
+
+            // Capture raw text input on form submit
+            $('form').on('submit', function() {
+                try {
+                    const selectedData = select2Element.select2('data');
+                    // Filter out potential placeholder or empty items before joining
+                    const rawText = selectedData
+                        .filter(item => item.text && String(item.text).trim() !== '') // Ensure item.text exists and is not empty
+                        .map(item => item.text)
+                        .join(', '); // Join with comma and space
+                    $('#genes_raw_text_input').val(rawText);
+                    console.log("Raw text captured:", rawText); // For debugging
+                } catch(e) {
+                     console.error("Error getting Select2 data on submit:", e);
+                }
+            });
+        } catch(e) {
+             console.error("Error initializing Select2:", e);
+             // Optionally display an error to the user if Select2 fails
+             $('.search-container').prepend('<p style="color:red;">Error initializing gene selector.</p>');
+        }
+    } else {
+        console.warn("Select2 element (.genes-select2) not found.");
+        // Optionally inform user if the dropdown isn't available
+        // $('.search-container').prepend('<p style="color:orange;">Gene selection dropdown unavailable.</p>');
+    }
+});
+</script>
+
+</body>
+</html>

@@ -1257,7 +1257,21 @@ Vignet-specific:
 - Preserve URLs for backward compatibility
 - Progressive migration (page by page)
 
-### 16.3 Design System
+### 16.3 Responsibility & Execution Plan
+
+| Phase | Who | What | Timeline |
+|-------|-----|------|----------|
+| **Phase 1: CSS Modernization** | Claude Code | Replace table layouts with Tailwind CSS, responsive design, modern typography/colors. Keep existing PHP pages — just reskin. | 1-2 days |
+| **Phase 2: React SPA Build** | Claude Code + Team review | Build React components (NetworkViewer, GeneSearch, ResultsTable, ChatPanel). Team reviews via screenshots and iterates on UI/UX. | 3-5 days |
+| **Phase 3: Visual Polish** | Team (designer or template) | Fine-tune colors, spacing, visual hierarchy. Could use a science/research-oriented React template as starting point. | 1-2 days |
+
+**Phase 1** is a quick win that immediately modernizes the look without changing any backend code. It can be done independently and rolled back easily.
+
+**Phase 2** is the structural migration to React SPA. Each page migrated one at a time, with the old PHP page as fallback until the React version is verified.
+
+**Phase 3** is iterative — the team reviews screenshots and provides feedback on visual design. A UI designer or Figma template can accelerate this.
+
+### 16.4 Design System
 
 **Color Palette:**
 ```
@@ -1318,51 +1332,136 @@ Text:       #1a202c (Near-black — readable)
 
 ---
 
-## 18. Implementation Roadmap
+## 18. Implementation Roadmap — Consolidated Execution Plan
 
-### Sprint 1: Foundation (Days 1-5)
+### Overview
 
-| Task | Priority | Effort | Dependencies |
-|------|----------|--------|-------------|
-| Database index optimization | P0 | 2 hours | None |
-| Daily PubMed pipeline (cron) | P0 | 4 hours | IgnetSciMiner tested |
-| API scaffolding (Flask) | P0 | 1 day | None |
-| Core API endpoints (search, gene, pair) | P0 | 2 days | API scaffolding |
-| Redis cache layer | P1 | 4 hours | Redis installed |
-| Frontend CSS modernization | P1 | 2 days | None |
+The plan is organized into **5 workstreams** that can run partly in parallel.
+Items marked [PREP] require setup before Claude Code implementation sessions.
+Items marked [DEFER] are parked for later and do not block the core 2.0 launch.
 
-### Sprint 2: Enhanced Features (Days 6-10)
+```
+Week 1                    Week 2                    Week 3+
+─────────────────────────────────────────────────────────────
+WS1: Data Pipeline ████████████░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+WS2: Database      ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+WS3: Backend API   ░░░░████████████████░░░░░░░░░░░░░░░░░░░░░
+WS4: Frontend      ░░░░░░░░████████████████████░░░░░░░░░░░░░
+WS5: User & LLM    ░░░░░░░░░░░░░░░░████████████░░░░░░░░░░░░
+─────────────────────────────────────────────────────────────
+Deferred:          PMCOA pipeline | Fine-tuned LLM | Vignet
+```
 
-| Task | Priority | Effort | Dependencies |
-|------|----------|--------|-------------|
-| SciMiner dictionary updates (INO, HUGO) | P1 | 1 day | Dictionary files |
-| Dignet 2.0 (dual-corpus mode) | P0 | 2 days | PMC pipeline started |
-| User text analysis endpoint | P1 | 2 days | Entity extraction |
-| LLM network interpretation | P1 | 1 day | API layer + LLM service |
-| React component library | P1 | 2 days | Design system |
-| User authentication | P2 | 1 day | API layer |
+---
 
-### Sprint 3: Advanced Features (Days 11-15)
+### Workstream 1: Data Pipeline (Get daily updates running)
 
-| Task | Priority | Effort | Dependencies |
-|------|----------|--------|-------------|
-| PMC OA pipeline | P0 | 3 days | SciMiner adapted |
-| Context expansion feature | P1 | 2 days | Dignet 2.0 |
-| Ontology service (INO/VO/HDO) | P1 | 2 days | Ontology data loaded |
-| Network comparison mode | P2 | 1 day | Dual-corpus |
-| Usage analytics | P2 | 1 day | Database + API |
-| SPA migration (key pages) | P2 | 2 days | React components |
+**Goal:** Ignet database receives daily PubMed updates automatically.
 
-### Future Sprints
+| # | Task | Who | Effort | Depends On | Status |
+|---|------|-----|--------|-----------|--------|
+| 1.1 | [PREP] Install Redis | Admin (sudo) | 10 min | — | Not started |
+| 1.2 | Update `config.env`: prefix `pubmed26n`, `DB_ENABLED=yes`, file 1334 | Claude Code | 5 min | — | Not started |
+| 1.3 | Test one file end-to-end: download `pubmed26n1335` → preprocess → mine → DB load | Claude Code + verify | 2 hours | 1.2 | Not started |
+| 1.4 | Catch-up: process files 1336-1384 (~50 files) | Automated (sequential) | ~50-100 hrs | 1.3 passes | Not started |
+| 1.5 | Set up daily cron (`0 2 * * *`) | Claude Code | 10 min | 1.3 passes | Not started |
+| 1.6 | Create systemd service files for BioBERT + BioSummarAI | Claude Code | 30 min | — | Not started |
+| 1.7 | Update SciMiner dictionaries (INO 2016→latest, HUGO refresh) | Manual + Claude Code | 1 day | Dictionary sources | Not started |
 
-| Feature | Timeline | Dependencies |
-|---------|----------|-------------|
-| Vignet MVP | Weeks 3-4 | VO enhancement, VIOLIN import |
-| Llama 3.2 fine-tuning | Weeks 4-6 | Training data prepared |
-| Community features (registered users) | Week 4 | User auth |
-| GO enrichment analysis | Week 5 | GO data loaded |
-| Docker deployment | Week 6 | All services stable |
-| Public API documentation | Week 6 | API finalized |
+**Catch-up strategy for 1.4:** Run overnight/weekend. The pipeline processes one file at a time (~1-2 hours each). Can script a loop:
+```bash
+for i in $(seq 1336 1384); do
+  bash single_xml_pipeline.sh /path/pubmed26n${i}.xml.gz 1
+done
+```
+
+---
+
+### Workstream 2: Database Optimization
+
+**Goal:** Fast queries on 15.8M+ rows, ready for growth to 20M+.
+
+| # | Task | Who | Effort | Depends On | Status |
+|---|------|-----|--------|-----------|--------|
+| 2.1 | Add indexes to core tables (gene pairs, sentences, ontology) | Claude Code | 1 hour | — | Not started |
+| 2.2 | Run EXPLAIN on top 10 slowest queries, optimize | Claude Code | 2 hours | 2.1 | Not started |
+| 2.3 | [PREP] Install Redis; implement cache layer for repeated queries | Claude Code | 4 hours | 1.1 (Redis) | Not started |
+| 2.4 | Add cursor-based pagination (replace OFFSET) | Claude Code | 2 hours | — | Not started |
+| 2.5 | Consider table partitioning if queries still slow after 2.1-2.4 | Claude Code | 2 hours | 2.2 results | Not started |
+
+---
+
+### Workstream 3: Backend API Layer
+
+**Goal:** Unified REST API serving all frontend requests (replaces direct PHP-to-DB).
+
+| # | Task | Who | Effort | Depends On | Status |
+|---|------|-----|--------|-----------|--------|
+| 3.1 | Flask API scaffolding (app structure, config, error handling) | Claude Code | 4 hours | — | Not started |
+| 3.2 | Core endpoints: `/api/v1/genes`, `/api/v1/genes/{sym}/neighbors`, `/api/v1/pairs/{g1}/{g2}` | Claude Code | 1 day | 3.1 | Not started |
+| 3.3 | Network endpoints: `/api/v1/network/search`, `/api/v1/network/{id}/centrality` | Claude Code | 1 day | 3.1 | Not started |
+| 3.4 | LLM endpoints: `/api/v1/summarize`, `/api/v1/chat`, `/api/v1/interpret` | Claude Code | 1 day | 3.1 + LLM router | Not started |
+| 3.5 | LLM router (institutional LLM → OpenRouter → BYOK fallback) | Claude Code | 4 hours | 3.1 | Not started |
+| 3.6 | User text analysis: `/api/v1/extract` (run SciMiner on user text) | Claude Code | 1 day | 3.1 + SciMiner integration | Not started |
+| 3.7 | Celery async workers for long-running tasks (LLM, network analysis) | Claude Code | 4 hours | 1.1 (Redis) | Not started |
+| 3.8 | API documentation (OpenAPI/Swagger) | Claude Code | 2 hours | 3.2-3.6 done | Not started |
+
+---
+
+### Workstream 4: Frontend Modernization
+
+**Goal:** Modern, responsive UI that researchers actually enjoy using.
+
+| # | Task | Who | Effort | Depends On | Status |
+|---|------|-----|--------|-----------|--------|
+| 4.1 | **Phase 1: CSS Modernization** — Tailwind on existing PHP pages | Claude Code | 1-2 days | — | Not started |
+| 4.2 | **Phase 2: React Components** — GeneSearch, NetworkViewer, ResultsTable, ChatPanel | Claude Code | 3-5 days | 3.2-3.4 (API) | Not started |
+| 4.3 | **Phase 2: SPA routing** — React Router, page-by-page migration | Claude Code | 2 days | 4.2 | Not started |
+| 4.4 | **Phase 3: Visual Polish** — Team feedback, design refinement | Team + Claude Code | 1-2 days | 4.2 | Not started |
+| 4.5 | Cytoscape.js network viewer (interactive, multi-layout, typed edges) | Claude Code | 2 days | 4.2 | Not started |
+| 4.6 | Mobile responsiveness testing & fixes | Claude Code (Playwright) | 4 hours | 4.1+ | Not started |
+
+---
+
+### Workstream 5: User Management, LLM & Analytics
+
+**Goal:** User accounts, flexible LLM access, usage tracking.
+
+| # | Task | Who | Effort | Depends On | Status |
+|---|------|-----|--------|-----------|--------|
+| 5.1 | User DB tables (users, saved_queries, usage_events) | Claude Code | 2 hours | — | Not started |
+| 5.2 | Auth system (register, login, JWT for API) | Claude Code | 1 day | 5.1 + 3.1 | Not started |
+| 5.3 | Admin dashboard (pipeline status, usage stats, user management) | Claude Code | 1 day | 5.1 + 5.2 | Not started |
+| 5.4 | LLM settings page (BYOK key entry, provider selection) | Claude Code | 4 hours | 5.2 + 3.5 | Not started |
+| 5.5 | [PREP] Institutional LLM endpoint configured (DGX Spark URL) | Admin | — | Hardware available | Not started |
+| 5.6 | Usage event tracking (search, network view, LLM query) | Claude Code | 4 hours | 5.1 | Not started |
+
+---
+
+### Deferred (Not in Initial 2.0 Scope)
+
+| Item | Reason Deferred | Revisit When |
+|------|----------------|-------------|
+| PMC OA full-text pipeline | Needs separate server + significant compute | Server provisioned |
+| Fine-tuned Llama 3.2 (domain models) | Needs GPU + training data curation | DGX Spark available |
+| Vignet (Vaccine Ignet) sister site | Depends on VO enhancements + VIOLIN import | Core Ignet 2.0 stable |
+| CSRF protection | Low risk (no destructive user actions yet) | User auth implemented |
+| Docker containerization | Nice-to-have, not blocking | All services stable |
+| Elasticsearch | Only if MySQL FULLTEXT is a bottleneck | DB optimization results |
+| GO enrichment analysis | Requires GO data loading + analysis UI | API + frontend stable |
+
+---
+
+### Pre-Implementation Checklist
+
+Before starting any coding, these items must be ready:
+
+- [ ] **Redis installed** (`sudo dnf install redis -y && sudo systemctl enable --now redis`)
+- [ ] **systemd services created** for BioBERT + BioSummarAI (so they survive reboots)
+- [ ] **Disk space verified** (`df -h` — need at least 30GB free for pipeline catch-up)
+- [ ] **Institutional LLM endpoint URL** known (DGX Spark or similar — needed for Tier 1 LLM access)
+- [ ] **Team alignment** on design direction (review color palette, layout mockups)
+- [ ] **SciMiner config updated** (`pubmed26n` prefix, `DB_ENABLED=yes`)
 
 ---
 
@@ -1370,14 +1469,13 @@ Text:       #1a202c (Near-black — readable)
 
 | Risk | Probability | Impact | Mitigation |
 |------|------------|--------|------------|
-| Database performance at scale (10M+ rows) | High | High | Index optimization first; partitioning if needed; Redis cache |
-| PMC OA pipeline complexity (full-text parsing) | Medium | High | Start with structured XML sections; skip poorly formatted articles |
-| LLM cost (GPT-4o at scale) | Medium | Medium | Cache responses; use Llama 3.2 for batch tasks; rate limiting |
-| Frontend migration breaks existing users | Low | High | Progressive migration; keep old URLs working; redirect map |
-| SciMiner dictionary staleness | Medium | Medium | Update INO (2016→latest), HUGO (2018→latest) before go-live |
-| Fine-tuning Llama 3.2 quality | Medium | Medium | Start with GPT-4o; fine-tune iteratively; human evaluation |
-| Team bandwidth (2-week timeline) | High | High | Prioritize ruthlessly; P0 items first; defer P2+ |
-| Server resources (CPU inference for Llama) | Medium | Medium | Quantize model (GGUF 4-bit); test on current hardware first |
+| Database performance at scale (15M+ rows) | High | High | Index optimization first (WS2); Redis cache; partitioning if needed |
+| Pipeline catch-up takes too long (50 files) | Medium | Medium | Run overnight/weekend; parallelize if server load permits |
+| LLM cost if institutional LLM unavailable | Medium | Medium | Tiered access (BYOK, OpenRouter free); cache LLM responses in Redis |
+| Frontend migration breaks existing users | Low | High | Phase 1 CSS-only is reversible; React migration is page-by-page |
+| SciMiner dictionary staleness (INO 2016) | Medium | Medium | Update dictionaries in WS1 before daily pipeline goes live |
+| Server resources (4 cores, 16GB RAM) | Medium | High | Monitor during pipeline + services; defer local LLM if constrained |
+| 52GB disk space runs low | Medium | High | Clean old data; monitor during catch-up; alert at 80% |
 
 ---
 

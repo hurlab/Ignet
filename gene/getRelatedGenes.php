@@ -5,6 +5,7 @@ $db->Connect($host, $username, $password, $database);
 
 $vali=new Validation($_REQUEST);
 $geneSymbol1 = $vali->getInput('geneSymbol1', 'Gene Name', 1, 60, true);
+$geneSymbol1 = sanitizeGeneSymbol($geneSymbol1);
 $score = $vali->getInput('score', 'Score', 0, 60, true);
 $hasVaccine = $vali->getInput('hasVaccine', '"Vaccine" metioned?', 0, 60, true);
 $keywords = $vali->getInput('keywords', 'Keywords', 0, 60);
@@ -13,10 +14,12 @@ $order_by = $vali->getInput('order_by', 'Order by', 0, 20);
 $order = $vali->getInput('order', 'Order', 0, 20);
 $order_by = $order_by=='' ? 'score':$order_by;
 $order = $order=='' ? 'DESC':$order;
+$order_by = sanitizeOrderBy($order_by, ['geneSymbol1','score','hasVaccine'], 'score');
+$order = sanitizeOrder($order);
 $currPage = $vali->getNumber('currPage', 'Current Page', 1, 5);
 
 
-$params = "&geneSymbol1=$geneSymbol1&score=$score&hasVaccine=$hasVaccine&keywords=$keywords";
+$params = "&geneSymbol1=" . urlencode($geneSymbol1) . "&score=" . urlencode($score) . "&hasVaccine=" . urlencode($hasVaccine) . "&keywords=" . urlencode($keywords);
 
 if (strlen($vali->getErrorMsg())==0) { 
 	$strSql="SELECT * FROM t_centrality_score_gene2gene_whole";
@@ -29,7 +32,7 @@ if (strlen($vali->getErrorMsg())==0) {
 
 	if (!empty($cen_scores)) {
 ?>
-<p style="font-weight:bold">The rankings of <?php echo $geneSymbol1?> based on centrality scores:</p>
+<p style="font-weight:bold">The rankings of <?php echo htmlspecialchars($geneSymbol1, ENT_QUOTES, 'UTF-8')?> based on centrality scores:</p>
 <p>
 <?php 		
 		if (isset($cen_scores['d'][$geneSymbol1])) {
@@ -82,31 +85,31 @@ Betweenness centrality: <?php echo round(($i+1)/sizeof($array_tmp)*100, 2)?>%<br
 	}
 
 #	$strSql="(SELECT geneSymbol2 as geneSymbol1, score, hasVaccine FROM t_sentence_hit_gene2gene_Host where  geneSymbol1 = '$geneSymbol1'";
-	$strSql="(SELECT geneSymbol2 as geneSymbol1, score, hasVaccine, matching_term, term_id FROM t_sentence_hit_gene2gene_Host LEFT JOIN sentence_vaccine ON t_sentence_hit_gene2gene.pmid = sentence_vaccine.PMID where geneSymbol1='$geneSymbol1'";
+	$strSql="(SELECT geneSymbol2 as geneSymbol1, score, hasVaccine, matching_term, term_id FROM t_sentence_hit_gene2gene_Host LEFT JOIN sentence_vaccine ON t_sentence_hit_gene2gene.pmid = sentence_vaccine.PMID where geneSymbol1=" . $db->qstr($geneSymbol1);
 	if ($score!='') {
-		$strSql .= " and score>=$score";
+		$strSql .= " and score>=" . (float)$score;
 	}
 	if ($hasVaccine!='') {
-		$strSql .= " and hasVaccine>=$hasVaccine";
+		$strSql .= " and hasVaccine>=" . (int)$hasVaccine;
 	}
 	if ($keywords != '') {
 		$tkeywords = transformKeywords($keywords);
-		$strSql .= " AND MATCH(sentence) AGAINST ('$tkeywords' IN BOOLEAN MODE)";
+		$strSql .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
 	}
-	
+
 	$strSql .= ") ";
-	
+
 #	$strSql.="UNION (SELECT geneSymbol1 as geneSymbol1, score, hasVaccine FROM t_sentence_hit_gene2gene_Host where geneSymbol2 = '$geneSymbol1'";
-	$strSql.="UNION (SELECT geneSymbol1 as geneSymbol1, score, hasVaccine, matching_term, term_id FROM t_sentence_hit_gene2gene_Host LEFT JOIN sentence_vaccine ON t_sentence_hit_gene2gene.pmid = sentence_vaccine.PMID where geneSymbol2 = '$geneSymbol1'";
+	$strSql.="UNION (SELECT geneSymbol1 as geneSymbol1, score, hasVaccine, matching_term, term_id FROM t_sentence_hit_gene2gene_Host LEFT JOIN sentence_vaccine ON t_sentence_hit_gene2gene.pmid = sentence_vaccine.PMID where geneSymbol2 = " . $db->qstr($geneSymbol1);
 	if ($score!='') {
-		$strSql .= " and score>=$score";
+		$strSql .= " and score>=" . (float)$score;
 	}
 	if ($hasVaccine!='') {
-		$strSql .= " and hasVaccine>=$hasVaccine";
+		$strSql .= " and hasVaccine>=" . (int)$hasVaccine;
 	}
 	if ($keywords != '') {
 		$tkeywords = transformKeywords($keywords);
-		$strSql .= " AND MATCH(sentence) AGAINST ('$tkeywords' IN BOOLEAN MODE)";
+		$strSql .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
 	}
 	$strSql .= ") ";
 	$strSql.= " order by $order_by $order";
@@ -318,12 +321,12 @@ Betweenness centrality: <?php echo round(($i+1)/sizeof($array_tmp)*100, 2)?>%<br
 			}
 ?>
   <tr>
-    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><a href="index.php?geneSymbol1=<?php echo $gene_list['geneSymbol1']?>"><?php echo $gene_list['geneSymbol1']?></a></td>
-    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><a target="_blank" href="../genepair/index.php?geneSymbol1=<?php echo $geneSymbol1?>&amp;geneSymbol2=<?php echo $gene_list['geneSymbol1']?>">
-    	<?php echo sprintf("%.4f", $gene_list['score'])?>
+    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><a href="index.php?geneSymbol1=<?php echo htmlspecialchars($gene_list['geneSymbol1'], ENT_QUOTES, 'UTF-8')?>"><?php echo htmlspecialchars($gene_list['geneSymbol1'], ENT_QUOTES, 'UTF-8')?></a></td>
+    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><a target="_blank" href="../genepair/index.php?geneSymbol1=<?php echo htmlspecialchars($geneSymbol1, ENT_QUOTES, 'UTF-8')?>&amp;geneSymbol2=<?php echo htmlspecialchars($gene_list['geneSymbol1'], ENT_QUOTES, 'UTF-8')?>">
+    	<?php echo sprintf("%.4f", (float)$gene_list['score'])?>
     	</a></td>
     <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo $gene_list['hasVaccine']==1 ? 'Y' : 'N'?></td>
-    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><a href="http://purl.obolibrary.org/obo/<?php echo $gene_list['term_id']?>"><?php echo $gene_list['matching_term'];?></a></td>
+    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><a href="http://purl.obolibrary.org/obo/<?php echo htmlspecialchars($gene_list['term_id'], ENT_QUOTES, 'UTF-8')?>"><?php echo htmlspecialchars($gene_list['matching_term'], ENT_QUOTES, 'UTF-8');?></a></td>
   </tr>
 <?php 
 		}

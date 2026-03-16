@@ -13,25 +13,26 @@ foreach ($rs as $row) {
 	$c_query_id = $row['c_query_id'];
 	
 	if (trim($pubmedRecords)=='') {
-		$strSql = "update t_pubmed_query set c_num_genes=0, c_num_pairs=0, c_num_pubmed_records=0 where  c_query_id='$c_query_id'";
+		$strSql = "update t_pubmed_query set c_num_genes=0, c_num_pairs=0, c_num_pubmed_records=0 where  c_query_id=" . $db->qstr($c_query_id);
 		$db->Execute($strSql);
 	}
 	else {
 		$pubmedIds=preg_split('/,/', $pubmedRecords);
-	
-		$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene where pmid in ($pubmedRecords)";
-		
+		$safePmids = implode(',', array_map('intval', $pubmedIds));
+
+		$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene where pmid in ($safePmids)";
+
 		$pairs=array();
 		$genes=array();
-		
+
 		$rs = $db->Execute($strSql);
 		foreach ($rs as $row) {
 			if (!isset($pairs[$row['geneSymbol1']."\t".$row['geneSymbol2']]) && !isset($pairs[$row['geneSymbol2']."\t".$row['geneSymbol1']])) $pairs[$row['geneSymbol1']."\t".$row['geneSymbol2']]=1;
 			$genes[$row['geneSymbol1']]=1;
 			$genes[$row['geneSymbol2']]=1;
 		}
-		
-		$strSql = "update t_pubmed_query set c_num_genes=".sizeof($genes).", c_num_pairs=".sizeof($pairs).", c_num_pubmed_records=".sizeof($pubmedIds)." where  c_query_id='$c_query_id'";
+
+		$strSql = "update t_pubmed_query set c_num_genes=".(int)sizeof($genes).", c_num_pairs=".(int)sizeof($pairs).", c_num_pubmed_records=".(int)sizeof($pubmedIds)." where  c_query_id=" . $db->qstr($c_query_id);
 		$db->Execute($strSql);
 	}
 }

@@ -40,19 +40,22 @@ $geneSymbol1 = $vali->getInput('geneSymbol1', 'Gene Name', 1, 60, true);
 $geneSymbol2 = $vali->getInput('geneSymbol2', 'Gene Name', 1, 60, true);
 
 
-$strSql = "SELECT * FROM t_pubmed_query where c_query_id = '$c_query_id'";
+$strSql = "SELECT * FROM t_pubmed_query where c_query_id = " . $db->qstr($c_query_id);
 $rs = $db->Execute($strSql);
 
 if (!$rs->EOF) {
 	$pubmedRecords=$rs->Fields('c_pubmed_records');
-	$strSql="SELECT distinct s24.sentence, s24.PMID FROM sentences25_genepair s24 INNER JOIN t_sentence_hit_gene2gene_Host hgh ON hgh.PMID = s24.PMID where hgh.PMID in ($pubmedRecords) and ((geneSymbol1 = '$geneSymbol1' and  geneSymbol2 = '$geneSymbol2') OR  (geneSymbol1 = '$geneSymbol2' and  geneSymbol2 = '$geneSymbol1'))";
+	$safePmids = implode(',', array_map('intval', explode(',', $pubmedRecords)));
+	$qGeneSymbol1 = $db->qstr($geneSymbol1);
+	$qGeneSymbol2 = $db->qstr($geneSymbol2);
+	$strSql="SELECT distinct s24.sentence, s24.PMID FROM sentences25_genepair s24 INNER JOIN t_sentence_hit_gene2gene_Host hgh ON hgh.PMID = s24.PMID where hgh.PMID in ($safePmids) and ((geneSymbol1 = $qGeneSymbol1 and  geneSymbol2 = $qGeneSymbol2) OR  (geneSymbol1 = $qGeneSymbol2 and  geneSymbol2 = $qGeneSymbol1))";
 	
 	$rs = $db->Execute($strSql);
 	$array_pub_list = $rs->GetArray();
 
 ?>
 
-<p>Gene Pair: <?php echo $geneSymbol1?>, <?php echo $geneSymbol2?></p>
+<p>Gene Pair: <?php echo htmlspecialchars($geneSymbol1, ENT_QUOTES, 'UTF-8')?>, <?php echo htmlspecialchars($geneSymbol2, ENT_QUOTES, 'UTF-8')?></p>
 <p>Related Sentences</p>
 
 <table border="0" cellpadding="4">
@@ -69,7 +72,7 @@ if (!$rs->EOF) {
   <tr>
     <td valign="top" bgcolor="#F4F9FD" class="smallContent"><b><?php echo $i?></b></td>
     <td valign="top" bgcolor="#F4F9FD" class="smallContent">
-<a href="http://www.ncbi.nlm.nih.gov/pubmed/<?php echo $row['PMID']?>" target="_blank"><?php echo $row['PMID']?></a>
+<a href="http://www.ncbi.nlm.nih.gov/pubmed/<?php echo (int)$row['PMID']?>" target="_blank"><?php echo (int)$row['PMID']?></a>
 	</td>
     <td valign="top" bgcolor="#F4F9FD" class="smallContent">
 <?php
@@ -77,7 +80,7 @@ if (!$rs->EOF) {
 		echo(formatOutput($row['sentence'], array($keywords)));
 }
 else {
-	echo($row['sentence']);
+	echo htmlspecialchars($row['sentence'], ENT_QUOTES, 'UTF-8');
 }
 ?>    
     </td>

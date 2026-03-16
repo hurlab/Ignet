@@ -88,10 +88,10 @@ $geneCount = $rs -> Fields("geneCount");
 
 		<p>Ignet has analyzed abstracts from millions of publications available in PubMed.</p>		
 	
-		<p>Specifically, Ignet has found <?php echo $interactionCount ?> gene-gene interactions from <?php echo $sentenceCount ?> sentences in  <?php  echo $pmidCount?> PubMed publications. These interactions involve <?php echo $geneCount ?> unique human genes. </p>
+		<p>Specifically, Ignet has found <?php echo htmlspecialchars($interactionCount, ENT_QUOTES, 'UTF-8') ?> gene-gene interactions from <?php echo htmlspecialchars($sentenceCount, ENT_QUOTES, 'UTF-8') ?> sentences in  <?php  echo htmlspecialchars($pmidCount, ENT_QUOTES, 'UTF-8')?> PubMed publications. These interactions involve <?php echo htmlspecialchars($geneCount, ENT_QUOTES, 'UTF-8') ?> unique human genes. </p>
 		<br/>
 		<p>An example listed for gene interaction with IFNG:</p> 
-		<p><?php echo $num_genes?> genes associated with IFNG,</p>
+		<p><?php echo htmlspecialchars($num_genes, ENT_QUOTES, 'UTF-8')?> genes associated with IFNG,</p>
 		<!-- <p><?php echo $num_pairs?> interactions detected in the IFNG interaction network. </p> -->
 		<!-- <p><?php echo $num_sentences?> interaction sentences have been found and visualized in Ignet.</p> -->
 		<p>Top 50 genes ranked by four scores</p>
@@ -109,10 +109,10 @@ for ($i=0; $i<50; $i++) {
 ?>
   <tr>
     <td><?php echo $i+1?></td>
-    <td><?php echo $array_rank['d'][$i]?></td>
-    <td><?php echo $array_rank['p'][$i]?></td>
-    <td><?php echo $array_rank['c'][$i]?></td>
-    <td><?php echo $array_rank['b'][$i]?></td>
+    <td><?php echo htmlspecialchars($array_rank['d'][$i], ENT_QUOTES, 'UTF-8')?></td>
+    <td><?php echo htmlspecialchars($array_rank['p'][$i], ENT_QUOTES, 'UTF-8')?></td>
+    <td><?php echo htmlspecialchars($array_rank['c'][$i], ENT_QUOTES, 'UTF-8')?></td>
+    <td><?php echo htmlspecialchars($array_rank['b'][$i], ENT_QUOTES, 'UTF-8')?></td>
   </tr>
 <?php 
 }

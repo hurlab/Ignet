@@ -8,27 +8,31 @@ $vali=new Validation($_REQUEST);
 $keywords = $vali->getInput('keywords', 'Keywords', 0, 60);
 
 $geneSymbol1 = $vali->getInput('geneSymbol1', 'ignet 1', 2, 60);
+$geneSymbol1 = sanitizeGeneSymbol($geneSymbol1);
 $geneSymbol2 = $vali->getInput('geneSymbol2', 'ignet 2', 0, 60);
+$geneSymbol2 = sanitizeGeneSymbol($geneSymbol2);
 $score = $vali->getInput('score', 'Score', 0, 10);
 $hasVaccine = $vali->getInput('hasVaccine', '"Vaccine" metioned?', 0, 10);
 
 $orderBy = $vali->getInput('orderBy', 'Order by', 0, 60);
 $order = $vali->getInput('order', 'Accending or Decending', 0, 60);
+$orderBy = sanitizeOrderBy($orderBy, ['geneSymbol1','geneSymbol2','geneMatch1','geneMatch2','Score','hasVaccine','score'], '');
+$order = sanitizeOrder($order);
 $currPage = $vali->getNumber('currPage', 'Current Page', 1, 5);
 
 $strSql = "SELECT c_hit_id FROM t_sentence_hit_gene2gene_Host WHERE ";
-$strSql .= "  ((geneSymbol1 = '$geneSymbol1' AND geneSymbol2 = '$geneSymbol2') OR (geneSymbol2 = '$geneSymbol1' AND geneSymbol1 = '$geneSymbol2'))";
+$strSql .= "  ((geneSymbol1 = " . $db->qstr($geneSymbol1) . " AND geneSymbol2 = " . $db->qstr($geneSymbol2) . ") OR (geneSymbol2 = " . $db->qstr($geneSymbol1) . " AND geneSymbol1 = " . $db->qstr($geneSymbol2) . "))";
 
 if ($score != '') {
-	$strSql .= " AND score > $score";
+	$strSql .= " AND score > " . (float)$score;
 }
 if ($hasVaccine != '') {
-	$strSql .= " AND hasVaccine = $hasVaccine";
+	$strSql .= " AND hasVaccine = " . (int)$hasVaccine;
 }
 
 if ($keywords != '') {
 	$tkeywords = transformKeywords($keywords);
-	$strSql .= " AND MATCH(sentence) AGAINST ('$tkeywords' IN BOOLEAN MODE)";
+	$strSql .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
 }
 
 if ($orderBy != '') {
@@ -51,17 +55,17 @@ if (!$rs->EOF)
 	if ($currPage == '' || $currPage > $numOfPage || $numOfPage < 1) {
 		$currPage = 1;
 	}
-	$params = "?geneSymbol1=$geneSymbol1&geneSymbol2=$geneSymbol2&score=$score&hasVaccine=$hasVaccine&keywords=$keywords";
-	$params = addslashes($params);
+	$params = "?geneSymbol1=" . urlencode($geneSymbol1) . "&geneSymbol2=" . urlencode($geneSymbol2) . "&score=" . urlencode($score) . "&hasVaccine=" . urlencode($hasVaccine) . "&keywords=" . urlencode($keywords);
 
 	$a_ignets = array();
 	for ($i= ($currPage-1)*$recordsPerPage; $i < $currPage*$recordsPerPage && $i < $numOfRecords; $i++) {
 		$a_ignets[] = $array_c_hit_ids[$i]['c_hit_id'];
 	}
 	
-	$ignets = implode("','", $a_ignets);
+	$a_ignets_safe = array_map('intval', $a_ignets);
+	$ignets = implode(",", $a_ignets_safe);
 
-	$strSql = "select * FROM t_sentence_hit_gene2gene_Host where c_hit_id in ('$ignets')";
+	$strSql = "select * FROM t_sentence_hit_gene2gene_Host where c_hit_id in ($ignets)";
 
 	if ($orderBy != '') {
 		$strSql .= " ORDER BY $orderBy $order";
@@ -288,15 +292,15 @@ if (!$rs->EOF)
 	foreach ($array_ignet as $ignet) {
 ?>
 	<tr>
-		<td bgcolor="#F5FAF7" style=" font-size:12px"><a href="http://www.ncbi.nlm.nih.gov/pubmed/<?php echo $ignet['PMID']?>" target="_blank">
-			<?php echo $ignet['PMID']?>
+		<td bgcolor="#F5FAF7" style=" font-size:12px"><a href="http://www.ncbi.nlm.nih.gov/pubmed/<?php echo htmlspecialchars($ignet['PMID'], ENT_QUOTES, 'UTF-8')?>" target="_blank">
+			<?php echo htmlspecialchars($ignet['PMID'], ENT_QUOTES, 'UTF-8')?>
 		</a></td>
-		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $ignet['geneSymbol1']?></td>
-		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $ignet['geneSymbol2']?></td>
-		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $ignet['geneMatch1']?></td>
-		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $ignet['geneMatch2']?></td>
-		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $ignet['score']?></td>
-		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $ignet['hasVaccine']?></td>
+		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($ignet['geneSymbol1'], ENT_QUOTES, 'UTF-8')?></td>
+		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($ignet['geneSymbol2'], ENT_QUOTES, 'UTF-8')?></td>
+		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($ignet['geneMatch1'], ENT_QUOTES, 'UTF-8')?></td>
+		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($ignet['geneMatch2'], ENT_QUOTES, 'UTF-8')?></td>
+		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($ignet['score'], ENT_QUOTES, 'UTF-8')?></td>
+		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($ignet['hasVaccine'], ENT_QUOTES, 'UTF-8')?></td>
 		<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo formatOutput($ignet['sentence'], $keywords)?></td>
 	</tr>
 	<?php 

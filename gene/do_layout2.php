@@ -6,11 +6,12 @@ $db->Connect($host, $username, $password, $database);
 $vali=new Validation($_REQUEST);
 $c_species = $vali->getInput('c_species', 'Species', 1, 60, true);
 $c_gene_name = $vali->getInput('c_gene_name', 'Gene Name', 1, 60, true);
+$c_gene_name = sanitizeGeneSymbol($c_gene_name);
 
 if (strlen($vali->getErrorMsg())==0) { 
 	$c_job_key = preg_replace('/\W+/', '_', $c_species.'_'.$c_gene_name).'2';
 	
-	$strSql="SELECT * FROM t_gene_top_pair where c_species = '$c_species' and (c_gene_name1 = '$c_gene_name' or c_gene_name2 = '$c_gene_name') order by c_distance";
+	$strSql="SELECT * FROM t_gene_top_pair where c_species = " . $db->qstr($c_species) . " and (c_gene_name1 = " . $db->qstr($c_gene_name) . " or c_gene_name2 = " . $db->qstr($c_gene_name) . ") order by c_distance";
 		
 	$unique_pairs = array();	
 	$unique_genes = array();
@@ -56,7 +57,7 @@ if (strlen($vali->getErrorMsg())==0) {
 				$unique_genes[$related_gene] = 1;
 				
 		
-				$strSql="SELECT * FROM t_gene_top_pair where c_species = '$c_species' and (c_gene_name1 = '$related_gene' or c_gene_name2 = '$related_gene') order by c_distance";
+				$strSql="SELECT * FROM t_gene_top_pair where c_species = " . $db->qstr($c_species) . " and (c_gene_name1 = " . $db->qstr($related_gene) . " or c_gene_name2 = " . $db->qstr($related_gene) . ") order by c_distance";
 				
 				$rs2 = $db->Execute($strSql);
 				if (!$rs2->EOF) {
@@ -102,7 +103,7 @@ if (strlen($vali->getErrorMsg())==0) {
 			exec("fdp -Tpng -o/tmp/genomesh/$c_job_key.png -Tcmap -o/tmp/genomesh/$c_job_key.map /tmp/genomesh/$c_job_key.txt");
 //			exec("convert -density 72x72 /tmp/genomesh/$c_job_key.ps /tmp/genomesh/$c_job_key.png");
 ?>
-<img src="../genemesh/get_image.php?c_job_key=<?php echo $c_species?>_<?php echo $c_gene_name?>2" usemap="#map001" id="img001" border="0"/>
+<img src="../genemesh/get_image.php?c_job_key=<?php echo htmlspecialchars($c_species, ENT_QUOTES, 'UTF-8')?>_<?php echo htmlspecialchars($c_gene_name, ENT_QUOTES, 'UTF-8')?>2" usemap="#map001" id="img001" border="0"/>
 <map name="map001" id="map001">
 <?php 
 			print(str_replace($array_pattern, $array_replace, file_get_contents("/tmp/genomesh/$c_job_key.map")));

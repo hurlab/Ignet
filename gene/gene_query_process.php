@@ -58,32 +58,32 @@ $currPage = $vali->getNumber('currPage', 'Current Page', 1, 5);
 $strSql = "SELECT geneid FROM t_gene_annotation WHERE 1=1";
 
 if ($species != '') {
-	$strSql .= " AND species = '$species'";
+	$strSql .= " AND species = " . $db->qstr($species);
 }
 
 if ($gene_locus_tag != '') {
-	$strSql .= " AND locustag = '$gene_locus_tag'";
+	$strSql .= " AND locustag = " . $db->qstr($gene_locus_tag);
 }
 if ($gene_name != '') {
-	$strSql .= " AND (symbol = '$gene_name' OR MATCH (synonyms) AGAINST ('$gene_name'))";
+	$strSql .= " AND (symbol = " . $db->qstr($gene_name) . " OR MATCH (synonyms) AGAINST (" . $db->qstr($gene_name) . "))";
 }
 if ($gene_id != '') {
-	$strSql .= " AND geneid = '$gene_id'";
+	$strSql .= " AND geneid = " . $db->qstr($gene_id);
 }
 
 if ($protein_refseq != '') {
-	$strSql .= " AND protein_acc='$protein_refseq' or protein_acc like '$protein_refseq.%' ";
+	$strSql .= " AND (protein_acc=" . $db->qstr($protein_refseq) . " or protein_acc like " . $db->qstr($protein_refseq . '.%') . ") ";
 }
 if ($protein_id != '') {
-	$strSql .= " AND protein_gi='$protein_id'";
+	$strSql .= " AND protein_gi=" . $db->qstr($protein_id);
 }
 if ($uniprot_acc != '') {
-	$strSql .= " AND uniprot_acc='$uniprot_acc'";
+	$strSql .= " AND uniprot_acc=" . $db->qstr($uniprot_acc);
 }
 
 if ($description != '') {
 	$tkeywords = transformKeywords($description);
-	$strSql .= " AND MATCH(symbol,locustag,synonyms,dbxrefs,description,protein_note,annotation,phi_annotation,taxname) AGAINST ('$tkeywords' IN BOOLEAN MODE)";
+	$strSql .= " AND MATCH(symbol,locustag,synonyms,dbxrefs,description,protein_note,annotation,phi_annotation,taxname) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
 }
 
 $rs = $db->Execute($strSql);
@@ -100,17 +100,17 @@ if (!$rs->EOF)
 	if ($currPage == '' || $currPage > $numOfPage || $numOfPage < 1) {
 		$currPage = 1;
 	}
-	$params = "&species=$species&phi_function=$phi_function&gene_locus_tag=$gene_locus_tag&gene_name=$gene_name&gene_id=$gene_id&gene_start=$gene_start&gene_end=$gene_end&protein_refseq=$protein_refseq&protein_id=$protein_id&uniprot_acc=$uniprot_acc&protein_weight1=$protein_weight1&protein_weight2=$protein_weight2&protein_pi1=$protein_pi1&protein_pi2=$protein_pi2&description=$description&orderby1=$orderby1&order1=$order1&orderby2=$orderby2&order2=$order2";
-	$params = addslashes($params);
+	$params = "&species=" . urlencode($species) . "&phi_function=" . urlencode($phi_function) . "&gene_locus_tag=" . urlencode($gene_locus_tag) . "&gene_name=" . urlencode($gene_name) . "&gene_id=" . urlencode($gene_id) . "&gene_start=" . urlencode($gene_start) . "&gene_end=" . urlencode($gene_end) . "&protein_refseq=" . urlencode($protein_refseq) . "&protein_id=" . urlencode($protein_id) . "&uniprot_acc=" . urlencode($uniprot_acc) . "&protein_weight1=" . urlencode($protein_weight1) . "&protein_weight2=" . urlencode($protein_weight2) . "&protein_pi1=" . urlencode($protein_pi1) . "&protein_pi2=" . urlencode($protein_pi2) . "&description=" . urlencode($description) . "&orderby1=" . urlencode($orderby1) . "&order1=" . urlencode($order1) . "&orderby2=" . urlencode($orderby2) . "&order2=" . urlencode($order2);
 
 	$a_genes = array();
 	for ($i= ($currPage-1)*$recordsPerPage; $i < $currPage*$recordsPerPage && $i < $numOfRecords; $i++) {
 		$a_genes[] = $array_geneids[$i]['geneid'];
 	}
 	
-	$geneids = implode("','", $a_genes);
+	$a_genes_safe = array_map('intval', $a_genes);
+	$geneids = implode(",", $a_genes_safe);
 
-	$strSql = "select * from t_gene_annotation where geneid in ('$geneids')";
+	$strSql = "select * from t_gene_annotation where geneid in ($geneids)";
 
 	$rs = $db->Execute($strSql);
 	$array_gene = array();
@@ -206,35 +206,35 @@ if (!$rs->EOF)
 	foreach ($array_gene as $gene) {
 ?>
 			<tr>
-				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $gene['taxname']?></td>
-				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $gene['locustag']?></td>
+				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($gene['taxname'], ENT_QUOTES, 'UTF-8')?></td>
+				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($gene['locustag'], ENT_QUOTES, 'UTF-8')?></td>
 				<td bgcolor="#F5FAF7" style=" font-size:12px">
-<?php 
-		$strSql = "select * from db_mesh.t_gene where c_num_pubs>2 and c_species='{$gene['species']}' and c_gene_name='{$gene['symbol']}' limit 1";
-		
+<?php
+		$strSql = "select * from db_mesh.t_gene where c_num_pubs>2 and c_species=" . $db->qstr($gene['species']) . " and c_gene_name=" . $db->qstr($gene['symbol']) . " limit 1";
+
 		$rs_count = $db->Execute($strSql);
 
 		if ($gene['symbol']!='' && $gene['symbol']!='-') {
 			if (!$rs_count->EOF) {
 ?>
-				<a href="index.php?c_species=<?php echo $gene['species']?>&amp;c_gene_name=<?php echo $gene['symbol']?>">
-					<?php echo $gene['symbol']?>
+				<a href="index.php?c_species=<?php echo htmlspecialchars($gene['species'], ENT_QUOTES, 'UTF-8')?>&amp;c_gene_name=<?php echo htmlspecialchars($gene['symbol'], ENT_QUOTES, 'UTF-8')?>">
+					<?php echo htmlspecialchars($gene['symbol'], ENT_QUOTES, 'UTF-8')?>
 			</a>
-				<?php 
+				<?php
 			}
-			else { 
+			else {
 ?>
-				<?php echo $gene['symbol']?>
-				<?php 
+				<?php echo htmlspecialchars($gene['symbol'], ENT_QUOTES, 'UTF-8')?>
+				<?php
 			}
 		}
 ?>
 				</td>
-				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $gene['geneid']?></td>
-				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo preg_replace('/\|/', ', ', $gene['synonyms'])?></td>
-				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo preg_replace('/\|/', ', ', $gene['dbxrefs'])?></td>
-				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $gene['description']?></td>
-				<td bgcolor="#F5FAF7" style=" font-size:12px"><a href="http://www.phidias.us/phigen/query/host_gene_detail.php?geneid=<?php echo $gene['geneid']?>">More</a></td>
+				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($gene['geneid'], ENT_QUOTES, 'UTF-8')?></td>
+				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars(preg_replace('/\|/', ', ', $gene['synonyms']), ENT_QUOTES, 'UTF-8')?></td>
+				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars(preg_replace('/\|/', ', ', $gene['dbxrefs']), ENT_QUOTES, 'UTF-8')?></td>
+				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($gene['description'], ENT_QUOTES, 'UTF-8')?></td>
+				<td bgcolor="#F5FAF7" style=" font-size:12px"><a href="http://www.phidias.us/phigen/query/host_gene_detail.php?geneid=<?php echo htmlspecialchars($gene['geneid'], ENT_QUOTES, 'UTF-8')?>">More</a></td>
 			</tr>
 			<?php 
 	}

@@ -43,7 +43,7 @@ $tkeywords = transformKeywords($keywords);
 <h3> Gene Interaction Search</h3>
 
 <?php 
-$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene where MATCH(sentence) AGAINST ('$tkeywords' IN BOOLEAN MODE)";
+$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene where MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
 
 $gene_pairs=array();
 
@@ -55,7 +55,7 @@ foreach ($rs as $row) {
 if (!empty($gene_pairs)){
 ?>
 
-<p> Found <?php echo sizeof($gene_pairs)?> gene pairs.  <a href="dignet/load_centrality_scores.php?keywords=<?php echo $keywords?>">Calculate centrality scores</a>.</p>
+<p> Found <?php echo sizeof($gene_pairs)?> gene pairs.  <a href="dignet/load_centrality_scores.php?keywords=<?php echo htmlspecialchars(urlencode($keywords), ENT_QUOTES, 'UTF-8')?>">Calculate centrality scores</a>.</p>
 <table border="0" cellpadding="2" cellspacing="2">
   <tr>
 	<td align="center" bgcolor="#A5C3D6" class="styleLeftColumn">Gene 1</td>
@@ -66,8 +66,8 @@ if (!empty($gene_pairs)){
 		$tokens=preg_split('/---/', $gene_pair);
 ?>
   <tr>
-	<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $tokens[0]?></td>
-	<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $tokens[1]?></td>
+	<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($tokens[0], ENT_QUOTES, 'UTF-8')?></td>
+	<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($tokens[1], ENT_QUOTES, 'UTF-8')?></td>
   </tr>
 <?php 
 	}

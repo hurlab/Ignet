@@ -51,13 +51,13 @@ else {
 
 	$c_feedback_key = date('YmdHis').createRandomPassword();
 	$strSql = "INSERT INTO t_feedback (c_email, c_subject, c_category, c_body, c_submit_time, c_submit_ip, c_feedback_key) VALUES(";
-	$strSql .= "'$c_email'";
-	$strSql .= ", '$c_subject'";
-	$strSql .= ", '$c_category'";
-	$strSql .= ", '$c_body'";
+	$strSql .= $db->qstr($c_email);
+	$strSql .= ", " . $db->qstr($c_subject);
+	$strSql .= ", " . $db->qstr($c_category);
+	$strSql .= ", " . $db->qstr($c_body);
 	$strSql .= ", CURDATE()";
-	$strSql .= ", '$c_submit_ip'";
-	$strSql .= ", '$c_feedback_key')";
+	$strSql .= ", " . $db->qstr($c_submit_ip);
+	$strSql .= ", " . $db->qstr($c_feedback_key) . ")";
 
 	if ($db->Execute($strSql)) {
 		include('Mail.php');

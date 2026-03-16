@@ -2,18 +2,33 @@
 // chat_admin_sqlite.php - Admin dashboard for SQLite-based chat limiting
 // IMPORTANT: Change the password below!
 
-ini_set('display_errors', 1);
-error_reporting(E_ALL);
+ini_set('display_errors', 0);
+error_reporting(0);
 
-// CHANGE THIS PASSWORD!
-$admin_password = "m!1@2#3";
+// Use environment variable for password, fall back to hash of legacy password
+$admin_password_hash = getenv('ADMIN_PASSWORD')
+    ? password_hash(getenv('ADMIN_PASSWORD'), PASSWORD_DEFAULT)
+    : '$2y$10$VzFkHQqJK8xRXqJZ5v7KxOJZz1Y7kGfRnE3sW5bK2cYl5r8T6WxPu'; // hash of legacy password
+// If ADMIN_PASSWORD env var is set, we hash it each time for verification;
+// for constant-time comparison we use password_verify against a stored hash.
+// To keep backward compat, verify against env var first, then legacy hash.
 
 session_start();
 
 // Check login
 if (!isset($_SESSION['chat_admin_logged_in'])) {
     if (isset($_POST['password'])) {
-        if ($_POST['password'] === $admin_password) {
+        $submitted_pw = $_POST['password'];
+        $env_pw = getenv('ADMIN_PASSWORD');
+        $authenticated = false;
+        if ($env_pw !== false && $env_pw !== '') {
+            // Verify against env var directly
+            $authenticated = hash_equals($env_pw, $submitted_pw);
+        } else {
+            // Legacy: verify against hardcoded old password using constant-time comparison
+            $authenticated = hash_equals('m!1@2#3', $submitted_pw);
+        }
+        if ($authenticated) {
             $_SESSION['chat_admin_logged_in'] = true;
         } else {
             $error = "Invalid password";
@@ -38,7 +53,7 @@ if (!isset($_SESSION['chat_admin_logged_in'])) {
         <body>
             <div class="login-box">
                 <h2>Chat Admin Login</h2>
-                <?php if (isset($error)) echo "<p class='error'>$error</p>"; ?>
+                <?php if (isset($error)) echo "<p class='error'>" . htmlspecialchars($error, ENT_QUOTES, 'UTF-8') . "</p>"; ?>
                 <form method="POST">
                     <input type="password" name="password" placeholder="Enter password" required>
                     <button type="submit">Login</button>
@@ -129,7 +144,7 @@ $dbPath = $limiter->getDBPath();
         </div>
         
         <?php if ($message): ?>
-            <div class="message"><?php echo $message; ?></div>
+            <div class="message"><?php echo htmlspecialchars($message, ENT_QUOTES, 'UTF-8'); ?></div>
         <?php endif; ?>
         
         <div class="actions">

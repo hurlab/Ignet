@@ -39,13 +39,15 @@ $c_query_id = $vali->getInput('c_query_id', 'Query ID', 2, 60);
 $geneSymbol1 = $vali->getInput('geneSymbol1', 'Gene Name', 1, 60, true);
 
 
-$strSql = "SELECT * FROM t_pubmed_query where c_query_id = '$c_query_id'";
+$strSql = "SELECT * FROM t_pubmed_query where c_query_id = " . $db->qstr($c_query_id);
 $rs = $db->Execute($strSql);
 if (!$rs->EOF) {
 	$pubmedRecords=$rs->Fields('c_pubmed_records');
-	
-	$strSql = "(SELECT geneSymbol1 FROM t_sentence_hit_gene2gene_Host where pmid in ($pubmedRecords) and geneSymbol2 = '$geneSymbol1')";
-	$strSql .= " UNION (SELECT geneSymbol2 as geneSymbol1 FROM t_sentence_hit_gene2gene_Host where pmid in ($pubmedRecords) and geneSymbol1 = '$geneSymbol1')";
+	$safePmids = implode(',', array_map('intval', explode(',', $pubmedRecords)));
+	$qGeneSymbol1 = $db->qstr($geneSymbol1);
+
+	$strSql = "(SELECT geneSymbol1 FROM t_sentence_hit_gene2gene_Host where pmid in ($safePmids) and geneSymbol2 = $qGeneSymbol1)";
+	$strSql .= " UNION (SELECT geneSymbol2 as geneSymbol1 FROM t_sentence_hit_gene2gene_Host where pmid in ($safePmids) and geneSymbol1 = $qGeneSymbol1)";
 
 	$rsRelatedGenes = $db->Execute($strSql);
 	
@@ -59,19 +61,19 @@ if (!$rs->EOF) {
 		}
 	}
 
-	$strSql = "SELECT * FROM t_gene_list where c_genesymbol='$geneSymbol1'";
+	$strSql = "SELECT * FROM t_gene_list where c_genesymbol=" . $db->qstr($geneSymbol1);
 	$rs = $db->Execute($strSql);
 	
 	$arrayGeneDetail = $rs->FetchRow();
 	
 ?>
-<p>Gene symbol: <?php echo $geneSymbol1?></p>
-<p>Gene name: <?php echo $arrayGeneDetail['c_gene_product']?></p>
-<p>HGNC ID: <a href="http://www.genenames.org/data/hgnc_data.php?hgnc_id=<?php echo $arrayGeneDetail['c_hugo_id']?>"><?php echo $arrayGeneDetail['c_hugo_id']?></a></p>
-<?php	
+<p>Gene symbol: <?php echo htmlspecialchars($geneSymbol1, ENT_QUOTES, 'UTF-8')?></p>
+<p>Gene name: <?php echo htmlspecialchars($arrayGeneDetail['c_gene_product'], ENT_QUOTES, 'UTF-8')?></p>
+<p>HGNC ID: <a href="http://www.genenames.org/data/hgnc_data.php?hgnc_id=<?php echo urlencode($arrayGeneDetail['c_hugo_id'])?>"><?php echo htmlspecialchars($arrayGeneDetail['c_hugo_id'], ENT_QUOTES, 'UTF-8')?></a></p>
+<?php
 	if ($arrayGeneDetail['c_synonyms']!='') {
 ?>
-<p>Synonyms: <?php echo $arrayGeneDetail['c_synonyms']?></p>
+<p>Synonyms: <?php echo htmlspecialchars($arrayGeneDetail['c_synonyms'], ENT_QUOTES, 'UTF-8')?></p>
 <?php	
 	}
 ?>
@@ -91,8 +93,8 @@ if (!$rs->EOF) {
 ?>
   <tr>
     <td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo $i?></td>
-    <td bgcolor="#F5FAF7" style=" font-size:12px"><a href="geneDetail.php?geneSymbol1=<?php echo $relatedGene?>&amp;c_query_id=<?php echo $c_query_id?>"><?php echo $relatedGene?></a></td>
-    <td bgcolor="#F5FAF7" style=" font-size:12px"><a href="genePair.php?geneSymbol1=<?php echo $geneSymbol1?>&amp;geneSymbol2=<?php echo $relatedGene?>&amp;c_query_id=<?php echo $c_query_id?>"><?php echo $num_hits?> hits</a></td>
+    <td bgcolor="#F5FAF7" style=" font-size:12px"><a href="geneDetail.php?geneSymbol1=<?php echo urlencode($relatedGene)?>&amp;c_query_id=<?php echo urlencode($c_query_id)?>"><?php echo htmlspecialchars($relatedGene, ENT_QUOTES, 'UTF-8')?></a></td>
+    <td bgcolor="#F5FAF7" style=" font-size:12px"><a href="genePair.php?geneSymbol1=<?php echo urlencode($geneSymbol1)?>&amp;geneSymbol2=<?php echo urlencode($relatedGene)?>&amp;c_query_id=<?php echo urlencode($c_query_id)?>"><?php echo $num_hits?> hits</a></td>
   </tr>
   <?php 
 	}
@@ -101,7 +103,7 @@ if (!$rs->EOF) {
 
 
   <?php 
-	$strSql="SELECT distinct hgh.PMID, hgh.sentenceID, s24.sentence FROM sentences25_genepair s24 INNER JOIN t_sentence_hit_gene2gene_Host hgh ON hgh.PMID = s24.PMID where hgh.PMID in ($pubmedRecords) and (geneSymbol1 = '$geneSymbol1' or geneSymbol2 = '$geneSymbol1')";
+	$strSql="SELECT distinct hgh.PMID, hgh.sentenceID, s24.sentence FROM sentences25_genepair s24 INNER JOIN t_sentence_hit_gene2gene_Host hgh ON hgh.PMID = s24.PMID where hgh.PMID in ($safePmids) and (geneSymbol1 = $qGeneSymbol1 or geneSymbol2 = $qGeneSymbol1)";
 
 	$rs = $db->Execute($strSql);
 	$array_pub_list = $rs->GetArray();
@@ -124,7 +126,7 @@ if (!$rs->EOF) {
   <tr>
     <td valign="top" bgcolor="#F4F9FD" class="smallContent"><b><?php echo $i?></b></td>
     <td valign="top" bgcolor="#F4F9FD" class="smallContent">
-<a href="http://www.ncbi.nlm.nih.gov/pubmed/<?php echo $row['PMID']?>" target="_blank"><?php echo $row['PMID']?></a>
+<a href="http://www.ncbi.nlm.nih.gov/pubmed/<?php echo (int)$row['PMID']?>" target="_blank"><?php echo (int)$row['PMID']?></a>
 	</td>
     <td valign="top" bgcolor="#F4F9FD" class="smallContent">
 <?php
@@ -132,7 +134,7 @@ if (!$rs->EOF) {
 		echo(formatOutput($row['sentence'], array($keywords)));
 }
 else {
-	echo($row['sentence']);
+	echo htmlspecialchars($row['sentence'], ENT_QUOTES, 'UTF-8');
 }
 ?>    
     </td>

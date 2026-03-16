@@ -3,9 +3,9 @@
 echo "PHP IS WORKING<br>";
 
 // STEP 2: Test error display
-ini_set('display_startup_errors', 1);
-ini_set('display_errors', 1);
-error_reporting(-1);
+ini_set('display_startup_errors', 0);
+ini_set('display_errors', 0);
+error_reporting(0);
 echo "Error reporting enabled<br>";
 
 // STEP 3: Test functions.php include

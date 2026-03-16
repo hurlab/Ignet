@@ -32,9 +32,9 @@ include('../inc/template_left.php');
 <?php
 //phpinfo(); //benu
 include('../inc/functions.php'); //benu
-ini_set('display_errors', '1'); //benu
-ini_set('display_startup_errors', '1'); //benu
-error_reporting(E_ALL);
+ini_set('display_errors', '0');
+ini_set('display_startup_errors', '0');
+error_reporting(0);
 $db = ADONewConnection($driver);
 $db->Connect($host, $username, $password, $database);
 
@@ -46,14 +46,15 @@ $c_query_id = $vali->getInput('c_query_id', 'Query ID', 2, 60);
 #echo "<pre>$output</pre>";
 
 
-$strSql = "SELECT * FROM t_pubmed_query where c_query_id = '$c_query_id'";
+$strSql = "SELECT * FROM t_pubmed_query where c_query_id = " . $db->qstr($c_query_id);
 $rs = $db->Execute($strSql);
 
 if (!$rs->EOF) {
 	$pubmedRecords=$rs->Fields('c_pubmed_records');
 	$keywords = $rs->Fields('c_query_text');
-	
-	$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene_Host where pmid in ($pubmedRecords)";
+	$safePmids = implode(',', array_map('intval', explode(',', $pubmedRecords)));
+
+	$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene_Host where pmid in ($safePmids)";
 	
 	$pairs=array();
 	
@@ -67,12 +68,12 @@ if (!$rs->EOF) {
 	}
 	//echo "start .. before ";
 	//emty data for query id = "ocvzi4gu";
-	$strSql = "SELECT * from t_centrality_score_dignet_backup where c_query_id='$c_query_id' order by score desc";
+	$strSql = "SELECT * from t_centrality_score_dignet_backup where c_query_id=" . $db->qstr($c_query_id) . " order by score desc";
 	$rs = $db->Execute($strSql);
 	//echo "strsql".$strSql."...end";
 	//if (!$rs->EOF) {
 		
-		$userfolder = $c_query_id;
+		$userfolder = preg_replace('/[^a-zA-Z0-9_-]/', '', $c_query_id);
 		$work_dir=dirname(__FILE__)."/userfiles/$userfolder";
 		if (!file_exists($work_dir)) {
 			mkdir($work_dir);
@@ -113,41 +114,42 @@ if (!$rs->EOF) {
 		//$sql =  "LOAD DATA LOCAL INFILE '$work_dir/network.betweenness-centrality' INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='b', c_query_id='$userfolder'";
 		
 		try{ //benu
+		$qUserfolder = $db->qstr($userfolder);
 		if (file_exists("$work_dir/network.betweenness-centrality")) {
-			$db->Execute("LOAD DATA LOCAL INFILE '$work_dir/network.betweenness-centrality' INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='b', c_query_id='$userfolder'");
+			$db->Execute("LOAD DATA LOCAL INFILE " . $db->qstr("$work_dir/network.betweenness-centrality") . " INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='b', c_query_id=$qUserfolder");
 		}
 		else{
 		echo "network.betweeness-centrality doesnot exist";
 		}
-	//check for betweeness centrality	
+	//check for betweeness centrality
 		if (file_exists("$work_dir/network.closeness-centrality")) {
-                        $db->Execute("LOAD DATA LOCAL INFILE '$work_dir/network.closeness-centrality' INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='c', c_query_id='$userfolder'");
-                        
-                }       
+                        $db->Execute("LOAD DATA LOCAL INFILE " . $db->qstr("$work_dir/network.closeness-centrality") . " INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='c', c_query_id=$qUserfolder");
+
+                }
                 else{
                 echo "network.closeness-centrality doesnot exist";
-                }      
+                }
 		//check for closeness centrality
 
 		if (file_exists("$work_dir/network.degree-centrality")) {
-                        $db->Execute("LOAD DATA LOCAL INFILE '$work_dir/network.degree-centrality' INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='d', c_query_id='$userfolder'");
-                        
-                }       
+                        $db->Execute("LOAD DATA LOCAL INFILE " . $db->qstr("$work_dir/network.degree-centrality") . " INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='d', c_query_id=$qUserfolder");
+
+                }
                 else{
                 echo "network.degree-centrality doesnot exist";
-                }      
-                        //check for degree centrality         
+                }
+                        //check for degree centrality
 		if (file_exists("$work_dir/network.eigenvector-centrality")) {
-                        $db->Execute("LOAD DATA LOCAL INFILE '$work_dir/network.eigenvector-centrality' INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='e', c_query_id='$userfolder'");
+                        $db->Execute("LOAD DATA LOCAL INFILE " . $db->qstr("$work_dir/network.eigenvector-centrality") . " INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='e', c_query_id=$qUserfolder");
 
                 	}
                 else{
                 echo "network.eigenvector-centrality doesnot exist";
                 }
-                        //check for eigenvector centrality 
-		
+                        //check for eigenvector centrality
+
 		if (file_exists("$work_dir/network.pagerank-centrality")) {
-                        $db->Execute("LOAD DATA LOCAL INFILE '$work_dir/network.pagerank-centrality' INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='p', c_query_id='$userfolder'");
+                        $db->Execute("LOAD DATA LOCAL INFILE " . $db->qstr("$work_dir/network.pagerank-centrality") . " INTO TABLE t_centrality_score_dignet COLUMNS TERMINATED BY ' ' SET score_type='p', c_query_id=$qUserfolder");
 
                         }
                 else{
@@ -171,7 +173,7 @@ if (!$rs->EOF) {
 	//}
 	
 	$genes = array();
-	$strSql = "SELECT * from t_centrality_score_dignet where c_query_id='$c_query_id' order by score desc";
+	$strSql = "SELECT * from t_centrality_score_dignet where c_query_id=" . $db->qstr($c_query_id) . " order by score desc";
 	//echo $strSql;
 	$rs = $db->Execute($strSql);
 	//echo "printing query id";
@@ -187,8 +189,8 @@ if (!$rs->EOF) {
 	
 	
 ?>
-<p> Keywords: <?php echo $keywords?>.</p>
-<p> Found <a href="searchPubmed.php?keywords=<?php echo $keywords?>"><?php echo sizeof($pairs)?> gene pairs</a>. Below are the results of centrality scores for each gene based on different centrality calculations:</p>
+<p> Keywords: <?php echo htmlspecialchars($keywords, ENT_QUOTES, 'UTF-8')?>.</p>
+<p> Found <a href="searchPubmed.php?keywords=<?php echo urlencode($keywords)?>"><?php echo sizeof($pairs)?> gene pairs</a>. Below are the results of centrality scores for each gene based on different centrality calculations:</p>
 
 <table border="0" cellpadding="4" bgcolor="#FFFFFF">
   <tr>
@@ -226,15 +228,15 @@ if (!$rs->EOF) {
 ?>
   <tr>
     <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo($i+1)?></td>
-    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><a href="geneDetail.php?geneSymbol1=<?php echo $genes['d'][$i]['genesymbol']?>&c_query_id=<?php echo $c_query_id?>"><?php echo $genes['d'][$i]['genesymbol']?></a></td>
+    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><a href="geneDetail.php?geneSymbol1=<?php echo urlencode($genes['d'][$i]['genesymbol'])?>&c_query_id=<?php echo urlencode($c_query_id)?>"><?php echo htmlspecialchars($genes['d'][$i]['genesymbol'], ENT_QUOTES, 'UTF-8')?></a></td>
     <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo round($genes['d'][$i]['score'], 4)?></td>
     <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo($i+1)?></td>
-    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><a href="geneDetail.php?geneSymbol1=<?php echo $genes['e'][$i]['genesymbol']?>&c_query_id=<?php echo $c_query_id?>"><?php echo $genes['e'][$i]['genesymbol']?></a></td>
+    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><a href="geneDetail.php?geneSymbol1=<?php echo urlencode($genes['e'][$i]['genesymbol'])?>&c_query_id=<?php echo urlencode($c_query_id)?>"><?php echo htmlspecialchars($genes['e'][$i]['genesymbol'], ENT_QUOTES, 'UTF-8')?></a></td>
     <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo round($genes['e'][$i]['score'], 4)?></td>
-    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo $genes['c'][$i]['genesymbol']?></td>
-    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo $genes['c'][$i]['score']?></td>
-    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo $genes['b'][$i]['genesymbol']?></td>
-    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo $genes['b'][$i]['score']?></td>
+    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo htmlspecialchars($genes['c'][$i]['genesymbol'], ENT_QUOTES, 'UTF-8')?></td>
+    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo htmlspecialchars($genes['c'][$i]['score'], ENT_QUOTES, 'UTF-8')?></td>
+    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo htmlspecialchars($genes['b'][$i]['genesymbol'], ENT_QUOTES, 'UTF-8')?></td>
+    <td bgcolor="<?php echo $bgcolor?>" class="smallContent"><?php echo htmlspecialchars($genes['b'][$i]['score'], ENT_QUOTES, 'UTF-8')?></td>
   </tr>
 	 <?php 
 		}	}

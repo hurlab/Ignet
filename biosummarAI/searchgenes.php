@@ -1,8 +1,8 @@
 <?php
 // searchgenes.php
-ini_set('display_startup_errors', 1);
-ini_set('display_errors', 1);
-error_reporting(-1);
+ini_set('display_startup_errors', 0);
+ini_set('display_errors', 0);
+error_reporting(0);
 set_time_limit(300); // 5 minutes max execution time
 ini_set('memory_limit', '512M'); // Increase memory limit
 

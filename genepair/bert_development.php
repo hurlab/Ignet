@@ -3,8 +3,8 @@ include('../inc/functions.php');
 ?>
 
 <?php
-error_reporting(E_ALL); 
-ini_set('display_errors', 1);
+error_reporting(0);
+ini_set('display_errors', 0);
 
 $db = ADONewConnection($driver);
 $db->Connect($host, $username, $password, $database);
@@ -41,7 +41,7 @@ catch (Exception $e) { echo "Error: " . $e->getMessage(); }
 $startTime = microtime(true);
 
 function getSentenceData($sentence_ID, $db){
-	$strSql2 = "Select * from sentences24_Host where sentenceID =".$sentence_ID;
+	$strSql2 = "Select * from sentences24_Host where sentenceID =" . (int)$sentence_ID;
 	$rs2 = $db->Execute($strSql2);
 
         if (!$rs2->EOF)
@@ -86,7 +86,7 @@ $response = curl_exec($ch);
 }
 
 function updateConfidenceScore($confidenceScore, $gene2gene_host_id, $db){
-$strSql3 = "UPDATE t_sentence_hit_gene2gene_Host SET score = ".$confidenceScore." WHERE gene2gene_host_id = ".$gene2gene_host_id;
+$strSql3 = "UPDATE t_sentence_hit_gene2gene_Host SET score = " . (float)$confidenceScore . " WHERE gene2gene_host_id = " . (int)$gene2gene_host_id;
          echo "host_id:".$gene2gene_host_id;       
        //echo $strSql3;
                  

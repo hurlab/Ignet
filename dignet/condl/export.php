@@ -44,7 +44,7 @@ foreach ($rs as $row) {
 		file_put_contents("exportFiles/$keywords.pairs", join(PHP_EOL, array_keys($pairs)));
 		file_put_contents("exportFiles/$keywords.genes", join(PHP_EOL, array_keys($arrayNode)));
 		
-		$strSql = "SELECT * from t_centrality_score_dignet where c_query_id='$c_query_id' order by score desc";
+		$strSql = "SELECT * from t_centrality_score_dignet where c_query_id=" . $db->qstr($c_query_id) . " order by score desc";
 		$rsScore = $db->Execute($strSql);
 		
 		$arrayScore=array();

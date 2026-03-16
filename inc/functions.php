@@ -7,11 +7,10 @@
 #	}
 #}
 #else {
-	ini_set("display_errors", "1"); 
-	ini_set("display_startup_errors", "1"); 
-	error_reporting(E_ALL);
+	ini_set("display_errors", "0");
+	ini_set("display_startup_errors", "0");
+	error_reporting(E_ERROR | E_PARSE);
 #}
-error_reporting(E_ERROR | E_PARSE);
 
 // Load database connection credentials
 include('../../../conf/config.php');
@@ -80,6 +79,29 @@ function createRandomPassword() {
 function formatSqlStr($strIn){
 	$strIn = str_replace("'","''", $strIn);
 	return $strIn;
+}
+
+/**
+ * Sanitize a gene symbol: allow only alphanumeric, hyphens, dots, and underscores.
+ */
+function sanitizeGeneSymbol($sym) {
+	return preg_replace('/[^A-Za-z0-9._-]/', '', trim($sym));
+}
+
+/**
+ * Validate and return an ORDER BY column from a whitelist.
+ * Returns the default if the input is not in the allowed list.
+ */
+function sanitizeOrderBy($input, $allowed, $default = '') {
+	return in_array($input, $allowed, true) ? $input : $default;
+}
+
+/**
+ * Validate sort direction (ASC or DESC only).
+ */
+function sanitizeOrder($input) {
+	$input = strtoupper(trim($input));
+	return ($input === 'DESC') ? 'DESC' : 'ASC';
 }
 
 

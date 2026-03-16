@@ -44,13 +44,14 @@ $vali=new Validation($_REQUEST);
 $c_query_id = $vali->getInput('c_query_id', 'Query ID', 2, 60);
 
 
-$strSql = "SELECT * FROM t_pubmed_query where c_query_id = '$c_query_id'";
+$strSql = "SELECT * FROM t_pubmed_query where c_query_id = " . $db->qstr($c_query_id);
 $rs = $db->Execute($strSql);
 if (!$rs->EOF) {
 	$pubmedRecords=$rs->Fields('c_pubmed_records');
 	$keywords = $rs->Fields('c_query_text');
-	
-	$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene_Host where pmid in ($pubmedRecords)";
+
+	$safePmids = implode(',', array_map('intval', explode(',', $pubmedRecords)));
+	$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene_Host where pmid in ($safePmids)";
 	
 	$pairs=array();
 	$arrayNode=array();
@@ -119,9 +120,9 @@ if (!$rs->EOF) {
 
 	
 ?>
-<p> Keywords: <?php echo $keywords?>.</p>
-<p> Found <a href="searchPubmed.php?keywords=<?php echo $keywords?>"><?php echo sizeof($pairs)?> gene pairs</a>. Below are the network shown in Cytoscape Web.</p>
-<p><a href="getNetworkGraphml.php?c_query_id=<?php echo $c_query_id?>">Download network in graphml format</a>.</p>
+<p> Keywords: <?php echo htmlspecialchars($keywords, ENT_QUOTES, 'UTF-8')?>.</p>
+<p> Found <a href="searchPubmed.php?keywords=<?php echo urlencode($keywords)?>"><?php echo sizeof($pairs)?> gene pairs</a>. Below are the network shown in Cytoscape Web.</p>
+<p><a href="getNetworkGraphml.php?c_query_id=<?php echo urlencode($c_query_id)?>">Download network in graphml format</a>.</p>
 
 
 <div id="cytoWebContent" style="width: 800px;height: 600px;display: block;"></div>

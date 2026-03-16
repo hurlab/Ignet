@@ -5,6 +5,7 @@ $db->Connect($host, $username, $password, $database);
 
 $vali=new Validation($_REQUEST);
 $geneSymbol1 = $vali->getInput('geneSymbol1', 'Gene Name', 1, 60, true);
+$geneSymbol1 = sanitizeGeneSymbol($geneSymbol1);
 $score = $vali->getInput('score', 'Score', 0, 60, true);
 $hasVaccine = $vali->getInput('hasVaccine', '"Vaccine" metioned?', 0, 60, true);
 $keywords = $vali->getInput('keywords', 'Keywords', 0, 60);
@@ -12,31 +13,29 @@ $keywords = $vali->getInput('keywords', 'Keywords', 0, 60);
 if (strlen($vali->getErrorMsg())==0) { 
 	$c_job_key = preg_replace('/\W+/', '_', $geneSymbol1);
 	
-	// --- SQL INJECTION VULNERABILITY STILL EXISTS HERE ---
-	// This code still needs to be updated with prepared statements for security.
-	$strSql="(SELECT distinct geneSymbol2 FROM t_sentence_hit_gene2gene where  geneSymbol1 = '$geneSymbol1'";
+	$strSql="(SELECT distinct geneSymbol2 FROM t_sentence_hit_gene2gene where  geneSymbol1 = " . $db->qstr($geneSymbol1);
 	if ($score!='') {
-		$strSql .= " and score>=$score";
+		$strSql .= " and score>=" . (float)$score;
 	}
 	if ($hasVaccine!='') {
-		$strSql .= " and hasVaccine>=$hasVaccine";
+		$strSql .= " and hasVaccine>=" . (int)$hasVaccine;
 	}
 	if ($keywords != '') {
 		$tkeywords = transformKeywords($keywords);
-		$strSql .= " AND MATCH(sentence) AGAINST ('$tkeywords' IN BOOLEAN MODE)";
+		$strSql .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
 	}
 	$strSql .= ") ";
-	
-	$strSql.="UNION (SELECT distinct geneSymbol1 as geneSymbol2 FROM t_sentence_hit_gene2gene where  geneSymbol2 = '$geneSymbol1'";
+
+	$strSql.="UNION (SELECT distinct geneSymbol1 as geneSymbol2 FROM t_sentence_hit_gene2gene where  geneSymbol2 = " . $db->qstr($geneSymbol1);
 	if ($score!='') {
-		$strSql .= " and score>=$score";
+		$strSql .= " and score>=" . (float)$score;
 	}
 	if ($hasVaccine!='') {
-		$strSql .= " and hasVaccine>=$hasVaccine";
+		$strSql .= " and hasVaccine>=" . (int)$hasVaccine;
 	}
 	if ($keywords != '') {
 		$tkeywords = transformKeywords($keywords);
-		$strSql .= " AND MATCH(sentence) AGAINST ('$tkeywords' IN BOOLEAN MODE)";
+		$strSql .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
 	}
 	$strSql .= ") ";
 		
@@ -47,15 +46,17 @@ if (strlen($vali->getErrorMsg())==0) {
 		$dot_txt = "graph G {\n graph[splines=true, overlap=false, dpi=72];\n";
 		$dot_txt .= "node[fontsize=12, fontname=Arial, style=filled, fillcolor=\"#88ff88\"];\n";
 		$dot_txt .= "edge [penwidth=2.0];\n";
-		$dot_txt .= "\"$geneSymbol1\" [fillcolor=dodgerblue1];\n";
+		$safeGene1 = htmlspecialchars($geneSymbol1, ENT_QUOTES, 'UTF-8');
+		$dot_txt .= "\"$safeGene1\" [fillcolor=dodgerblue1];\n";
 		
 		foreach($array_gene_list as $gene_list) {
 			$edge_color='#FF3300';
 			$geneSymbol2 = trim($gene_list['geneSymbol2']);
-			$dot_txt .= '"'. $geneSymbol1 . '"--"' . $geneSymbol2 . "\"  [URL=\"../genepair/index.php?geneSymbol1=$geneSymbol1&geneSymbol2=$geneSymbol2\", color=\"$edge_color\"];\n";
-			
+			$safeGene2 = htmlspecialchars($geneSymbol2, ENT_QUOTES, 'UTF-8');
+			$dot_txt .= '"'. $safeGene1 . '"--"' . $safeGene2 . "\"  [URL=\"../genepair/index.php?geneSymbol1=" . urlencode($geneSymbol1) . "&geneSymbol2=" . urlencode($geneSymbol2) . "\", color=\"$edge_color\"];\n";
+
 			if ($geneSymbol2 != $geneSymbol1) {
-				$dot_txt .= "\"$geneSymbol2\" [URL=\"index.php?geneSymbol1=$geneSymbol2\"];\n";
+				$dot_txt .= "\"$safeGene2\" [URL=\"index.php?geneSymbol1=" . urlencode($geneSymbol2) . "\"];\n";
 			}
 		}
 		$dot_txt .= "}";
@@ -93,7 +94,7 @@ if (strlen($vali->getErrorMsg())==0) {
 	}
 	else {
 ?>
-<p>Found <?php echo $rs->RecordCount()?> gene neighbors of <strong><?php echo $geneSymbol1; ?></strong>. Gene interaction network image will appear only with <100 neighboring genes.</p>
+<p>Found <?php echo (int)$rs->RecordCount()?> gene neighbors of <strong><?php echo htmlspecialchars($geneSymbol1, ENT_QUOTES, 'UTF-8'); ?></strong>. Gene interaction network image will appear only with <100 neighboring genes.</p>
 <?php 
 	}
 	$rs->close();

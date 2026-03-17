@@ -1,0 +1,24 @@
+[Unit]
+Description=Ignet REST API Service
+Documentation=https://github.com/hurlab/Ignet
+After=network.target mariadb.service redis.service
+
+[Service]
+Type=simple
+User=juhur
+Group=webapps
+WorkingDirectory=/data/var/www/html/ignet/api
+ExecStart=/data/var/www/html/ignet/api/venv/bin/python run.py
+EnvironmentFile=/data/var/www/html/ignet/biosummarAI/.env
+Environment=PYTHONUNBUFFERED=1
+
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ignet-api
+
+[Install]
+WantedBy=multi-user.target

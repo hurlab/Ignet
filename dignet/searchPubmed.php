@@ -1,6 +1,6 @@
 <?php 
 include('../inc/functions.php');
-ini_set('memory_limit','5G');
+ini_set('memory_limit', '512M');
 
 // Define constants for timeout and PMID limits
 if (!defined('IGNET_EUTILS_TIMEOUT')) define('IGNET_EUTILS_TIMEOUT', 25); // seconds per edirect call

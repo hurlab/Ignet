@@ -117,25 +117,59 @@ Betweenness centrality: <?php echo round(($i+1)/sizeof($array_tmp)*100, 2)?>%<br
 	
 //	print($strSql);
 	
-	$rs = $db->Execute($strSql);
-	if (!$rs->EOF) {
-		$array_gene_list = $rs->GetArray();
-		
-		$unique_genes=array();
-		foreach($array_gene_list as $gene) {
-			$unique_genes[$gene['geneSymbol1']]=1;
-		}
+	// Build a COUNT query to get total rows and unique gene count
+	$strSqlCount = "(SELECT geneSymbol2 as geneSymbol1 FROM t_sentence_hit_gene2gene_Host LEFT JOIN sentence_vaccine ON t_sentence_hit_gene2gene.pmid = sentence_vaccine.PMID where geneSymbol1=" . $db->qstr($geneSymbol1);
+	if ($score!='') {
+		$strSqlCount .= " and score>=" . (float)$score;
+	}
+	if ($hasVaccine!='') {
+		$strSqlCount .= " and hasVaccine>=" . (int)$hasVaccine;
+	}
+	if ($keywords != '') {
+		$tkeywords = transformKeywords($keywords);
+		$strSqlCount .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
+	}
+	$strSqlCount .= ") UNION (SELECT geneSymbol1 as geneSymbol1 FROM t_sentence_hit_gene2gene_Host LEFT JOIN sentence_vaccine ON t_sentence_hit_gene2gene.pmid = sentence_vaccine.PMID where geneSymbol2 = " . $db->qstr($geneSymbol1);
+	if ($score!='') {
+		$strSqlCount .= " and score>=" . (float)$score;
+	}
+	if ($hasVaccine!='') {
+		$strSqlCount .= " and hasVaccine>=" . (int)$hasVaccine;
+	}
+	if ($keywords != '') {
+		$strSqlCount .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
+	}
+	$strSqlCount .= ")";
 
-		$numOfRecords = sizeof($array_gene_list);
-		
+	$rsCount = $db->Execute($strSqlCount);
+	$unique_genes = array();
+	$numOfRecords = 0;
+	if ($rsCount && !$rsCount->EOF) {
+		while (!$rsCount->EOF) {
+			$unique_genes[$rsCount->fields['geneSymbol1']] = 1;
+			$numOfRecords++;
+			$rsCount->MoveNext();
+		}
+		$rsCount->close();
+	}
+
+	if ($numOfRecords > 0) {
 		$recordsPerPage = 500;
 		$numOfPage = ceil($numOfRecords / $recordsPerPage);
-		
+
 		if ($currPage == '' || $currPage > $numOfPage || $numOfPage < 1) {
 			$currPage = 1;
 		}
-		
-		$array_gene_list=array_slice($array_gene_list, ($currPage-1)*$recordsPerPage, $recordsPerPage);
+
+		$offset = ($currPage - 1) * $recordsPerPage;
+		$strSql .= " LIMIT $recordsPerPage OFFSET $offset";
+
+		$rs = $db->Execute($strSql);
+		$array_gene_list = array();
+		if ($rs && !$rs->EOF) {
+			$array_gene_list = $rs->GetArray();
+			$rs->close();
+		}
 ?>
 
 <p><strong>Gene neighbors with matching sentences:</strong></p>
@@ -332,14 +366,13 @@ Betweenness centrality: <?php echo round(($i+1)/sizeof($array_tmp)*100, 2)?>%<br
 		}
 ?>
 </table>
-<?php 
+<?php
 	}
 	else {
 ?>
-No close related gene returned! 
-<?php 
+No close related gene returned!
+<?php
 	}
-	$rs->close();
 }
 else {
 ?>

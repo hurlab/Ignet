@@ -1,35 +1,48 @@
-<?php 
+<?php
 include ('../inc/functions.php');
 $db = ADONewConnection($driver);
 $db->Connect($host, $username, $password, $database);
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd"><html xmlns="http://www.w3.org/1999/xhtml"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
+<!DOCTYPE html>
+<html lang="en"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
 <head>
 <!-- InstanceBeginEditable name="doctitle" -->
 <title>IGNET: Interferon-gamma (IFN-γ) Network</title>
 <!-- InstanceEndEditable -->
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <link rel="shortcut icon" href="/favicon.ico"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: '#1a365d',
+          'navy-dark': '#102a4c',
+          accent: '#ed8936',
+          success: '#38a169',
+          background: '#f7fafc',
+          text: '#1a202c',
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
 <link href="../css/bmain.css" rel="stylesheet" type="text/css" />
 <!-- InstanceBeginEditable name="head" --><!-- InstanceEndEditable -->
 </head>
-<body style="margin:0px; background-image:url(/images/bg_2008-08-21.2.gif)" id="main_body">
-<?php 
-
+<body class="bg-[#f7fafc] text-[#1a202c] font-sans" id="main_body">
+<?php
 include('../inc/template_top.php');
 ?>
-<table width="100%" border="0" cellpadding="0" cellspacing="0">
-	<tr>
-		<td width="160" valign="top" style="min-width:160px">
-<?php 
-include('../inc/template_left.php');
-?>
-		</td>
-		<td valign="top">
-		<div style="margin:6px 10px 16px 10px; border-top:2px #4A2F65 solid">
-		<!-- InstanceBeginEditable name="Main" -->
-		<?php 
+<main class="max-w-7xl mx-auto px-4 py-6">
+  <!-- InstanceBeginEditable name="Main" -->
+    <?php
 
 $vali=new Validation($_REQUEST);
 
@@ -86,43 +99,88 @@ if ($description != '') {
 	$strSql .= " AND MATCH(symbol,locustag,synonyms,dbxrefs,description,protein_note,annotation,phi_annotation,taxname) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
 }
 
-$rs = $db->Execute($strSql);
-if (!$rs->EOF)
-{
-	$array_geneids = $rs->GetArray();
-	$rs->close();
+// Build COUNT query using the same WHERE clause
+$strSqlCount = "SELECT COUNT(*) FROM t_gene_annotation WHERE 1=1";
 
-	$numOfRecords = sizeof($array_geneids);
-	
+if ($species != '') {
+	$strSqlCount .= " AND species = " . $db->qstr($species);
+}
+if ($gene_locus_tag != '') {
+	$strSqlCount .= " AND locustag = " . $db->qstr($gene_locus_tag);
+}
+if ($gene_name != '') {
+	$strSqlCount .= " AND (symbol = " . $db->qstr($gene_name) . " OR MATCH (synonyms) AGAINST (" . $db->qstr($gene_name) . "))";
+}
+if ($gene_id != '') {
+	$strSqlCount .= " AND geneid = " . $db->qstr($gene_id);
+}
+if ($protein_refseq != '') {
+	$strSqlCount .= " AND (protein_acc=" . $db->qstr($protein_refseq) . " or protein_acc like " . $db->qstr($protein_refseq . '.%') . ") ";
+}
+if ($protein_id != '') {
+	$strSqlCount .= " AND protein_gi=" . $db->qstr($protein_id);
+}
+if ($uniprot_acc != '') {
+	$strSqlCount .= " AND uniprot_acc=" . $db->qstr($uniprot_acc);
+}
+if ($description != '') {
+	$tkeywords = transformKeywords($description);
+	$strSqlCount .= " AND MATCH(symbol,locustag,synonyms,dbxrefs,description,protein_note,annotation,phi_annotation,taxname) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
+}
+
+$numOfRecords = (int)$db->GetOne($strSqlCount);
+
+if ($numOfRecords > 0)
+{
 	$recordsPerPage = 50;
 	$numOfPage = ceil($numOfRecords / $recordsPerPage);
-	
+
 	if ($currPage == '' || $currPage > $numOfPage || $numOfPage < 1) {
 		$currPage = 1;
 	}
 	$params = "&species=" . urlencode($species) . "&phi_function=" . urlencode($phi_function) . "&gene_locus_tag=" . urlencode($gene_locus_tag) . "&gene_name=" . urlencode($gene_name) . "&gene_id=" . urlencode($gene_id) . "&gene_start=" . urlencode($gene_start) . "&gene_end=" . urlencode($gene_end) . "&protein_refseq=" . urlencode($protein_refseq) . "&protein_id=" . urlencode($protein_id) . "&uniprot_acc=" . urlencode($uniprot_acc) . "&protein_weight1=" . urlencode($protein_weight1) . "&protein_weight2=" . urlencode($protein_weight2) . "&protein_pi1=" . urlencode($protein_pi1) . "&protein_pi2=" . urlencode($protein_pi2) . "&description=" . urlencode($description) . "&orderby1=" . urlencode($orderby1) . "&order1=" . urlencode($order1) . "&orderby2=" . urlencode($orderby2) . "&order2=" . urlencode($order2);
 
-	$a_genes = array();
-	for ($i= ($currPage-1)*$recordsPerPage; $i < $currPage*$recordsPerPage && $i < $numOfRecords; $i++) {
-		$a_genes[] = $array_geneids[$i]['geneid'];
+	$offset = ($currPage - 1) * $recordsPerPage;
+
+	$strSqlPage = "select * from t_gene_annotation where geneid in (SELECT geneid FROM t_gene_annotation WHERE 1=1";
+
+	if ($species != '') {
+		$strSqlPage .= " AND species = " . $db->qstr($species);
 	}
-	
-	$a_genes_safe = array_map('intval', $a_genes);
-	$geneids = implode(",", $a_genes_safe);
+	if ($gene_locus_tag != '') {
+		$strSqlPage .= " AND locustag = " . $db->qstr($gene_locus_tag);
+	}
+	if ($gene_name != '') {
+		$strSqlPage .= " AND (symbol = " . $db->qstr($gene_name) . " OR MATCH (synonyms) AGAINST (" . $db->qstr($gene_name) . "))";
+	}
+	if ($gene_id != '') {
+		$strSqlPage .= " AND geneid = " . $db->qstr($gene_id);
+	}
+	if ($protein_refseq != '') {
+		$strSqlPage .= " AND (protein_acc=" . $db->qstr($protein_refseq) . " or protein_acc like " . $db->qstr($protein_refseq . '.%') . ") ";
+	}
+	if ($protein_id != '') {
+		$strSqlPage .= " AND protein_gi=" . $db->qstr($protein_id);
+	}
+	if ($uniprot_acc != '') {
+		$strSqlPage .= " AND uniprot_acc=" . $db->qstr($uniprot_acc);
+	}
+	if ($description != '') {
+		$strSqlPage .= " AND MATCH(symbol,locustag,synonyms,dbxrefs,description,protein_note,annotation,phi_annotation,taxname) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
+	}
+	$strSqlPage .= " LIMIT $recordsPerPage OFFSET $offset)";
 
-	$strSql = "select * from t_gene_annotation where geneid in ($geneids)";
-
-	$rs = $db->Execute($strSql);
+	$rs = $db->Execute($strSqlPage);
 	$array_gene = array();
-	if (!$rs->EOF) {
+	if ($rs && !$rs->EOF) {
 		$array_gene = $rs->GetArray();
 		$rs->close();
 	}
-	
+
 
 ?>
 		<p> Found
-			<?php echo sizeof($array_geneids)?>
+			<?php echo $numOfRecords?>
 			gene(s). Please click a gene name for related MeSH information. (Only genes which have siginicant MeSH information are clickable.) </p>
 		<table border="0">
 			<tr>
@@ -138,55 +196,55 @@ if (!$rs->EOF)
 					of
 					<?php echo $numOfPage?>
 					,
-					<?php 
+					<?php
 	if ($currPage > 1) {
 ?>
 					<a href="../genemesh/?currPage=1<?php echo $params?>">First</a>
-					<?php 
+					<?php
 	}
 	else {
 ?>
 					First
-					<?php 
+					<?php
 	}
 ?>
 					,
-					<?php 
+					<?php
 	if ($currPage > 1) {
 ?>
 					<a href="../genemesh/?currPage=<?php echo $currPage-1?><?php echo $params?>">Previous </a>
-					<?php 
+					<?php
 	}
 	else {
 ?>
 					Previous
-					<?php 
+					<?php
 	}
 ?>
 					,
-					<?php 
+					<?php
 	if ($currPage < $numOfPage) {
 ?>
 					<a href="../genemesh/?currPage=<?php echo $currPage+1?><?php echo $params?>">Next</a>
-					<?php 
+					<?php
 	}
 	else {
 ?>
 					Next
-					<?php 
+					<?php
 	}
 ?>
 					,
-					<?php 
+					<?php
 	if ($currPage < $numOfPage) {
 ?>
 					<a href="../genemesh/?currPage=<?php echo $numOfPage?><?php echo $params?>">Last</a>
-					<?php 
+					<?php
 	}
 	else {
 ?>
 					Last
-					<?php 
+					<?php
 	}
 ?>				</td>
 			</tr>
@@ -202,7 +260,7 @@ if (!$rs->EOF)
 				<td align="center" bgcolor="#A5C3D6" class="styleLeftColumn">Description</td>
 				<td align="center" bgcolor="#A5C3D6" class="styleLeftColumn">More</td>
 			</tr>
-			<?php 
+			<?php
 	foreach ($array_gene as $gene) {
 ?>
 			<tr>
@@ -236,32 +294,22 @@ if (!$rs->EOF)
 				<td bgcolor="#F5FAF7" style=" font-size:12px"><?php echo htmlspecialchars($gene['description'], ENT_QUOTES, 'UTF-8')?></td>
 				<td bgcolor="#F5FAF7" style=" font-size:12px"><a href="http://www.phidias.us/phigen/query/host_gene_detail.php?geneid=<?php echo htmlspecialchars($gene['geneid'], ENT_QUOTES, 'UTF-8')?>">More</a></td>
 			</tr>
-			<?php 
+			<?php
 	}
 ?>
 		</table>
 		<p align="center">&nbsp; </p>
-		<?php 
+		<?php
 }
 else {
 ?>
 		<p align="center">&nbsp; </p>
 		<p align="center">No protein/gene was found. Please use different keywords. <a href="gene_query.php">Go back and try again</a>. </p>
-		<?php 
+		<?php
 }
 ?>
-<!-- InstanceEndEditable -->
-		</div>
-		</td>
-	</tr>
-</table>
+  <!-- InstanceEndEditable -->
+</main>
+<?php include('../inc/template_footer.php'); ?>
 </body>
-<script type="text/javascript">
-var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-</script>
-<script type="text/javascript">
-var pageTracker = _gat._getTracker("UA-4869243-4");
-pageTracker._trackPageview();
-</script>
 <!-- InstanceEnd --></html>

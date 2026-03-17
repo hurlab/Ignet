@@ -41,47 +41,63 @@ if ($orderBy != '') {
 
 //print($strSql);
 
-$rs = $db->Execute($strSql);
-if (!$rs->EOF)
-{
-	$array_c_hit_ids = $rs->GetArray();
-	$rs->close();
+// Build COUNT query using the same WHERE clause
+$strSqlCount = "SELECT COUNT(*) FROM t_sentence_hit_gene2gene_Host WHERE ";
+$strSqlCount .= "  ((geneSymbol1 = " . $db->qstr($geneSymbol1) . " AND geneSymbol2 = " . $db->qstr($geneSymbol2) . ") OR (geneSymbol2 = " . $db->qstr($geneSymbol1) . " AND geneSymbol1 = " . $db->qstr($geneSymbol2) . "))";
 
-	$numOfRecords = sizeof($array_c_hit_ids);
-	
+if ($score != '') {
+	$strSqlCount .= " AND score > " . (float)$score;
+}
+if ($hasVaccine != '') {
+	$strSqlCount .= " AND hasVaccine = " . (int)$hasVaccine;
+}
+if ($keywords != '') {
+	$tkeywords = transformKeywords($keywords);
+	$strSqlCount .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
+}
+
+$numOfRecords = (int)$db->GetOne($strSqlCount);
+
+if ($numOfRecords > 0)
+{
 	$recordsPerPage = 50;
 	$numOfPage = ceil($numOfRecords / $recordsPerPage);
-	
+
 	if ($currPage == '' || $currPage > $numOfPage || $numOfPage < 1) {
 		$currPage = 1;
 	}
 	$params = "?geneSymbol1=" . urlencode($geneSymbol1) . "&geneSymbol2=" . urlencode($geneSymbol2) . "&score=" . urlencode($score) . "&hasVaccine=" . urlencode($hasVaccine) . "&keywords=" . urlencode($keywords);
 
-	$a_ignets = array();
-	for ($i= ($currPage-1)*$recordsPerPage; $i < $currPage*$recordsPerPage && $i < $numOfRecords; $i++) {
-		$a_ignets[] = $array_c_hit_ids[$i]['c_hit_id'];
+	$offset = ($currPage - 1) * $recordsPerPage;
+
+	$strSqlPage = "select * FROM t_sentence_hit_gene2gene_Host where ";
+	$strSqlPage .= "  ((geneSymbol1 = " . $db->qstr($geneSymbol1) . " AND geneSymbol2 = " . $db->qstr($geneSymbol2) . ") OR (geneSymbol2 = " . $db->qstr($geneSymbol1) . " AND geneSymbol1 = " . $db->qstr($geneSymbol2) . "))";
+
+	if ($score != '') {
+		$strSqlPage .= " AND score > " . (float)$score;
 	}
-	
-	$a_ignets_safe = array_map('intval', $a_ignets);
-	$ignets = implode(",", $a_ignets_safe);
-
-	$strSql = "select * FROM t_sentence_hit_gene2gene_Host where c_hit_id in ($ignets)";
-
+	if ($hasVaccine != '') {
+		$strSqlPage .= " AND hasVaccine = " . (int)$hasVaccine;
+	}
+	if ($keywords != '') {
+		$strSqlPage .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
+	}
 	if ($orderBy != '') {
-		$strSql .= " ORDER BY $orderBy $order";
+		$strSqlPage .= " ORDER BY $orderBy $order";
 	}
+	$strSqlPage .= " LIMIT $recordsPerPage OFFSET $offset";
 
-	$rs = $db->Execute($strSql);
+	$rs = $db->Execute($strSqlPage);
 	$array_ignet = array();
-	if (!$rs->EOF) {
+	if ($rs && !$rs->EOF) {
 		$array_ignet = $rs->GetArray();
 		$rs->close();
 	}
-	
+
 
 ?>
 <p> Found
-	<?php echo sizeof($array_c_hit_ids)?>
+	<?php echo $numOfRecords?>
 	record(s). Please click more for detail information. </p>
 <table border="0">
 	<tr>

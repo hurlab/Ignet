@@ -35,19 +35,37 @@ if (strlen($vali->getErrorMsg())==0) {
 		$strSql .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
 	}
 
-	$rs = $db->Execute($strSql);
-	$array_pub_list = $rs->GetArray();
+	// Build COUNT query using the same WHERE clause
+	$strSqlCount = "SELECT COUNT(DISTINCT `PMID`, `sentenceID`) FROM t_sentence_hit_gene2gene_Host where (geneSymbol1 = " . $db->qstr($geneSymbol1) . " or geneSymbol2 = " . $db->qstr($geneSymbol1) . ")";
+	if ($score!='') {
+		$strSqlCount .= " and score>=" . (float)$score;
+	}
+	if ($hasVaccine!='') {
+		$strSqlCount .= " and hasVaccine>=" . (int)$hasVaccine;
+	}
+	if ($keywords != '') {
+		$tkeywords = transformKeywords($keywords);
+		$strSqlCount .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
+	}
 
-	$numOfRecords = sizeof($array_pub_list);
-	
+	$numOfRecords = (int)$db->GetOne($strSqlCount);
+
 	$recordsPerPage = 50;
 	$numOfPage = ceil($numOfRecords / $recordsPerPage);
-	
+
 	if ($currPage == '' || $currPage > $numOfPage || $numOfPage < 1) {
 		$currPage = 1;
 	}
-	
-	$array_pub_list=array_slice($array_pub_list, ($currPage-1)*$recordsPerPage, $recordsPerPage);
+
+	$offset = ($currPage - 1) * $recordsPerPage;
+	$strSql .= " LIMIT $recordsPerPage OFFSET $offset";
+
+	$rs = $db->Execute($strSql);
+	$array_pub_list = array();
+	if ($rs && !$rs->EOF) {
+		$array_pub_list = $rs->GetArray();
+		$rs->close();
+	}
 ?>
 
 <p><?php echo (int)$numOfRecords?> publications relate to <?php echo htmlspecialchars($geneSymbol1, ENT_QUOTES, 'UTF-8')?></p>

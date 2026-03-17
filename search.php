@@ -3,33 +3,45 @@ include('inc/functions.php');
 $db = ADONewConnection($driver);
 $db->Connect($host, $username, $password, $database);
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
+<!DOCTYPE html>
+<html lang="en"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
 <head>
 <!-- InstanceBeginEditable name="doctitle" -->
 <title>Ignet</title>
 <!-- InstanceEndEditable -->
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <link rel="shortcut icon" href="/favicon.ico"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: '#1a365d',
+          'navy-dark': '#102a4c',
+          accent: '#ed8936',
+          success: '#38a169',
+          background: '#f7fafc',
+          text: '#1a202c',
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
 <link href="css/bmain.css" rel="stylesheet" type="text/css" />
 <!-- InstanceBeginEditable name="head" --><!-- InstanceEndEditable -->
 </head>
-<body style="margin:0px; background-image:url(/images/bg_2008-08-21.2.gif)" id="main_body">
-<?php 
-
+<body class="bg-[#f7fafc] text-[#1a202c] font-sans" id="main_body">
+<?php
 include('inc/template_top.php');
 ?>
-<table width="100%" border="0" cellpadding="0" cellspacing="0">
-	<tr>
-		<td width="160" valign="top" style="min-width:160px">
-<?php 
-include('inc/template_left.php');
-?>
-		</td>
-		<td valign="top">
-		<div style="margin:6px 10px 16px 10px; border-top:2px #4A2F65 solid">
-		<!-- InstanceBeginEditable name="Main" -->
+<main class="max-w-7xl mx-auto px-4 py-6">
+  <!-- InstanceBeginEditable name="Main" -->
 <?php 
 
 $vali=new Validation($_REQUEST);
@@ -43,7 +55,7 @@ $tkeywords = transformKeywords($keywords);
 <h3> Gene Interaction Search</h3>
 
 <?php 
-$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene where MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
+$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene where MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE) LIMIT 10000";
 
 $gene_pairs=array();
 
@@ -56,6 +68,9 @@ if (!empty($gene_pairs)){
 ?>
 
 <p> Found <?php echo sizeof($gene_pairs)?> gene pairs.  <a href="dignet/load_centrality_scores.php?keywords=<?php echo htmlspecialchars(urlencode($keywords), ENT_QUOTES, 'UTF-8')?>">Calculate centrality scores</a>.</p>
+<?php if (sizeof($gene_pairs) >= 10000): ?>
+<p style="color:#888; font-size:0.9em;">Note: Results are limited to the top 10,000 database rows. Refine your keywords to see more specific results.</p>
+<?php endif; ?>
 <table border="0" cellpadding="2" cellspacing="2">
   <tr>
 	<td align="center" bgcolor="#A5C3D6" class="styleLeftColumn">Gene 1</td>
@@ -82,18 +97,8 @@ else {
 }
 ?>
 
-		<!-- InstanceEndEditable -->
-		</div>
-		</td>
-	</tr>
-</table>
+  <!-- InstanceEndEditable -->
+</main>
+<?php include('inc/template_footer.php'); ?>
 </body>
-<script type="text/javascript">
-var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-</script>
-<script type="text/javascript">
-var pageTracker = _gat._getTracker("UA-4869243-4");
-pageTracker._trackPageview();
-</script>
 <!-- InstanceEnd --></html>

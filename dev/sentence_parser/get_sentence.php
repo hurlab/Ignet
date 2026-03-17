@@ -2,7 +2,7 @@
 //get sentence from ncibi db
 
 header("Content-Type: text/plain");
-ini_set("memory_limit", "8192M");
+ini_set("memory_limit", "512M");
 set_time_limit(60*60);
 
 include_once('../../inc/functions.php');

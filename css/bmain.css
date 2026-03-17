@@ -1,240 +1,131 @@
 body {
-	font-family: arial, verdana, sans-serif;
-	font-size: 14px;
-	margin: 0px;
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
 }
 
-td {
-	font-family: arial, verdana, sans-serif;
-	font-size: 14px;
-}
-
-form {
-	font-family: arial, verdana, sans-serif;
-	font-size: 14px;
-	margin-bottom:0px;
-	margin-top:0px;
-	padding-bottom:0px;
-	padding-top:0px;
-}
-
-input, select {
-	font-size: 12px;
-	font-family: arial, verdana, sans-serif;
-}
-
-input:focus, textarea:focus{
-	background-color: #FFFFDD;
-}
-
-p {
-	font-family: arial, verdana, sans-serif;
-	margin-bottom:16px;
-	margin-top:16px;
-	padding-bottom:0px;
-	padding-top:0px;
-}
-
-
-td {empty-cells:show;}
-h3{
- font-family: arial, verdana, sans-serif;
- font-size: 20px;
- color:#990000;
- margin-bottom:16px;
- margin-top:18px;
- padding-bottom:0px;
- padding-top:0px;
-}
-
-h4{
- margin-bottom: 4px;
- padding-bottom: 4px;
-}
-
-hr {
-	height: 1px;
-	color: #BBBBBB;
-	background-color: #BBBBBB;
-	border: 0px;
-}
-
-textarea {
-	font-size: 12px;
-	font-family: arial, verdana, sans-serif;
-	overflow:auto;
+input:focus, textarea:focus {
+  background-color: #FFFFDD;
 }
 
 img {
-	border:0px;
-	vertical-align:text-bottom;
+  border: 0px;
+  vertical-align: text-bottom;
 }
 
-.welcome {
-	font-weight: bold;
-	font-size: 14px;
-	color: #990000;
-	margin-top:18px;
-	padding-top:0px;
-}
-
-.h3gray {
-	font-weight: bold;
-	font-size: 14px;
-	color: #333333;
-}
-
-.styleLeftColumn {
-	font-weight: bold;
-	font-size: 12px;
-	color: #112233;
-}
-.styleLeftColumn1 {
-	font-weight: bold;
-	font-size: 13px;
-	color: #FFFFFF;
-}
-.styleLeftColumn2 {
-	font-weight: bold;
-	font-size: 13px;
-	color: #990000;
-}
-.styleSubject {
-	color: #FFFFFF;
-	font-weight: bold;
+.warning {
+  color: red;
+  font-weight: bold;
+  font-size: 1.2em;
+  margin-bottom: 10px;
 }
 
 .block_generic {
-	margin-left: 16px;
-	padding-left: 0px;
-	margin-top: 4px;
-	padding-top: 0px;
-	margin-right: 0px;
-	padding-right: 0px;
-	margin-bottom: 4px;
-	padding-bottom: 0px;
+  margin-left: 16px;
+  padding-left: 0px;
+  margin-top: 4px;
+  padding-top: 0px;
+  margin-right: 0px;
+  padding-right: 0px;
+  margin-bottom: 4px;
+  padding-bottom: 0px;
 }
 
 .block_search_groups {
-	margin-left: 16px;
-	padding-left: 16px;
-	margin-top: 0px;
-	padding-top: 0px;
-	margin-right: 0px;
-	padding-right: 0px;
-	margin-bottom: 0px;
-	padding-bottom: 0px;
+  margin-left: 16px;
+  padding-left: 16px;
+  margin-top: 0px;
+  padding-top: 0px;
+  margin-right: 0px;
+  padding-right: 0px;
+  margin-bottom: 0px;
+  padding-bottom: 0px;
 }
+
 .block_references {
-	font-size: 12px;
-	margin-left: 2px;
-	padding-left: 0px;
-	margin-top: 4px;
-	padding-top: 0px;
-	margin-right: 0px;
-	padding-right: 0px;
-	margin-bottom: 4px;
-	padding-bottom: 0px;
+  font-size: 12px;
+  margin-left: 2px;
+  padding-left: 0px;
+  margin-top: 4px;
+  padding-top: 0px;
+  margin-right: 0px;
+  padding-right: 0px;
+  margin-bottom: 4px;
+  padding-bottom: 0px;
 }
 
-.smallContent {font-size: 12px;}
-.xsmallContent {font-size: 11px;}
+.smallContent { font-size: 12px; }
+.xsmallContent { font-size: 11px; }
 
+.h3gray {
+  font-weight: bold;
+  font-size: 14px;
+  color: #333333;
+}
 
 .mainhead {
-	font-size: 30px;
-	color: #333333;
-	font-weight: bold;
-	font-family: arial, verdana, sans-serif;
+  font-size: 30px;
+  color: #333333;
+  font-weight: bold;
 }
-
-.subhead {
-	font-size: 16px;
-	line-height: 18px;
-	color: #ffffff;
-	font-weight: bold;
-	text-decoration: none;
-}
-
-.temphead {font-size: 18px; line-height: 18px; color: #ffffff;}
-
-.footerlink {font-size: 13px; line-height: 22px;  font-weight:bold; padding-right: 10px; padding-left: 10px; text-decoration:none}
-a.footerlink:link {color: #000066;}
-a.footerlink:visited {color: #000066;}
-a.footerlink:hover {color: #888800;}
-a.footerlink:active {color: #000066;}
-
-.topnav {font-size: 14px; font-weight:bold; line-height: 16px; padding-right: 6px; padding-left: 6px; text-decoration:none}
-a.topnav:link {color: #000066;}
-a.topnav:visited {color: #000066;}
-a.topnav:hover {color: #888800;}
-a.topnav:active {color: #000066;}
-
-.leftnav {font-size: 16px; font-weight:bold; line-height: 16px; margin-top:16px; margin-bottom:5px; color:#660000; text-decoration:none}
-.leftnav2 {
-font-size: 14px; font-weight:bold; line-height: 14px; margin-left: 14px; text-decoration:none; margin-bottom:5px; 
-}
-a.leftnav2a:link {color: #000066; text-decoration:none; }
-a.leftnav2a:visited {color: #000066; text-decoration:none; }
-a.leftnav2a:hover {color: #888800; text-decoration:none; }
-a.leftnav2:active {color: #000066; text-decoration:none; }
-
 
 .mainheadblue {
-	font-size: 16px;
-	line-height: 20px;
-	color: #333333;
-	font-weight: bold;
-	text-decoration: none;
+  font-size: 16px;
+  line-height: 20px;
+  color: #333333;
+  font-weight: bold;
+  text-decoration: none;
+}
+
+hr {
+  height: 1px;
+  color: #BBBBBB;
+  background-color: #BBBBBB;
+  border: 0px;
 }
 
 div#msgbox {
-	width:500px;
-	margin-left:auto;
-	margin-right:auto;
-	margin-top: 60px;
+  width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 60px;
 }
 
 div#msgbox_caption {
-	font-weight:bold;
-}
-
-ul#msgbox_operations {
-
+  font-weight: bold;
 }
 
 .msgbox_operation {
-	margin-top: 10px;
-	margin-bottom:10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 div#errbox {
-	width:500px;
-	margin-left:auto;
-	margin-right:auto;
-	margin-top: 60px;
+  width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 60px;
 }
 
 div#errbox_caption {
-	font-weight:bold;
-	margin-top: 10px;
-	margin-bottom:10px;
+  font-weight: bold;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 div#errbox_msg {
-	color:#FF0000;
-	margin-top: 10px;
-	margin-bottom:10px;
+  color: #FF0000;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 div#errbox_header {
-	color:#990000;
-	margin-top: 10px;
-	margin-bottom:10px;
+  color: #990000;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }
 
-
 div#errbox_operation {
-	margin-top: 10px;
-	margin-bottom:10px;
+  margin-top: 10px;
+  margin-bottom: 10px;
 }

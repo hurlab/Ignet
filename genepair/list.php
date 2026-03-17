@@ -66,12 +66,21 @@ if ($orderBy != '' && in_array($orderBy, $allowedOrderColumns, true)) {
     $strSql .= " ORDER BY $orderBy $safeOrder";
 }
 
-$rs = $db->Execute($strSql);
-if (!$rs->EOF) {
-    $array_c_hit_ids = $rs->GetArray();
-    $rs->close();
+// Build COUNT query using the same WHERE clause
+$strSqlCount = "SELECT COUNT(*) FROM t_sentence_hit_gene2gene_Host WHERE ";
+$strSqlCount .= "((geneSymbol1 = " . $db->qstr($geneSymbol1) . " AND geneSymbol2 = " . $db->qstr($geneSymbol2) . ") OR (geneSymbol2 = " . $db->qstr($geneSymbol1) . " AND geneSymbol1 = " . $db->qstr($geneSymbol2) . "))";
 
-    $numOfRecords = sizeof($array_c_hit_ids);
+if ($hasVaccine != '') {
+    $strSqlCount .= " AND hasVaccine = " . (int)$hasVaccine;
+}
+if ($keywords != '') {
+    $tkeywords = transformKeywords($keywords);
+    $strSqlCount .= " AND MATCH(sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
+}
+
+$numOfRecords = (int)$db->GetOne($strSqlCount);
+
+if ($numOfRecords > 0) {
     $recordsPerPage = 50;
     $numOfPage = ceil($numOfRecords / $recordsPerPage);
     if ($currPage == '' || $currPage > $numOfPage || $numOfPage < 1) $currPage = 1;
@@ -79,26 +88,31 @@ if (!$rs->EOF) {
     $score = 0;
     $params = "list.php?geneSymbol1=" . urlencode($geneSymbol1) . "&geneSymbol2=" . urlencode($geneSymbol2) . "&score=" . urlencode($score) . "&hasVaccine=" . urlencode($hasVaccine) . "&keywords=" . urlencode($keywords);
 
-    $a_ignets = array();
-    for ($i = ($currPage-1)*$recordsPerPage; $i < $currPage*$recordsPerPage && $i < $numOfRecords; $i++) {
-        $a_ignets[] = intval($array_c_hit_ids[$i]['c_hit_id']);
-    }
+    $offset = ($currPage - 1) * $recordsPerPage;
 
-    $ignets = implode(",", $a_ignets);
-    $strSql = "SELECT t_sentence_hit_gene2gene_Host.*, t_sentence_hit_gene2gene_Host.sentenceID AS sentenceID, sentences25_genepair.sentence
+    $strSqlPage = "SELECT t_sentence_hit_gene2gene_Host.*, t_sentence_hit_gene2gene_Host.sentenceID AS sentenceID, sentences25_genepair.sentence
                FROM t_sentence_hit_gene2gene_Host
                LEFT JOIN sentences25_genepair ON t_sentence_hit_gene2gene_Host.sentenceID = sentences25_genepair.sentenceID
-               WHERE gene2gene_host_id IN ($ignets)
-               GROUP BY sentences25_genepair.sentence, t_sentence_hit_gene2gene_Host.PMID";
+               WHERE ((geneSymbol1 = " . $db->qstr($geneSymbol1) . " AND geneSymbol2 = " . $db->qstr($geneSymbol2) . ") OR (geneSymbol2 = " . $db->qstr($geneSymbol1) . " AND geneSymbol1 = " . $db->qstr($geneSymbol2) . "))";
+
+    if ($hasVaccine != '') {
+        $strSqlPage .= " AND hasVaccine = " . (int)$hasVaccine;
+    }
+    if ($keywords != '') {
+        $strSqlPage .= " AND MATCH(t_sentence_hit_gene2gene_Host.sentence) AGAINST (" . $db->qstr($tkeywords) . " IN BOOLEAN MODE)";
+    }
+
+    $strSqlPage .= " GROUP BY sentences25_genepair.sentence, t_sentence_hit_gene2gene_Host.PMID";
 
     if ($orderBy != '' && in_array($orderBy, $allowedOrderColumns, true)) {
         $safeOrder = in_array(strtoupper($order), $allowedOrderDirs, true) ? strtoupper($order) : 'ASC';
-        $strSql .= " ORDER BY $orderBy $safeOrder";
+        $strSqlPage .= " ORDER BY $orderBy $safeOrder";
     }
+    $strSqlPage .= " LIMIT $recordsPerPage OFFSET $offset";
 
-    $rs = $db->Execute($strSql);
+    $rs = $db->Execute($strSqlPage);
     $array_ignet = array();
-    if (!$rs->EOF) {
+    if ($rs && !$rs->EOF) {
         $array_ignet = $rs->GetArray();
         $rs->close();
     }
@@ -129,7 +143,7 @@ if (!empty($sentenceIDs)) {
     
 
 ?>
-<p>Found <?php echo sizeof($array_c_hit_ids)?> record(s).</p>
+<p>Found <?php echo $numOfRecords?> record(s).</p>
 
 <table border="0">
     <tr>

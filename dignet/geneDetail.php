@@ -1,34 +1,45 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
+<!DOCTYPE html>
+<html lang="en"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
 <head>
 <!-- InstanceBeginEditable name="doctitle" -->
 <title>Ignet</title>
 <!-- InstanceEndEditable -->
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <link rel="shortcut icon" href="/favicon.ico"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: '#1a365d',
+          'navy-dark': '#102a4c',
+          accent: '#ed8936',
+          success: '#38a169',
+          background: '#f7fafc',
+          text: '#1a202c',
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
 <link href="../css/bmain.css" rel="stylesheet" type="text/css" />
-<!-- InstanceBeginEditable name="head" -->
-<!-- InstanceEndEditable -->
+<!-- InstanceBeginEditable name="head" --><!-- InstanceEndEditable -->
 </head>
-<body style="margin:0px; background-image:url(/images/bg_2008-08-21.2.gif)" id="main_body">
-<?php 
-
+<body class="bg-[#f7fafc] text-[#1a202c] font-sans" id="main_body">
+<?php
 include('../inc/template_top.php');
 ?>
-<table width="100%" border="0" cellpadding="0" cellspacing="0">
-	<tr>
-		<td width="160" valign="top" style="min-width:160px">
-<?php 
-include('../inc/template_left.php');
-?>
-		</td>
-		<td valign="top">
-		<div style="margin:6px 10px 16px 10px; border-top:2px #4A2F65 solid">
-		<!-- InstanceBeginEditable name="Main" -->
+<main class="max-w-7xl mx-auto px-4 py-6">
+  <!-- InstanceBeginEditable name="Main" -->
 <h3>Gene Information</h3>
 
-<?php 
+<?php
 include('../inc/functions.php');
 $db = ADONewConnection($driver);
 $db->Connect($host, $username, $password, $database);
@@ -50,7 +61,7 @@ if (!$rs->EOF) {
 	$strSql .= " UNION (SELECT geneSymbol2 as geneSymbol1 FROM t_sentence_hit_gene2gene_Host where pmid in ($safePmids) and geneSymbol1 = $qGeneSymbol1)";
 
 	$rsRelatedGenes = $db->Execute($strSql);
-	
+
 	$arrayRelatedGene=array();
 	foreach($rsRelatedGenes as $relatedGene) {
 		if (isset($arrayRelatedGene[$relatedGene['geneSymbol1']])) {
@@ -63,9 +74,9 @@ if (!$rs->EOF) {
 
 	$strSql = "SELECT * FROM t_gene_list where c_genesymbol=" . $db->qstr($geneSymbol1);
 	$rs = $db->Execute($strSql);
-	
+
 	$arrayGeneDetail = $rs->FetchRow();
-	
+
 ?>
 <p>Gene symbol: <?php echo htmlspecialchars($geneSymbol1, ENT_QUOTES, 'UTF-8')?></p>
 <p>Gene name: <?php echo htmlspecialchars($arrayGeneDetail['c_gene_product'], ENT_QUOTES, 'UTF-8')?></p>
@@ -74,7 +85,7 @@ if (!$rs->EOF) {
 	if ($arrayGeneDetail['c_synonyms']!='') {
 ?>
 <p>Synonyms: <?php echo htmlspecialchars($arrayGeneDetail['c_synonyms'], ENT_QUOTES, 'UTF-8')?></p>
-<?php	
+<?php
 	}
 ?>
 <p>Related Genes</p>
@@ -85,7 +96,7 @@ if (!$rs->EOF) {
     <td align="center" bgcolor="#A5C3D6" class="styleLeftColumn">Gene Symbol</td>
     <td align="center" bgcolor="#A5C3D6" class="styleLeftColumn">Number of hits</td>
   </tr>
-  <?php 
+  <?php
 	ksort($arrayRelatedGene);
 	$i=0;
 	foreach ($arrayRelatedGene as $relatedGene=>$num_hits) {
@@ -96,13 +107,13 @@ if (!$rs->EOF) {
     <td bgcolor="#F5FAF7" style=" font-size:12px"><a href="geneDetail.php?geneSymbol1=<?php echo urlencode($relatedGene)?>&amp;c_query_id=<?php echo urlencode($c_query_id)?>"><?php echo htmlspecialchars($relatedGene, ENT_QUOTES, 'UTF-8')?></a></td>
     <td bgcolor="#F5FAF7" style=" font-size:12px"><a href="genePair.php?geneSymbol1=<?php echo urlencode($geneSymbol1)?>&amp;geneSymbol2=<?php echo urlencode($relatedGene)?>&amp;c_query_id=<?php echo urlencode($c_query_id)?>"><?php echo $num_hits?> hits</a></td>
   </tr>
-  <?php 
+  <?php
 	}
 ?>
 </table>
 
 
-  <?php 
+  <?php
 	$strSql="SELECT distinct hgh.PMID, hgh.sentenceID, s24.sentence FROM sentences25_genepair s24 INNER JOIN t_sentence_hit_gene2gene_Host hgh ON hgh.PMID = s24.PMID where hgh.PMID in ($safePmids) and (geneSymbol1 = $qGeneSymbol1 or geneSymbol2 = $qGeneSymbol1)";
 
 	$rs = $db->Execute($strSql);
@@ -118,7 +129,7 @@ if (!$rs->EOF) {
     <td align="center" bgcolor="#E4E4E4" class="styleLeftColumn">PMID</td>
     <td align="center" bgcolor="#E4E4E4" class="styleLeftColumn">Sentence</td>
   </tr>
-<?php 
+<?php
 	$i=0;
 	foreach ($array_pub_list as $row) {
 		$i++;
@@ -136,10 +147,10 @@ if (!$rs->EOF) {
 else {
 	echo htmlspecialchars($row['sentence'], ENT_QUOTES, 'UTF-8');
 }
-?>    
+?>
     </td>
   </tr>
-<?php 
+<?php
 	}
 ?>
 </table>
@@ -148,18 +159,8 @@ else {
 }
 ?>
 
-<!-- InstanceEndEditable -->
-		</div>
-		</td>
-	</tr>
-</table>
+  <!-- InstanceEndEditable -->
+</main>
+<?php include('../inc/template_footer.php'); ?>
 </body>
-<script type="text/javascript">
-var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-</script>
-<script type="text/javascript">
-var pageTracker = _gat._getTracker("UA-4869243-4");
-pageTracker._trackPageview();
-</script>
 <!-- InstanceEnd --></html>

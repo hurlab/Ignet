@@ -1,12 +1,33 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
+<!DOCTYPE html>
+<html lang="en"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
 <head>
 <!-- InstanceBeginEditable name="doctitle" -->
 <title>Ignet</title>
 <!-- InstanceEndEditable -->
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <link rel="shortcut icon" href="/favicon.ico"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: '#1a365d',
+          'navy-dark': '#102a4c',
+          accent: '#ed8936',
+          success: '#38a169',
+          background: '#f7fafc',
+          text: '#1a202c',
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
 <link href="../css/bmain.css" rel="stylesheet" type="text/css" />
 <!-- InstanceBeginEditable name="head" -->
 <!-- <script type="text/javascript" src="cytoscapeweb_v1.0.2/js/min/AC_OETags.min.js"></script>	-->
@@ -14,27 +35,17 @@
 <!-- <script type="text/javascript" src="cytoscapeweb_v1.0.2/js/min/cytoscapeweb.min.js"></script> -->
 <script	type="text/javascript" src="cytoscapeweb_v3.5.4/cytoscape.min.js"></script>
 
-
 <!-- InstanceEndEditable -->
 </head>
-<body style="margin:0px; background-image:url(/images/bg_2008-08-21.2.gif)" id="main_body">
-<?php 
-
+<body class="bg-[#f7fafc] text-[#1a202c] font-sans" id="main_body">
+<?php
 include('../inc/template_top.php');
 ?>
-<table width="100%" border="0" cellpadding="0" cellspacing="0">
-	<tr>
-		<td width="160" valign="top" style="min-width:160px">
-<?php 
-include('../inc/template_left.php');
-?>
-		</td>
-		<td valign="top">
-		<div style="margin:6px 10px 16px 10px; border-top:2px #4A2F65 solid">
-		<!-- InstanceBeginEditable name="Main" -->
+<main class="max-w-7xl mx-auto px-4 py-6">
+  <!-- InstanceBeginEditable name="Main" -->
 <h3>Dignet Gene Interaction Network Display</h3>
 
-<?php 
+<?php
 include('../inc/functions.php');
 $db = ADONewConnection($driver);
 $db->Connect($host, $username, $password, $database);
@@ -52,10 +63,10 @@ if (!$rs->EOF) {
 
 	$safePmids = implode(',', array_map('intval', explode(',', $pubmedRecords)));
 	$strSql = "SELECT geneSymbol1, geneSymbol2 FROM t_sentence_hit_gene2gene_Host where pmid in ($safePmids)";
-	
+
 	$pairs=array();
 	$arrayNode=array();
-	
+
 	$rs = $db->Execute($strSql);
 	$node_id = 0;
 	foreach ($rs as $row) {
@@ -80,17 +91,17 @@ if (!$rs->EOF) {
 		</node>
 ";
 	}
-	
-	
+
+
 	foreach ($pairs as $pair=>$tmpValue) {
 		$tokens = preg_split('/\t/', $pair);
-		
-		$gml_txt .= "	
+
+		$gml_txt .= "
 		<edge source=\"{$arrayNode[$tokens[0]]}\" target=\"{$arrayNode[$tokens[1]]}\"	/>
 ";
 	}
-	
-	$gml_txt .= "	
+
+	$gml_txt .= "
 	</graph>
 </graphml>";
 
@@ -118,7 +129,7 @@ if (!$rs->EOF) {
 	}
 }
 
-	
+
 ?>
 <p> Keywords: <?php echo htmlspecialchars($keywords, ENT_QUOTES, 'UTF-8')?>.</p>
 <p> Found <a href="searchPubmed.php?keywords=<?php echo urlencode($keywords)?>"><?php echo sizeof($pairs)?> gene pairs</a>. Below are the network shown in Cytoscape Web.</p>
@@ -127,14 +138,14 @@ if (!$rs->EOF) {
 
 <div id="cytoWebContent" style="width: 800px;height: 600px;display: block;"></div>
 
-<!-- 
+<!--
 <script type="text/javascript">
     var options = { swfPath: "cytoscapeweb_v1.0.2/swf/CytoscapeWeb",
                     flashInstallerPath: "cytoscapeweb_v1.0.2/swf/playerProductInstall",
                     flashAlternateContent: "Flash Player needed." };
-                    
+
     var vis = new org.cytoscapeweb.Visualization("cytoWebContent", options);
-    
+
     vis.draw({ network: '<?php echo preg_replace('/[\r\n]+/', "\\\r\n", $gml_txt)?>' });
 </script>
 -->
@@ -153,24 +164,12 @@ if (!$rs->EOF) {
 	layout.run();
 </script>
 
-<?php 
+<?php
 //	print("<pre>$gml_txt</pre>");
 ?>
 
-<!-- InstanceEndEditable -->
-		</div>
-		</td>
-	</tr>
-</table>
+  <!-- InstanceEndEditable -->
+</main>
+<?php include('../inc/template_footer.php'); ?>
 </body>
-<!--
-<script type="text/javascript">
-var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-</script>
-<script type="text/javascript">
-var pageTracker = _gat._getTracker("UA-4869243-4");
-pageTracker._trackPageview();
-</script>
--->
 <!-- InstanceEnd --></html>

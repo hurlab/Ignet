@@ -1,20 +1,42 @@
-<?php 
+<?php
 include('../inc/functions.php');
 
 function debug_to_console($data){
     $outpout = $data;
     if (is_array($output))
         $output = implode(',', $output);
-    
+
     echo "<script>console.log(".$output.");</script>";
 }
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><head>
+<!DOCTYPE html>
+<html lang="en">
+<head>
 <title>Ignet Gene</title>
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <link rel="shortcut icon" href="/favicon.ico"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: '#1a365d',
+          'navy-dark': '#102a4c',
+          accent: '#ed8936',
+          success: '#38a169',
+          background: '#f7fafc',
+          text: '#1a202c',
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
 <link href="../css/bmain.css" rel="stylesheet" type="text/css" />
 <script language="javascript" src="https://ajax.googleapis.com/ajax/libs/dojo/1.6.2/dojo/dojo.xd.js"
 			djConfig="parseOnLoad: true"></script>
@@ -48,21 +70,12 @@ function reloadGenes() {
 	@import "https://ajax.googleapis.com/ajax/libs/dojo/1.3/dijit/themes/tundra/tundra.css";
 </style>
 </head>
-<body style="margin:0px; background-image:url(../images/bg_2008-08-21.2.gif)" id="main_body">
-<?php 
-
+<body class="bg-[#f7fafc] text-[#1a202c] font-sans" id="main_body">
+<?php
 include('../inc/template_top.php');
 ?>
-<table width="100%" border="0" cellpadding="0" cellspacing="0">
-	<tr>
-		<td width="160" valign="top" style="min-width:160px">
-<?php 
-include('../inc/template_left.php');
-?>
-		</td>
-		<td valign="top">
-		<div style="margin:6px 10px 16px 10px; border-top:2px #4A2F65 solid">
-		<?php 
+<main class="max-w-7xl mx-auto px-4 py-6">
+		<?php
 $db = NewADOConnection($driver);
 $db->PConnect($host, $username, $password, $database);
 $vali=new Validation($_REQUEST);
@@ -130,7 +143,7 @@ function retrive_dist() {
 		url: "do_layout.php?geneSymbol1=" + geneSymbol1 + "&score=" + score + "&hasVaccine=" + hasVaccine + "&keywords=" + keywords,
 		handleAs: "text",
 		timeout: 50000, // Time in milliseconds
-		
+
 		load: function(response, ioArgs) {
 			// Check if the response contains an error message or a success message
 			if (response.toLowerCase().indexOf("<p>") > -1) {
@@ -144,79 +157,79 @@ function retrive_dist() {
 				// Set the image source, adding a random number to prevent browser caching
 				document.getElementById('img001').src="../tmp/ignet/" + geneSymbol1.replace(/\W+/g, '_') + ".png?rand=" + Math.random();
 			}
-			return response; 
+			return response;
 		},
-		
+
 		error: function(response, ioArgs) {
 			console.error("HTTP status code: ", ioArgs.xhr.status);
 			document.getElementById('div_img001').innerHTML = '<p><b>Request Failed:</b> Could not contact the server to generate the image. Please try again.</p>';
 			return response;
 		}
-	});	
+	});
 }
 
-<?php 
+<?php
 if ($gene_found) {
 ?>
 	dojo.addOnLoad(retrive_dist);
-<?php 	
+<?php
 }
 ?>
 </script>
-    <h3 align="center">Ignet Gene Query</h3>
-    <form onsubmit="retrive_dist(); return false;">
-      <table border="0" cellpadding="4">
-			<tr>
-				<td bgcolor="#E4E4E4" class="styleLeftColumn">Gene Name </td>
-				<td bgcolor="#F4F9FD">
-	  <select name="geneSymbol1" id="geneSymbol1">
-          <?php 
-foreach ($geneSymbols as $gene=>$tmp) { 
+    <h2 class="text-lg font-bold text-[#1a365d] text-center mb-4">Gene Query</h2>
+    <form onsubmit="retrive_dist(); return false;" class="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+      <div class="flex flex-wrap items-end gap-3">
+        <div>
+          <label for="geneSymbol1" class="block text-xs font-semibold text-gray-600 mb-1">Gene</label>
+          <select name="geneSymbol1" id="geneSymbol1" class="border border-gray-300 rounded px-2 py-1.5 text-sm bg-white text-gray-900 focus:ring-2 focus:ring-blue-300 focus:outline-none">
+          <?php
+foreach ($geneSymbols as $gene=>$tmp) {
 ?>
-          <option value="<?php echo $gene?>" <?php  if ($gene==$geneSymbol1){?> selected="selected" <?php  }?>>
-          <?php echo $gene?>
-          </option>
-          <?php 
+            <option value="<?php echo $gene?>" <?php if ($gene==$geneSymbol1){?> selected="selected" <?php }?>><?php echo $gene?></option>
+          <?php
 }
 ?>
-        </select>				</td>
-				<td bgcolor="#E4E4E4" class="tdData">Score>= </td>
-				<td class=tdData">
-				  <input type="text" name="score" id="score" value="<?php echo $score;?>"/>
-				</td>
-				<td bgcolor="#E4E4E4" class="tdData">"Vaccine" metioned? </td>
-				<td class="tdData">
-				  <select name="hasVaccine" id="hasVaccine">
-				    <option value='1' <?php if ($hasVaccine=='1') echo 'selected';?>>Required</option>
-				    <option value='0' <?php if ($hasVaccine!='1') echo 'selected';?>>Optional</option>
-				  </select>
-				</td>
-				<td class="tdData">Keywords: </td>
-				<td class="tdData"><label for="keywords"></label>
-				  <input type="text" name="keywords" id="keywords" value="<?php echo $keywords?>" /></td>
-				<td align="center"><input type="button" name="Button" value="Retrieve" onclick="retrive_dist();" /></td>
-				</tr>
-		</table>
+          </select>
+        </div>
+        <div>
+          <label for="score" class="block text-xs font-semibold text-gray-600 mb-1">Score >=</label>
+          <input type="text" name="score" id="score" value="<?php echo $score;?>" class="border border-gray-300 rounded px-2 py-1.5 text-sm w-20 focus:ring-2 focus:ring-blue-300 focus:outline-none" />
+        </div>
+        <div>
+          <label for="hasVaccine" class="block text-xs font-semibold text-gray-600 mb-1">Vaccine</label>
+          <select name="hasVaccine" id="hasVaccine" class="border border-gray-300 rounded px-2 py-1.5 text-sm bg-white text-gray-900 focus:ring-2 focus:ring-blue-300 focus:outline-none">
+            <option value='1' <?php if ($hasVaccine=='1') echo 'selected';?>>Required</option>
+            <option value='0' <?php if ($hasVaccine!='1') echo 'selected';?>>Optional</option>
+          </select>
+        </div>
+        <div>
+          <label for="keywords" class="block text-xs font-semibold text-gray-600 mb-1">Keywords</label>
+          <input type="text" name="keywords" id="keywords" value="<?php echo $keywords?>" placeholder="e.g., blood" class="border border-gray-300 rounded px-2 py-1.5 text-sm w-32 focus:ring-2 focus:ring-blue-300 focus:outline-none" />
+        </div>
+        <div>
+          <button type="button" name="Button" onclick="retrive_dist();" class="bg-[#ed8936] hover:bg-orange-500 text-white px-4 py-1.5 rounded text-sm font-medium transition">Retrieve</button>
+        </div>
+      </div>
     </form>
       <br />
       <table border="0">
         <tr>
           <td valign="top">
 		  <div jsId="div_results1" id="div_results1" dojotype="dijit.layout.ContentPane" loadingmessage="Loading related genes..." style="height:300px; overflow:auto; ">
-<?php 
+<?php
 if ($geneSymbol1=='') {
 ?>
 <p><strong>Instruction: </strong>Please select a gene, choose 'vaccine' required or not, add some keyword (optional), and then click retrieve!</p>
-<p><strong>Examples:</strong> Choose and click: <a href="index.php?geneSymbol1=A1BG">A1BG</a>, <a href="index.php?geneSymbol1=IFNG">IFNG</a>, <a href="index.php?geneSymbol1=IL10">IL10</a>, <a href="index.php?geneSymbol1=SLC39A1">SLC39A1</a>, <a href="index.php?geneSymbol1=TLR4">TLR4</a>, <a href="index.php?geneSymbol1=TNF">TNF</a>. <br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;For each of the query, you can add the requirement of 'vaccine' mentioned, and/or you can add some keyword(s) such as 'blood'. 
+<p><strong>Examples:</strong> Choose and click: <a href="index.php?geneSymbol1=A1BG">A1BG</a>, <a href="index.php?geneSymbol1=IFNG">IFNG</a>, <a href="index.php?geneSymbol1=IL10">IL10</a>, <a href="index.php?geneSymbol1=SLC39A1">SLC39A1</a>, <a href="index.php?geneSymbol1=TLR4">TLR4</a>, <a href="index.php?geneSymbol1=TNF">TNF</a>. <br/>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;For each of the query, you can add the requirement of 'vaccine' mentioned, and/or you can add some keyword(s) such as 'blood'.
 </p>
-<?php 
+<?php
 }
 else {
 	if (!$gene_found) {
 ?>
 <p>&nbsp; </p>
 <p>Can not find gene <?php echo $geneSymbol1?>! Please select a different gene and click retrive!</p>
-<?php 
+<?php
 	}
 }
 ?>
@@ -234,17 +247,8 @@ else {
           <td colspan="2"><div jsId="div_results2" id="div_results2" dojotype="dijit.layout.ContentPane" loadingmessage="Loading Publications..." style="height:300px; overflow:auto;"></div></td>
         </tr>
       </table>
-</div>
-		</td>
-	</tr>
-</table>
+
+</main>
+<?php include('../inc/template_footer.php'); ?>
 </body>
-<script type="text/javascript">
-var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-</script>
-<script type="text/javascript">
-var pageTracker = _gat._getTracker("UA-4869243-4");
-pageTracker._trackPageview();
-</script>
 </html>

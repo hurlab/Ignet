@@ -1,33 +1,45 @@
 <?php 
 include ('../inc/functions.php');
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
+<!DOCTYPE html>
+<html lang="en"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
 <head>
 <!-- InstanceBeginEditable name="doctitle" -->
 <title>Ignet</title>
 <!-- InstanceEndEditable -->
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <link rel="shortcut icon" href="/favicon.ico"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: '#1a365d',
+          'navy-dark': '#102a4c',
+          accent: '#ed8936',
+          success: '#38a169',
+          background: '#f7fafc',
+          text: '#1a202c',
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
 <link href="../css/bmain.css" rel="stylesheet" type="text/css" />
 <!-- InstanceBeginEditable name="head" --><!-- InstanceEndEditable -->
 </head>
-<body style="margin:0px; background-image:url(/images/bg_2008-08-21.2.gif)" id="main_body">
-<?php 
-
+<body class="bg-[#f7fafc] text-[#1a202c] font-sans" id="main_body">
+<?php
 include('../inc/template_top.php');
 ?>
-<table width="100%" border="0" cellpadding="0" cellspacing="0">
-	<tr>
-		<td width="160" valign="top" style="min-width:160px">
-<?php 
-include('../inc/template_left.php');
-?>
-		</td>
-		<td valign="top">
-		<div style="margin:6px 10px 16px 10px; border-top:2px #4A2F65 solid">
-		<!-- InstanceBeginEditable name="Main" -->
+<main class="max-w-7xl mx-auto px-4 py-6">
+    <!-- InstanceBeginEditable name="Main" -->
       <?php 
 
 $vali=new Validation($_REQUEST);
@@ -90,17 +102,7 @@ else {
 
 ?>
       <!-- InstanceEndEditable -->
-		</div>
-		</td>
-	</tr>
-</table>
+</main>
+<?php include('../inc/template_footer.php'); ?>
 </body>
-<script type="text/javascript">
-var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-</script>
-<script type="text/javascript">
-var pageTracker = _gat._getTracker("UA-4869243-4");
-pageTracker._trackPageview();
-</script>
 <!-- InstanceEnd --></html>

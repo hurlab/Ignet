@@ -1,15 +1,36 @@
-<?php 
+<?php
 include('../inc/functions.php');
 ?>
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
+<!DOCTYPE html>
+<html lang="en"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
 <head>
 <!-- InstanceBeginEditable name="doctitle" -->
 <title>Ignet GenePair</title>
 <!-- InstanceEndEditable -->
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <link rel="shortcut icon" href="/favicon.ico"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: '#1a365d',
+          'navy-dark': '#102a4c',
+          accent: '#ed8936',
+          success: '#38a169',
+          background: '#f7fafc',
+          text: '#1a202c',
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
 <link href="../css/bmain.css" rel="stylesheet" type="text/css" />
 <!-- InstanceBeginEditable name="head" -->
 <script language="javascript" src="https://ajax.googleapis.com/ajax/libs/dojo/1.6.2/dojo/dojo.xd.js"
@@ -24,22 +45,13 @@ include('../inc/functions.php');
 
 <!-- InstanceEndEditable -->
 </head>
-<body style="margin:0px; background-image:url(../images/bg_2008-08-21.2.gif)" id="main_body">
-<?php 
-
+<body class="bg-[#f7fafc] text-[#1a202c] font-sans" id="main_body">
+<?php
 include('../inc/template_top.php');
 ?>
-<table width="100%" border="0" cellpadding="0" cellspacing="0">
-	<tr>
-		<td width="160" valign="top" style="min-width:160px">
-<?php 
-include('../inc/template_left.php');
-?>
-		</td>
-		<td valign="top">
-		<div style="margin:6px 10px 16px 10px; border-top:2px #4A2F65 solid">
-		<!-- InstanceBeginEditable name="Main" -->
-    <?php 
+<main class="max-w-7xl mx-auto px-4 py-6">
+  <!-- InstanceBeginEditable name="Main" -->
+    <?php
 
 $db = ADONewConnection($driver);
 $db->Connect($host, $username, $password, $database);
@@ -131,76 +143,63 @@ function retrive_dist() {
 }
 
 
-<?php 
+<?php
 if ($gene_found) {
 ?>
 	dojo.addOnLoad(retrive_dist);
-<?php 	
+<?php
 }
 ?>
 </script>
-<h3 align="center">Ignet GenePair Query</h3>
-  <form id="form1" name="form1">
-  <input type="hidden" name="hasVaccine" id="hasVaccine"  value=""/>
-  	<table border="0" style="border:1px solid #666666">
-		<tr>
-			<td class="styleLeftColumn">Gene1</td>
-			<td class="tdData">
-	  <select name="geneSymbol1" id="geneSymbol1" onchange="reloadGenes();">
-          <?php 
-foreach ($geneSymbols as $gene=>$tmp) { 
+<h2 class="text-lg font-bold text-[#1a365d] text-center mb-4">GenePair Query</h2>
+  <form id="form1" name="form1" class="bg-white border border-gray-200 rounded-lg p-4 mb-4">
+  <input type="hidden" name="hasVaccine" id="hasVaccine" value=""/>
+    <div class="flex flex-wrap items-end gap-3">
+      <div>
+        <label for="geneSymbol1" class="block text-xs font-semibold text-gray-600 mb-1">Gene 1</label>
+        <select name="geneSymbol1" id="geneSymbol1" onchange="reloadGenes();" class="border border-gray-300 rounded px-2 py-1.5 text-sm bg-white text-gray-900 focus:ring-2 focus:ring-blue-300 focus:outline-none">
+          <?php
+foreach ($geneSymbols as $gene=>$tmp) {
 ?>
-          <option value="<?php echo $gene?>" <?php  if ($gene==$geneSymbol1){?> selected="selected" <?php  }?>>
-          <?php echo $gene?>
-          </option>
-          <?php 
+          <option value="<?php echo $gene?>" <?php if ($gene==$geneSymbol1){?> selected="selected" <?php }?>><?php echo $gene?></option>
+          <?php
 }
 ?>
-        </select>			
-			</td>
-			<td class="styleLeftColumn">Gene2</td>
-			<td class="tdData">
-	  <select name="geneSymbol2" id="geneSymbol2">
-          <?php 
-foreach ($geneSymbols as $gene=>$tmp) { 
+        </select>
+      </div>
+      <div>
+        <label for="geneSymbol2" class="block text-xs font-semibold text-gray-600 mb-1">Gene 2</label>
+        <select name="geneSymbol2" id="geneSymbol2" class="border border-gray-300 rounded px-2 py-1.5 text-sm bg-white text-gray-900 focus:ring-2 focus:ring-blue-300 focus:outline-none">
+          <?php
+foreach ($geneSymbols as $gene=>$tmp) {
 ?>
-          <option value="<?php echo $gene?>" <?php  if ($gene==$geneSymbol2){?> selected="selected" <?php  }?>>
-          <?php echo $gene?>
-          </option>
-          <?php 
+          <option value="<?php echo $gene?>" <?php if ($gene==$geneSymbol2){?> selected="selected" <?php }?>><?php echo $gene?></option>
+          <?php
 }
 ?>
-        </select>			
-			</td>
-			<td class="tdData">Keywords: </td>
-			<td class="tdData"><label for="keywords"></label>
-			  <input type="text" name="keywords" id="keywords" value="<?php echo $keywords?>" /></td>
-			<td align="center" class="tdData"><input name="Button" type="button" value="Search" onclick="retrive_dist()" /></td>
-		</tr>
-	</table>
-		</form>
-	
-<div jsId="div_results2" id="div_results2" dojotype="dijit.layout.ContentPane" loadingmessage="Loading Publications..."></div>	
-		
-<p>For example, Search for: 
+        </select>
+      </div>
+      <div>
+        <label for="keywords" class="block text-xs font-semibold text-gray-600 mb-1">Keywords</label>
+        <input type="text" name="keywords" id="keywords" value="<?php echo $keywords?>" placeholder="e.g., blood" class="border border-gray-300 rounded px-2 py-1.5 text-sm w-32 focus:ring-2 focus:ring-blue-300 focus:outline-none" />
+      </div>
+      <div>
+        <button name="Button" type="button" onclick="retrive_dist()" class="bg-[#ed8936] hover:bg-orange-500 text-white px-4 py-1.5 rounded text-sm font-medium transition">Search</button>
+      </div>
+    </div>
+  </form>
+
+<div jsId="div_results2" id="div_results2" dojotype="dijit.layout.ContentPane" loadingmessage="Loading Publications..."></div>
+
+<p>For example, Search for:
 	<ul>
-	<li>Interactions between <a href="http://134.129.166.26/ignet/genepair/index.php?geneSymbol1=IL6&geneSymbol2=IFNG"> IL6 and IFNG</a>, or between <a href="http://134.129.166.26/ignet/genepair/index.php?hasVaccine=&geneSymbol1=IL6&geneSymbol2=IFNG&keywords=blood"> IL6 and IFNG with keyword "blood"</a>. </li> 
-	<li>Interactions between <a href="http://134.129.166.26/ignet/genepair/index.php?geneSymbol1=TLR4&geneSymbol2=TNF"> TLR4 and TNF</a>, between <a href="http://134.129.166.26/ignet/genepair/index.php?geneSymbol1=TLR4&geneSymbol2=IL10"> TLR4 and IL10</a>, or between <a href="http://134.129.166.26/ignet/genepair/index.php?geneSymbol1=TLR4&geneSymbol2=IFNG"> TLR4 and IFNG</a>.</li> 
-	</ul>			
+	<li>Interactions between <a href="http://134.129.166.26/ignet/genepair/index.php?geneSymbol1=IL6&geneSymbol2=IFNG"> IL6 and IFNG</a>, or between <a href="http://134.129.166.26/ignet/genepair/index.php?hasVaccine=&geneSymbol1=IL6&geneSymbol2=IFNG&keywords=blood"> IL6 and IFNG with keyword "blood"</a>. </li>
+	<li>Interactions between <a href="http://134.129.166.26/ignet/genepair/index.php?geneSymbol1=TLR4&geneSymbol2=TNF"> TLR4 and TNF</a>, between <a href="http://134.129.166.26/ignet/genepair/index.php?geneSymbol1=TLR4&geneSymbol2=IL10"> TLR4 and IL10</a>, or between <a href="http://134.129.166.26/ignet/genepair/index.php?geneSymbol1=TLR4&geneSymbol2=IFNG"> TLR4 and IFNG</a>.</li>
+	</ul>
 </p>
 			<br/>
   <!-- InstanceEndEditable -->
-		</div>
-		</td>
-	</tr>
-</table>
+</main>
+<?php include('../inc/template_footer.php'); ?>
 </body>
-<script type="text/javascript">
-var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-</script>
-<script type="text/javascript">
-var pageTracker = _gat._getTracker("UA-4869243-4");
-pageTracker._trackPageview();
-</script>
 <!-- InstanceEnd --></html>

@@ -1,57 +1,74 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
-<html xmlns="http://www.w3.org/1999/xhtml"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
+<!DOCTYPE html>
+<html lang="en"><!-- InstanceBegin template="/Templates/main.dwt.php" codeOutsideHTMLIsLocked="false" -->
 <head>
 <!-- InstanceBeginEditable name="doctitle" -->
 <title>Ignet</title>
 <!-- InstanceEndEditable -->
-<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-<meta http-equiv="Content-Script-Type" content="text/javascript" />
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <link rel="shortcut icon" href="/favicon.ico"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          navy: '#1a365d',
+          'navy-dark': '#102a4c',
+          accent: '#ed8936',
+          success: '#38a169',
+          background: '#f7fafc',
+          text: '#1a202c',
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+        },
+      }
+    }
+  }
+</script>
 <link href="css/bmain.css" rel="stylesheet" type="text/css" />
 <!-- InstanceBeginEditable name="head" --><!-- InstanceEndEditable -->
 </head>
-<body style="margin:0px; background-image:url(images/bg_2008-08-21.2.gif)" id="main_body">
-<?php 
-
+<body class="bg-[#f7fafc] text-[#1a202c] font-sans" id="main_body">
+<?php
 include('inc/template_top.php');
 ?>
-<table width="100%" border="0" cellpadding="0" cellspacing="0">
-	<tr>
-		<td width="160" valign="top" style="min-width:160px">
-<?php 
-include('inc/template_left.php');
-?>
-		</td>
-		<td valign="top">
-		<div style="margin:6px 10px 16px 10px; border-top:2px #4A2F65 solid">
-		<!-- InstanceBeginEditable name="Main" -->
-      <h3 align="center">Contact Us</h3>
-      <p>The Ignet system has been co-developed and maintained by three collaborative teams, including: </p>
-      <blockquote class="block_generic">  
-        <p><a href="http://www.hegroup.org/aboutUs/Oliver.html" target="_blank"><strong>Dr. Yongqun "Oliver" He</strong></a>, Associate Professor, Unit for Laboratory Animal Medicine, Department of Microbiology and Immunology, and Center for Computational Medicine and Biology, University of Michigan, Ann Arbor, MI, USA. Email: yongqunh AT med.umich.edu.</p>
+<main class="max-w-7xl mx-auto px-4 py-6">
+  <!-- InstanceBeginEditable name="Main" -->
+    <h1 class="text-xl font-bold text-[#1a365d] mb-4">Contact Us</h1>
+    <p class="text-sm text-gray-700 leading-relaxed mb-5">The Ignet system has been co-developed and maintained by three collaborative teams:</p>
 
-        <p><a href="https://und.edu/directory/jung.hur"><strong>Dr. Junguk Hur</strong></a>, Associate Professor, Department of Biomedical Sciences, University of North Dakota, Grand Forks, ND, USA; and: Department of Neurology, University of Michigan, Ann Arbor, MI, USA. </p>
-			
-        <p><a href="https://www.cmpe.boun.edu.tr/~ozgur/"><strong>Dr. Arzucan Ozgur</strong></a>, Associate Professor, Department of Computer Engineering, Bogazici University, Istanbul, Turkey. </p>
-		  
-        <p>&nbsp;</p>
-      </blockquote>
-     
-      <!-- p>You can also send your suggestions and comments via the online <a href="feedback/index.php">feedback form</a>. </p -->
-	  <p> Please feel free to contact us. Thanks! </p>
-	  <p>&nbsp;</p>
-        <!-- InstanceEndEditable -->
-		</div>
-		</td>
-	</tr>
-</table>
+    <div class="grid md:grid-cols-3 gap-4 mb-6">
+      <div class="bg-white border border-gray-200 rounded-lg p-5">
+        <h3 class="text-sm font-bold text-[#1a365d] mb-1"><a href="http://www.hegroup.org/aboutUs/Oliver.html" target="_blank" class="text-[#2b6cb0] hover:underline">Dr. Yongqun "Oliver" He</a></h3>
+        <p class="text-xs text-gray-600 leading-relaxed mb-1">Associate Professor</p>
+        <p class="text-xs text-gray-600 leading-relaxed mb-1">Unit for Laboratory Animal Medicine, Department of Microbiology and Immunology, and Center for Computational Medicine and Biology</p>
+        <p class="text-xs text-gray-600 leading-relaxed mb-1">University of Michigan, Ann Arbor, MI, USA</p>
+        <p class="text-xs text-gray-600 leading-relaxed">Email: yongqunh AT med.umich.edu</p>
+      </div>
+
+      <div class="bg-white border border-gray-200 rounded-lg p-5">
+        <h3 class="text-sm font-bold text-[#1a365d] mb-1"><a href="https://und.edu/directory/jung.hur" class="text-[#2b6cb0] hover:underline">Dr. Junguk Hur</a></h3>
+        <p class="text-xs text-gray-600 leading-relaxed mb-1">Associate Professor</p>
+        <p class="text-xs text-gray-600 leading-relaxed mb-1">Department of Biomedical Sciences, University of North Dakota, Grand Forks, ND, USA</p>
+        <p class="text-xs text-gray-600 leading-relaxed">Department of Neurology, University of Michigan, Ann Arbor, MI, USA</p>
+      </div>
+
+      <div class="bg-white border border-gray-200 rounded-lg p-5">
+        <h3 class="text-sm font-bold text-[#1a365d] mb-1"><a href="https://www.cmpe.boun.edu.tr/~ozgur/" class="text-[#2b6cb0] hover:underline">Dr. Arzucan Ozgur</a></h3>
+        <p class="text-xs text-gray-600 leading-relaxed mb-1">Associate Professor</p>
+        <p class="text-xs text-gray-600 leading-relaxed mb-1">Department of Computer Engineering</p>
+        <p class="text-xs text-gray-600 leading-relaxed">Bogazici University, Istanbul, Turkey</p>
+      </div>
+    </div>
+
+    <div class="bg-white border border-gray-200 rounded-lg p-5">
+      <p class="text-sm text-gray-700 leading-relaxed">Please feel free to contact us for any suggestions, comments, and collaborations. Thanks!</p>
+    </div>
+  <!-- InstanceEndEditable -->
+</main>
+<?php include('inc/template_footer.php'); ?>
 </body>
-<script type="text/javascript">
-var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
-document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
-</script>
-<script type="text/javascript">
-var pageTracker = _gat._getTracker("UA-4869243-4");
-pageTracker._trackPageview();
-</script>
 <!-- InstanceEnd --></html>

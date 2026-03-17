@@ -1,0 +1,113 @@
+"""
+Statistics endpoint.
+
+GET /api/v1/stats - overall database statistics with Redis cache
+"""
+
+import logging
+
+from flask import Blueprint, jsonify
+
+from db import db_connection, get_redis
+
+logger = logging.getLogger(__name__)
+
+stats_bp = Blueprint("stats", __name__)
+
+# Redis key names (must match the keys used in the PHP codebase)
+_KEY_GENES = "ignet:stats:total_genes"
+_KEY_PMIDS = "ignet:stats:total_pmids"
+_KEY_SENTENCES = "ignet:stats:total_sentences"
+_KEY_INTERACTIONS = "ignet:stats:total_interactions"
+_CACHE_TTL = 86400  # 24 hours
+
+
+def _get_from_cache(redis_client, key: str) -> int | None:
+    """Return cached integer value or None on miss / Redis unavailable."""
+    if redis_client is None:
+        return None
+    try:
+        val = redis_client.get(key)
+        return int(val) if val is not None else None
+    except Exception:
+        return None
+
+
+def _set_cache(redis_client, key: str, value: int) -> None:
+    """Store integer value in Redis; silently ignore failures."""
+    if redis_client is None:
+        return
+    try:
+        redis_client.set(key, str(value), ex=_CACHE_TTL)
+    except Exception:
+        pass
+
+
+@stats_bp.route("/stats", methods=["GET"])
+def get_stats():
+    """
+    Return aggregate statistics.
+
+    Reads from Redis cache (TTL 24 h); falls back to live DB query on miss.
+    Cache keys are shared with the PHP layer for consistency.
+    """
+    redis_client = get_redis()
+
+    # Try to serve entirely from cache
+    total_genes = _get_from_cache(redis_client, _KEY_GENES)
+    total_pmids = _get_from_cache(redis_client, _KEY_PMIDS)
+    total_sentences = _get_from_cache(redis_client, _KEY_SENTENCES)
+    total_interactions = _get_from_cache(redis_client, _KEY_INTERACTIONS)
+
+    # Determine which values need a live DB query
+    needs_db = any(v is None for v in [total_genes, total_pmids, total_sentences, total_interactions])
+
+    if needs_db:
+        try:
+            with db_connection() as conn:
+                cursor = conn.cursor(dictionary=True)
+
+                if total_interactions is None:
+                    cursor.execute("SELECT COUNT(*) AS n FROM t_sentence_hit_gene2gene")
+                    total_interactions = int((cursor.fetchone() or {}).get("n", 0))
+                    _set_cache(redis_client, _KEY_INTERACTIONS, total_interactions)
+
+                if total_sentences is None:
+                    cursor.execute(
+                        "SELECT COUNT(DISTINCT sentenceID) AS n FROM t_sentence_hit_gene2gene"
+                    )
+                    total_sentences = int((cursor.fetchone() or {}).get("n", 0))
+                    _set_cache(redis_client, _KEY_SENTENCES, total_sentences)
+
+                if total_pmids is None:
+                    cursor.execute(
+                        "SELECT COUNT(DISTINCT PMID) AS n FROM t_sentence_hit_gene2gene"
+                    )
+                    total_pmids = int((cursor.fetchone() or {}).get("n", 0))
+                    _set_cache(redis_client, _KEY_PMIDS, total_pmids)
+
+                if total_genes is None:
+                    cursor.execute(
+                        """
+                        SELECT COUNT(DISTINCT gene) AS n
+                        FROM (
+                            SELECT geneSymbol1 AS gene FROM t_sentence_hit_gene2gene
+                            UNION
+                            SELECT geneSymbol2 AS gene FROM t_sentence_hit_gene2gene
+                        ) AS g
+                        WHERE gene IS NOT NULL
+                        """
+                    )
+                    total_genes = int((cursor.fetchone() or {}).get("n", 0))
+                    _set_cache(redis_client, _KEY_GENES, total_genes)
+
+        except Exception as exc:
+            logger.exception("Error fetching stats from database: %s", exc)
+            return jsonify({"error": "DatabaseError", "message": "Failed to fetch statistics."}), 500
+
+    return jsonify({
+        "total_genes": total_genes,
+        "total_pmids": total_pmids,
+        "total_sentences": total_sentences,
+        "total_interactions": total_interactions,
+    })

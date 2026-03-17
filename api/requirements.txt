@@ -1,0 +1,24 @@
+# Ignet REST API dependencies
+# Python 3.12+ | Flask + Waitress | Port 9637
+
+# Web framework and WSGI server
+flask>=3.1
+waitress>=3.0
+flask-cors>=6.0
+
+# Database
+mysql-connector-python>=9.0
+
+# Redis client
+redis>=7.0
+
+# HTTP requests (for downstream service calls)
+requests>=2.32
+
+# Environment and config
+python-dotenv>=1.0
+
+# Authentication
+PyJWT>=2.8
+bcrypt>=4.0
+cryptography>=42.0

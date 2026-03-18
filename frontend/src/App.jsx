@@ -6,7 +6,7 @@ import NotFound from './pages/NotFound.jsx'
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 const Home = lazy(() => import('./pages/Home.jsx'))
-const NetworkSearch = lazy(() => import('./pages/NetworkSearch.jsx'))
+const Dignet = lazy(() => import('./pages/Dignet.jsx'))
 const Gene = lazy(() => import('./pages/Gene.jsx'))
 const GenePair = lazy(() => import('./pages/GenePair.jsx'))
 const BioSummarAI = lazy(() => import('./pages/BioSummarAI.jsx'))
@@ -21,7 +21,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Layout />}>
             <Route index element={<Home />} />
-            <Route path="network" element={<NetworkSearch />} />
+            <Route path="dignet" element={<Dignet />} />
             <Route path="gene" element={<Gene />} />
             <Route path="genepair" element={<GenePair />} />
             <Route path="biosummarai" element={<BioSummarAI />} />

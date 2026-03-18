@@ -18,7 +18,7 @@ function downloadCSV(pairs, query) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `ignet-network-${query.replace(/\s+/g, '_')}.csv`
+  a.download = `ignet-dignet-${query.replace(/\s+/g, '_')}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -63,7 +63,7 @@ function buildElements(result) {
   return [...nodes, ...edges]
 }
 
-export default function NetworkSearch() {
+export default function Dignet() {
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [limit, setLimit] = useState(100)
@@ -81,7 +81,8 @@ export default function NetworkSearch() {
     setResult(null)
     setSelectedNode(null)
     try {
-      const data = await api.networkSearch(q, searchLimit ?? limit)
+      const raw = await api.dignetSearch(q, searchLimit ?? limit)
+      const data = raw?.data ?? raw
       setResult(data)
     } catch (err) {
       setError(err.message)
@@ -112,7 +113,7 @@ export default function NetworkSearch() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-navy mb-1">Network Search</h1>
+        <h1 className="text-xl font-bold text-navy mb-1">Dignet</h1>
         <p className="text-gray-500 text-xs">
           Enter a PubMed query to build a gene co-occurrence network from matching abstracts.
         </p>
@@ -199,7 +200,7 @@ export default function NetworkSearch() {
           <div className="flex flex-wrap gap-2">
             {result.query_id && (
               <a
-                href={`/api/v1/network/${result.query_id}/export/graphml`}
+                href={`/api/v1/dignet/${result.query_id}/export/graphml`}
                 download
                 className="inline-flex items-center gap-1 bg-white border border-gray-300 hover:border-blue-400 text-gray-600 hover:text-blue-600 text-xs font-medium px-3 py-1.5 rounded transition-colors"
               >

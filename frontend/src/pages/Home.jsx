@@ -4,9 +4,9 @@ import { api } from '../api.js'
 
 const coreTools = [
   {
-    title: 'Network Search',
+    title: 'Dignet',
     description: 'Search PubMed abstracts for gene co-occurrence networks and visualize interactions.',
-    to: '/network',
+    to: '/dignet',
     icon: '🔬',
   },
   {
@@ -107,7 +107,7 @@ export default function Home() {
         </p>
         <div className="flex flex-wrap justify-center gap-3 pt-2">
           <Link
-            to="/network"
+            to="/dignet"
             className="bg-accent hover:bg-orange-500 text-white font-semibold px-5 py-2 rounded transition-colors text-sm"
           >
             Search PubMed Networks

@@ -20,7 +20,7 @@ DirectorySlash Off
 
   # SPA routes that conflict with PHP directory names
   # These must be caught BEFORE mod_dir adds trailing slash
-  RewriteRule ^(gene|genepair|biosummarai|network|login|analyze|explore)$ dist-react/index.html [L]
+  RewriteRule ^(gene|genepair|biosummarai|dignet|login|analyze|explore)$ dist-react/index.html [L]
 
   # Skip requests for files with extensions (PHP, static assets)
   RewriteCond %{REQUEST_URI} \.(php|html|css|js|png|jpg|jpeg|gif|ico|svg|woff2?|ttf|eot|json|xml|txt|map|pdf|csv|zip)$

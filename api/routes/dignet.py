@@ -1,9 +1,9 @@
 """
-Network query API endpoints.
+Dignet query API endpoints.
 
-POST /api/v1/network/search         - search PubMed and return gene pairs
-GET  /api/v1/network/<query_id>     - retrieve Cytoscape.js graph for a query
-GET  /api/v1/network/<query_id>/export/graphml - export graph as GraphML
+POST /api/v1/dignet/search         - search PubMed and return gene pairs
+GET  /api/v1/dignet/<query_id>     - retrieve Cytoscape.js graph for a query
+GET  /api/v1/dignet/<query_id>/export/graphml - export graph as GraphML
 """
 
 import hashlib
@@ -21,7 +21,7 @@ from utils import sanitize_gene_symbol
 
 logger = logging.getLogger(__name__)
 
-network_bp = Blueprint("network", __name__)
+dignet_bp = Blueprint("dignet", __name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -169,11 +169,11 @@ def _fetch_gene_pairs(conn, pmids: list[int]) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
-# POST /api/v1/network/search
+# POST /api/v1/dignet/search
 # ---------------------------------------------------------------------------
 
 
-@network_bp.route("/network/search", methods=["POST"])
+@dignet_bp.route("/dignet/search", methods=["POST"])
 def network_search():
     """
     Search PubMed for the given keywords and return matching gene pairs.
@@ -254,11 +254,11 @@ def network_search():
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/network/<query_id>
+# GET /api/v1/dignet/<query_id>
 # ---------------------------------------------------------------------------
 
 
-@network_bp.route("/network/<int:query_id>", methods=["GET"])
+@dignet_bp.route("/dignet/<int:query_id>", methods=["GET"])
 def network_graph(query_id: int):
     """
     Return a Cytoscape.js-compatible graph for the given query_id.
@@ -316,11 +316,11 @@ def network_graph(query_id: int):
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/network/<query_id>/export/graphml
+# GET /api/v1/dignet/<query_id>/export/graphml
 # ---------------------------------------------------------------------------
 
 
-@network_bp.route("/network/<int:query_id>/export/graphml", methods=["GET"])
+@dignet_bp.route("/dignet/<int:query_id>/export/graphml", methods=["GET"])
 def network_export_graphml(query_id: int):
     """
     Export the gene interaction network for <query_id> as a GraphML file.

@@ -3,7 +3,7 @@ import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../AuthContext.jsx'
 
 const navLinks = [
-  { label: 'Network Search', to: '/network' },
+  { label: 'Dignet', to: '/dignet' },
   { label: 'Analyze Text', to: '/analyze', badge: 'NEW' },
   { label: 'Gene', to: '/gene' },
   { label: 'GenePair', to: '/genepair' },
@@ -26,7 +26,7 @@ export default function Header() {
   function handlePubmed(e) {
     e.preventDefault()
     if (pubmedQuery.trim()) {
-      navigate(`/network?q=${encodeURIComponent(pubmedQuery.trim())}`)
+      navigate(`/dignet?q=${encodeURIComponent(pubmedQuery.trim())}`)
       setPubmedQuery('')
     }
   }

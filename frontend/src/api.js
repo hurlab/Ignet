@@ -58,7 +58,7 @@ export const api = {
   geneNeighbors: (sym) => request(`/genes/${encodeURIComponent(sym)}/neighbors`),
   genePair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}`),
 
-  networkSearch: (keywords, limit) => request('/network/search', {
+  dignetSearch: (keywords, limit) => request('/dignet/search', {
     method: 'POST',
     body: JSON.stringify({ keywords }),
   }),

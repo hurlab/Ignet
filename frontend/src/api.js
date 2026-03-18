@@ -49,14 +49,14 @@ export const api = {
     body: JSON.stringify({ keywords }),
   }),
 
-  summarize: (gene_symbols, sentences) => request('/summarize', {
+  summarize: (genes) => request('/summarize', {
     method: 'POST',
-    body: JSON.stringify({ gene_symbols, sentences }),
+    body: JSON.stringify({ genes }),
   }),
 
-  predict: (gene1, gene2) => request('/predict', {
+  chat: (conversation_history, prompt) => request('/chat', {
     method: 'POST',
-    body: JSON.stringify({ gene1, gene2 }),
+    body: JSON.stringify({ conversation_history, prompt }),
   }),
 
   login: (email, password) => request('/auth/login', {

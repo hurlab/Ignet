@@ -54,7 +54,7 @@ export default function BioSummarAI() {
   }
 
   function addGene(sym) {
-    const s = (typeof sym === 'string' ? sym : sym?.symbol ?? sym?.gene ?? String(sym)).toUpperCase()
+    const s = (typeof sym === 'string' ? sym : sym?.Symbol ?? sym?.symbol ?? sym?.gene ?? String(sym)).toUpperCase()
     if (s && !selectedGenes.includes(s)) {
       setSelectedGenes((prev) => [...prev, s])
     }
@@ -80,8 +80,8 @@ export default function BioSummarAI() {
     setSummary(null)
     setChatMessages([])
     try {
-      const data = await api.summarize(selectedGenes, [])
-      setSummary(data?.summary ?? data?.text ?? JSON.stringify(data))
+      const data = await api.summarize(selectedGenes)
+      setSummary(data?.Summary?.reply ?? data?.summary ?? data?.text ?? JSON.stringify(data))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -97,10 +97,14 @@ export default function BioSummarAI() {
     setChatMessages((prev) => [...prev, { role: 'user', content: msg }])
     setChatLoading(true)
     try {
-      const res = await api.post('/chat', { message: msg, genes: selectedGenes, context: summary })
+      const history = [
+        { role: 'system', content: `Context about genes ${selectedGenes.join(', ')}: ${summary}` },
+        ...chatMessages.map((m) => ({ role: m.role, content: m.content })),
+      ]
+      const res = await api.chat(history, msg)
       setChatMessages((prev) => [
         ...prev,
-        { role: 'assistant', content: res?.reply ?? res?.message ?? JSON.stringify(res) },
+        { role: 'assistant', content: res?.Summary?.reply ?? res?.reply ?? res?.response ?? res?.message ?? JSON.stringify(res) },
       ])
     } catch (err) {
       setChatMessages((prev) => [
@@ -137,14 +141,16 @@ export default function BioSummarAI() {
           {suggestions.length > 0 && (
             <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg mt-0.5 max-h-48 overflow-y-auto">
               {suggestions.map((s, i) => {
-                const sym = typeof s === 'string' ? s : s?.symbol ?? s?.gene ?? String(s)
+                const sym = typeof s === 'string' ? s : s?.Symbol ?? s?.symbol ?? s?.gene ?? String(s)
                 return (
                   <button
                     key={i}
-                    onClick={() => addGene(sym)}
+                    onClick={() => addGene(s)}
                     className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 transition-colors"
                   >
-                    {sym}
+                    {typeof s === 'object' && s !== null
+                      ? <><span className="font-medium">{s.Symbol}</span>{s.description ? <span className="text-gray-500 ml-1">— {s.description}</span> : null}</>
+                      : sym}
                   </button>
                 )
               })}

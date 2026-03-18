@@ -3,31 +3,11 @@ import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 
-function ConfidenceBar({ score }) {
-  const pct = Math.round((score ?? 0) * 100)
-  const color = pct >= 70 ? 'bg-success' : pct >= 40 ? 'bg-yellow-400' : 'bg-red-400'
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-xs">
-        <span className="text-gray-500">Confidence</span>
-        <span className="font-semibold text-gray-700">{pct}%</span>
-      </div>
-      <div className="w-full bg-gray-200 rounded-full h-2">
-        <div
-          className={`${color} h-2 rounded-full transition-all`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  )
-}
-
 export default function GenePair() {
   const [gene1, setGene1] = useState('')
   const [gene2, setGene2] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [prediction, setPrediction] = useState(null)
   const [pairData, setPairData] = useState(null)
 
   async function handleSubmit(e) {
@@ -37,26 +17,17 @@ export default function GenePair() {
     if (!g1 || !g2) return
     setLoading(true)
     setError(null)
-    setPrediction(null)
     setPairData(null)
 
     try {
-      const [pred, pair] = await Promise.allSettled([
-        api.predict(g1, g2),
-        api.genePair(g1, g2),
-      ])
-      if (pred.status === 'fulfilled') setPrediction(pred.value)
-      else if (!prediction) setError(pred.reason?.message)
-      if (pair.status === 'fulfilled') setPairData(pair.value)
+      const data = await api.genePair(g1, g2)
+      setPairData(data)
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
     }
   }
-
-  const interacts = prediction?.label === 'interacts' || prediction?.interacts === true || prediction?.prediction === 1
-  const confidence = prediction?.score ?? prediction?.confidence ?? prediction?.probability ?? null
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
@@ -101,68 +72,92 @@ export default function GenePair() {
 
       {loading && <LoadingSpinner message="Running interaction prediction..." />}
 
-      {(prediction || pairData) && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Prediction result */}
-          {prediction && (
-            <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
-              <h2 className="font-semibold text-gray-700 text-sm">Interaction Prediction</h2>
-              <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-sm font-semibold ${
-                interacts ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-              }`}>
-                <span>{interacts ? '✓' : '✗'}</span>
-                <span>{interacts ? 'Interacts' : 'No Interaction'}</span>
+      {pairData && (() => {
+        const pmids = [...new Set((pairData.interactions ?? []).map((r) => r.PMID).filter(Boolean))]
+        return (
+          <div className="space-y-4">
+            {/* Summary stats */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-navy">{pairData.total ?? 0}</div>
+                <div className="text-xs text-gray-500">Evidence Sentences</div>
               </div>
-              {confidence !== null && <ConfidenceBar score={confidence} />}
-              <div className="text-xs text-gray-400">
-                Pair: <strong>{gene1.trim().toUpperCase()} &mdash; {gene2.trim().toUpperCase()}</strong>
+              <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-navy">{pmids.length}</div>
+                <div className="text-xs text-gray-500">Unique PMIDs</div>
+              </div>
+              <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
+                <div className="text-2xl font-bold text-navy">
+                  {pairData.gene1} &mdash; {pairData.gene2}
+                </div>
+                <div className="text-xs text-gray-500">Gene Pair</div>
               </div>
             </div>
-          )}
 
-          {/* Co-occurrence data */}
-          {pairData && (
-            <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">
-              <h2 className="font-semibold text-gray-700 text-sm">Co-occurrence Evidence</h2>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-gray-50 rounded p-3 text-center">
-                  <div className="text-xl font-bold text-navy">
-                    {pairData.count ?? pairData.cooccurrence ?? '—'}
-                  </div>
-                  <div className="text-xs text-gray-500">Co-occurrences</div>
-                </div>
-                <div className="bg-gray-50 rounded p-3 text-center">
-                  <div className="text-xl font-bold text-navy">
-                    {pairData.pmids?.length ?? pairData.pmid_count ?? '—'}
-                  </div>
-                  <div className="text-xs text-gray-500">PMIDs</div>
+            {/* PMID links */}
+            {pmids.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <div className="text-xs font-medium text-gray-600 mb-2">PubMed References</div>
+                <div className="flex flex-wrap gap-1">
+                  {pmids.slice(0, 20).map((pmid) => (
+                    <a
+                      key={pmid}
+                      href={`https://pubmed.ncbi.nlm.nih.gov/${pmid}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] bg-blue-50 text-blue-700 hover:bg-blue-100 px-1.5 py-0.5 rounded transition-colors"
+                    >
+                      {pmid}
+                    </a>
+                  ))}
+                  {pmids.length > 20 && (
+                    <span className="text-[11px] text-gray-400">+{pmids.length - 20} more</span>
+                  )}
                 </div>
               </div>
-              {pairData.pmids?.length > 0 && (
-                <div>
-                  <div className="text-xs font-medium text-gray-600 mb-1">PMIDs</div>
-                  <div className="flex flex-wrap gap-1">
-                    {pairData.pmids.slice(0, 10).map((pmid) => (
-                      <a
-                        key={pmid}
-                        href={`https://pubmed.ncbi.nlm.nih.gov/${pmid}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[11px] bg-blue-50 text-blue-700 hover:bg-blue-100 px-1.5 py-0.5 rounded transition-colors"
-                      >
-                        {pmid}
-                      </a>
+            )}
+
+            {/* Evidence table */}
+            {pairData.interactions?.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
+                <div className="text-xs font-medium text-gray-600 mb-2">Evidence Sentences</div>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b">
+                      <th className="py-1 pr-2">Score</th>
+                      <th className="py-1 pr-2">PMID</th>
+                      <th className="py-1 pr-2">Sentence</th>
+                      <th className="py-1">INO Term</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pairData.interactions.slice(0, 20).map((row, i) => (
+                      <tr key={i} className="border-b border-gray-50">
+                        <td className="py-1 pr-2 font-mono">{row.score?.toFixed(3) ?? '—'}</td>
+                        <td className="py-1 pr-2">
+                          <a
+                            href={`https://pubmed.ncbi.nlm.nih.gov/${row.PMID}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:underline"
+                          >
+                            {row.PMID}
+                          </a>
+                        </td>
+                        <td className="py-1 pr-2 max-w-md truncate">{row.sentence_text ?? '—'}</td>
+                        <td className="py-1">{row.ino_term ?? '—'}</td>
+                      </tr>
                     ))}
-                    {pairData.pmids.length > 10 && (
-                      <span className="text-[11px] text-gray-400">+{pairData.pmids.length - 10} more</span>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+                  </tbody>
+                </table>
+                {pairData.total > 20 && (
+                  <div className="text-xs text-gray-400 mt-2">Showing 20 of {pairData.total} results</div>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })()}
     </div>
   )
 }

@@ -10,7 +10,7 @@ import logging
 
 from flask import Blueprint, jsonify, request
 
-from db import db_connection
+from db import db_connection, get_redis
 
 logger = logging.getLogger(__name__)
 
@@ -114,6 +114,74 @@ def search_genes():
         "page": page,
         "per_page": per_page,
     })
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/genes/top
+# ---------------------------------------------------------------------------
+
+
+@genes_bp.route("/genes/top", methods=["GET"])
+def top_genes():
+    """
+    Return the most connected genes (by co-occurrence count).
+    Cached in Redis for 24 hours.
+
+    Query params:
+      limit - max genes to return (default 50, max 200)
+    """
+    try:
+        limit = min(200, max(1, int(request.args.get("limit", 50))))
+    except (ValueError, TypeError):
+        limit = 50
+
+    redis_client = get_redis()
+    cache_key = f"ignet:top_genes:{limit}"
+
+    # Try cache first
+    if redis_client:
+        try:
+            cached = redis_client.get(cache_key)
+            if cached:
+                import json
+                return jsonify(json.loads(cached))
+        except Exception:
+            pass
+
+    try:
+        with db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                """
+                SELECT gene, COUNT(*) AS pair_count FROM (
+                    SELECT geneSymbol1 AS gene FROM t_sentence_hit_gene2gene_Host
+                    UNION ALL
+                    SELECT geneSymbol2 AS gene FROM t_sentence_hit_gene2gene_Host
+                ) AS g
+                WHERE gene IS NOT NULL
+                GROUP BY gene
+                ORDER BY pair_count DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            genes = cursor.fetchall()
+
+    except Exception as exc:
+        logger.exception("Error in top_genes: %s", exc)
+        return jsonify({"error": "DatabaseError", "message": "Failed to query top genes."}), 500
+
+    result = {"genes": genes, "total": len(genes)}
+
+    # Cache for 24 hours
+    if redis_client:
+        try:
+            import json
+            redis_client.set(cache_key, json.dumps(result), ex=86400)
+        except Exception:
+            pass
+
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------

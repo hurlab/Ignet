@@ -46,6 +46,7 @@ def register():
     if not body:
         return jsonify({"error": "InvalidJSON", "message": "Request body must be valid JSON."}), 400
 
+    username: str = (body.get("username") or "").strip()
     email: str = (body.get("email") or "").strip().lower()
     password: str = body.get("password") or ""
 
@@ -53,6 +54,8 @@ def register():
         return jsonify({"error": "ValidationError", "message": "Invalid email format."}), 400
     if len(password) < 8:
         return jsonify({"error": "ValidationError", "message": "Password must be at least 8 characters."}), 400
+    if username and len(username) > 100:
+        return jsonify({"error": "ValidationError", "message": "Username must be 100 characters or less."}), 400
 
     pw_hash = hash_password(password)
 
@@ -60,8 +63,8 @@ def register():
         with db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
             cursor.execute(
-                "INSERT INTO users (email, password_hash) VALUES (%s, %s)",
-                (email, pw_hash),
+                "INSERT INTO users (username, email, password_hash) VALUES (%s, %s, %s)",
+                (username or None, email, pw_hash),
             )
             conn.commit()
             user_id: int = cursor.lastrowid
@@ -78,7 +81,7 @@ def register():
 
     return jsonify({
         "token": token,
-        "user": {"id": user_id, "email": email, "role": "user"},
+        "user": {"id": user_id, "email": email, "username": username or None, "role": "user"},
     }), 201
 
 
@@ -150,7 +153,7 @@ def get_profile():
         with db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
             cursor.execute(
-                "SELECT id, email, role, created_at FROM users WHERE id = %s",
+                "SELECT id, username, email, role, created_at FROM users WHERE id = %s",
                 (user["id"],),
             )
             row = cursor.fetchone()
@@ -166,6 +169,7 @@ def get_profile():
 
     return jsonify({
         "id": row["id"],
+        "username": row.get("username"),
         "email": row["email"],
         "role": row["role"],
         "created_at": row["created_at"].isoformat() if row["created_at"] else None,

@@ -9,13 +9,22 @@ export default function Footer() {
               Resources
             </h4>
             <ul className="space-y-1">
-              {['About', 'Documents', 'Help', 'FAQs', 'Links', 'Contact Us'].map((item) => (
-                <li key={item}>
+              {[
+                { label: 'About', href: '/ignet_legacy/about.php' },
+                { label: 'Documents', href: '/ignet_legacy/document.php' },
+                { label: 'Help', href: '/ignet_legacy/help.php' },
+                { label: 'FAQs', href: '/ignet_legacy/faq.php' },
+                { label: 'Links', href: '/ignet_legacy/links.php' },
+                { label: 'Contact Us', href: '/ignet_legacy/contact.php' },
+              ].map((item) => (
+                <li key={item.label}>
                   <a
-                    href="#"
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-gray-500 hover:text-navy text-xs transition-colors"
                   >
-                    {item}
+                    {item.label}
                   </a>
                 </li>
               ))}
@@ -28,13 +37,18 @@ export default function Footer() {
               Legal
             </h4>
             <ul className="space-y-1">
-              {['Disclaimer', 'Acknowledgements'].map((item) => (
-                <li key={item}>
+              {[
+                { label: 'Disclaimer', href: '/ignet_legacy/disclaimer.php' },
+                { label: 'Acknowledgements', href: '/ignet_legacy/acknowledgement.php' },
+              ].map((item) => (
+                <li key={item.label}>
                   <a
-                    href="#"
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-gray-500 hover:text-navy text-xs transition-colors"
                   >
-                    {item}
+                    {item.label}
                   </a>
                 </li>
               ))}

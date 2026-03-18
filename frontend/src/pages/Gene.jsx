@@ -1,16 +1,35 @@
-import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 
 export default function Gene() {
-  const [query, setQuery] = useState('')
+  const [searchParams] = useSearchParams()
+  const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [gene, setGene] = useState(null)
   const [neighbors, setNeighbors] = useState([])
   const navigate = useNavigate()
+
+  // Auto-search if query param provided
+  useEffect(() => {
+    if (searchParams.get('q')) {
+      const sym = searchParams.get('q').trim().toUpperCase()
+      if (sym) {
+        setQuery(sym)
+        setLoading(true)
+        api.geneNeighbors(sym)
+          .then((data) => {
+            setGene(sym)
+            setNeighbors(Array.isArray(data) ? data : (data?.neighbors ?? []))
+          })
+          .catch((err) => setError(err.message))
+          .finally(() => setLoading(false))
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleSearch(e) {
     e?.preventDefault()
@@ -102,7 +121,7 @@ export default function Gene() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {neighbors.map((n, i) => {
-                  const sym = n.symbol ?? n.gene ?? n
+                  const sym = n.neighbor ?? n.symbol ?? n.gene ?? n
                   const count = n.count ?? n.cooccurrence ?? '—'
                   const score = typeof n.score === 'number' ? n.score.toFixed(4) : (n.score ?? '—')
                   return (

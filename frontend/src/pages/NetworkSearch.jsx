@@ -7,28 +7,41 @@ import NetworkGraph from '../components/NetworkGraph.jsx'
 
 const LIMIT_OPTIONS = [50, 100, 200, 500]
 
-function buildElements(networkData) {
-  if (!networkData?.nodes || !networkData?.edges) return []
+const MAX_GRAPH_EDGES = 500
+
+function buildElements(result) {
+  const pairs = result?.gene_pairs
+  if (!pairs || pairs.length === 0) return []
+  const limitedPairs = pairs.slice(0, MAX_GRAPH_EDGES)
+  const genes = new Set()
+  const edges = []
+  limitedPairs.forEach((p, i) => {
+    const g1 = p.gene1
+    const g2 = p.gene2
+    if (!g1 || !g2) return
+    genes.add(g1)
+    genes.add(g2)
+    edges.push({
+      data: {
+        id: `e${i}`,
+        source: g1,
+        target: g2,
+        weight: p.score ?? 1,
+      },
+    })
+  })
   const degrees = {}
-  networkData.edges.forEach(({ source, target }) => {
+  edges.forEach(({ data: { source, target } }) => {
     degrees[source] = (degrees[source] ?? 0) + 1
     degrees[target] = (degrees[target] ?? 0) + 1
   })
   const maxDeg = Math.max(1, ...Object.values(degrees))
-  const nodes = networkData.nodes.map((n) => ({
+  const nodes = [...genes].map((g) => ({
     data: {
-      id: n.id ?? n.symbol,
-      label: n.symbol ?? n.id,
-      degree: degrees[n.id ?? n.symbol] ?? 1,
-      highDegree: (degrees[n.id ?? n.symbol] ?? 1) > maxDeg * 0.6,
-    },
-  }))
-  const edges = networkData.edges.map((e, i) => ({
-    data: {
-      id: `e${i}`,
-      source: e.source,
-      target: e.target,
-      weight: e.weight ?? e.count ?? 1,
+      id: g,
+      label: g,
+      degree: degrees[g] ?? 1,
+      highDegree: (degrees[g] ?? 1) > maxDeg * 0.6,
     },
   }))
   return [...nodes, ...edges]
@@ -122,9 +135,10 @@ export default function NetworkSearch() {
           {/* Stats */}
           <div className="flex gap-4 flex-wrap">
             {[
+              { label: 'PMIDs', value: result.pmid_count?.toLocaleString() },
               { label: 'Nodes', value: nodeCount },
               { label: 'Edges', value: edgeCount },
-              { label: 'Query', value: query },
+              { label: 'Cached', value: result.cached ? 'Yes' : 'No' },
             ].map(({ label, value }) => (
               <div key={label} className="bg-white border border-gray-200 rounded px-3 py-1.5">
                 <span className="text-xs text-gray-500 mr-1">{label}:</span>
@@ -132,6 +146,25 @@ export default function NetworkSearch() {
               </div>
             ))}
           </div>
+
+          {result.total_pairs > MAX_GRAPH_EDGES && (
+            <div className="bg-yellow-50 border border-yellow-200 rounded px-3 py-1.5 text-xs text-yellow-700">
+              Showing {MAX_GRAPH_EDGES} of {result.total_pairs.toLocaleString()} gene pairs in the graph. Export GraphML for the full dataset.
+            </div>
+          )}
+
+          {/* Export button */}
+          {result.query_id && (
+            <div>
+              <a
+                href={`/api/v1/network/${result.query_id}/export/graphml`}
+                download
+                className="inline-flex items-center gap-1 bg-white border border-gray-300 hover:border-blue-400 text-gray-600 hover:text-blue-600 text-xs font-medium px-3 py-1.5 rounded transition-colors"
+              >
+                Export GraphML
+              </a>
+            </div>
+          )}
 
           <div className="flex gap-4 flex-wrap lg:flex-nowrap">
             {/* Graph */}

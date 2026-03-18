@@ -39,6 +39,24 @@ include('inc/template_top.php');
 <main class="max-w-7xl mx-auto px-4 py-6">
   <!-- InstanceBeginEditable name="Main" -->
 
+    <!-- Under Construction Banner -->
+    <div class="bg-amber-50 border-2 border-dashed border-amber-400 rounded-xl p-6 text-center mb-8 mt-4">
+      <div class="text-6xl mb-3">🚧</div>
+      <h2 class="text-lg font-bold text-amber-800 mb-2">Ignet 2.0 is Under Active Development</h2>
+      <p class="text-amber-700 text-sm max-w-xl mx-auto mb-4">
+        We are rebuilding Ignet with a modern interface, new AI-powered tools, and a REST API.
+        Some features may be incomplete or behave unexpectedly during this transition.
+      </p>
+      <a href="/ignet_legacy/"
+         class="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-6 py-2.5 rounded-lg transition text-sm shadow-sm">
+        <span class="text-lg">📦</span>
+        Go to Previous Version (Ignet 1.0)
+      </a>
+      <p class="text-amber-600 text-xs mt-3">
+        The previous version remains fully functional at <code class="bg-amber-100 px-1 rounded">/ignet_legacy/</code>
+      </p>
+    </div>
+
     <!-- Hero Section -->
     <div class="text-center py-10">
       <h1 class="text-3xl font-bold text-[#1a365d] mb-3">Integrative Gene Interaction Network</h1>

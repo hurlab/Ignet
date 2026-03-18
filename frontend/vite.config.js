@@ -8,7 +8,7 @@ export default defineConfig({
       '/api': 'http://localhost:9637',
     },
   },
-  base: '/ignet/',
+  base: '/ignet/dist-react/',
   build: {
     outDir: '../dist-react',
   },

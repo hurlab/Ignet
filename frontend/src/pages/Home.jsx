@@ -27,25 +27,27 @@ const coreTools = [
     to: '/biosummarai',
     icon: '🤖',
   },
+  {
+    title: 'Analyze Text',
+    description: 'Paste biomedical text to detect genes and predict interactions with BioBERT.',
+    to: '/analyze',
+    icon: '📝',
+    badge: 'NEW',
+  },
+  {
+    title: 'Explore',
+    description: 'Browse the most connected genes and explore interaction networks.',
+    to: '/explore',
+    icon: '🌐',
+    badge: 'NEW',
+  },
 ]
 
-const newTools = [
-  {
-    title: 'Analyze Your Text',
-    description: 'Upload or paste your own biomedical text to extract gene interactions and build custom networks.',
-    to: '/analyze',
-  },
-  {
-    title: 'Explore Networks',
-    description: 'Interactive exploration tools for navigating large gene interaction networks by domain and pathway.',
-    to: '/explore',
-  },
-  {
-    title: 'REST API',
-    description: 'Programmatic access to all Ignet data and analyses via a JSON REST API.',
-    href: '/api/v1',
-  },
-]
+const apiInfo = {
+  title: 'REST API',
+  description: 'Programmatic access to all Ignet data and analyses via a JSON REST API with 19 endpoints.',
+  href: '/api/v1/health',
+}
 
 function StatCard({ label, value, loading }) {
   return (
@@ -75,6 +77,25 @@ export default function Home() {
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8 space-y-10">
+      {/* Under Construction Banner */}
+      <section className="bg-amber-50 border-2 border-dashed border-amber-400 rounded-xl p-6 text-center space-y-3">
+        <div className="text-6xl">🚧</div>
+        <h2 className="text-lg font-bold text-amber-800">
+          Ignet 2.0 is Under Active Development
+        </h2>
+        <p className="text-amber-700 text-sm max-w-xl mx-auto">
+          We are rebuilding Ignet with a modern interface, new AI-powered tools, and a REST API.
+          Some features may be incomplete or behave unexpectedly during this transition.
+        </p>
+        <a
+          href="/ignet_legacy/"
+          className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm shadow-sm"
+        >
+          <span className="text-lg">📦</span>
+          Go to Previous Version (Ignet 1.0)
+        </a>
+      </section>
+
       {/* Hero */}
       <section className="text-center py-10 space-y-4">
         <h1 className="text-3xl md:text-4xl font-bold text-navy leading-tight">
@@ -104,23 +125,28 @@ export default function Home() {
       <section>
         <h2 className="text-base font-semibold text-gray-700 mb-3">Database Statistics</h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <StatCard label="Genes" value={stats?.gene_count} loading={statsLoading} />
-          <StatCard label="Gene Pairs" value={stats?.pair_count} loading={statsLoading} />
-          <StatCard label="PMIDs" value={stats?.pmid_count} loading={statsLoading} />
-          <StatCard label="Abstracts" value={stats?.abstract_count ?? stats?.pmid_count} loading={statsLoading} />
+          <StatCard label="Genes" value={stats?.total_genes} loading={statsLoading} />
+          <StatCard label="Gene Pairs" value={stats?.total_interactions} loading={statsLoading} />
+          <StatCard label="PMIDs" value={stats?.total_pmids} loading={statsLoading} />
+          <StatCard label="Sentences" value={stats?.total_sentences} loading={statsLoading} />
         </div>
       </section>
 
       {/* Core tools */}
       <section>
-        <h2 className="text-base font-semibold text-gray-700 mb-3">Core Tools</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {coreTools.map(({ title, description, to, icon }) => (
+        <h2 className="text-base font-semibold text-gray-700 mb-3">Tools</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {coreTools.map(({ title, description, to, icon, badge }) => (
             <Link
               key={to}
               to={to}
-              className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-md transition-all group"
+              className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-md transition-all group relative"
             >
+              {badge && (
+                <span className="absolute top-3 right-3 bg-accent text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                  {badge}
+                </span>
+              )}
               <div className="text-2xl mb-2">{icon}</div>
               <h3 className="font-semibold text-navy group-hover:text-blue-700 text-sm mb-1">{title}</h3>
               <p className="text-gray-500 text-xs leading-relaxed">{description}</p>
@@ -129,31 +155,19 @@ export default function Home() {
         </div>
       </section>
 
-      {/* New in Ignet 2.0 */}
+      {/* REST API */}
       <section>
-        <h2 className="text-base font-semibold text-gray-700 mb-1">New in Ignet 2.0</h2>
-        <p className="text-gray-400 text-xs mb-3">Upcoming features currently in development</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {newTools.map(({ title, description, to, href }) => {
-            const inner = (
-              <div className="bg-white border border-dashed border-gray-300 rounded-lg p-4 relative opacity-80">
-                <span className="absolute top-3 right-3 bg-accent text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
-                  COMING SOON
-                </span>
-                <h3 className="font-semibold text-gray-700 text-sm mb-1 pr-16">{title}</h3>
-                <p className="text-gray-400 text-xs leading-relaxed">{description}</p>
-              </div>
-            )
-            if (to) {
-              return <Link key={title} to={to}>{inner}</Link>
-            }
-            return (
-              <a key={title} href={href} target="_blank" rel="noopener noreferrer">
-                {inner}
-              </a>
-            )
-          })}
-        </div>
+        <h2 className="text-base font-semibold text-gray-700 mb-3">Developer Access</h2>
+        <a
+          href={apiInfo.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-md transition-all group"
+        >
+          <h3 className="font-semibold text-navy group-hover:text-blue-700 text-sm mb-1">{apiInfo.title}</h3>
+          <p className="text-gray-500 text-xs leading-relaxed">{apiInfo.description}</p>
+          <code className="text-[11px] text-blue-600 mt-2 block">/api/v1/genes/search?q=BRCA1</code>
+        </a>
       </section>
 
       {/* About */}

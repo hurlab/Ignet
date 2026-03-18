@@ -10,7 +10,7 @@ export default {
         success: '#38a169',
       },
       fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
-      fontSize: { base: ['13px', '1.6'] },
+      fontSize: { base: ['14px', '1.6'] },
     },
   },
   plugins: [],

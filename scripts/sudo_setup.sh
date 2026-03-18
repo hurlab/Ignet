@@ -15,15 +15,37 @@ else
   echo "[DONE] ProxyPass added to ignet.conf"
 fi
 
-# 2. Reload Apache
+# 2. Add missing database index for ino_host25.sentence_id (speeds up /pairs JOIN)
+echo ""
+echo "=== Database index ==="
+MYSQL_CMD="mysql -u root ignet"
+if $MYSQL_CMD -e "SHOW INDEX FROM ino_host25 WHERE Column_name = 'sentence_id'" 2>/dev/null | grep -q sentence_id; then
+  echo "[SKIP] idx_ino_sentence_id already exists"
+else
+  echo "Creating index idx_ino_sentence_id on ino_host25(sentence_id) — this may take a few minutes on 7.3M rows..."
+  $MYSQL_CMD -e "CREATE INDEX idx_ino_sentence_id ON ino_host25(sentence_id)" 2>&1
+  echo "[DONE] idx_ino_sentence_id created"
+fi
+
+# 3. Add username column to users table (if not exists)
+echo ""
+echo "=== Users table username column ==="
+if $MYSQL_CMD -e "SHOW COLUMNS FROM users LIKE 'username'" 2>/dev/null | grep -q username; then
+  echo "[SKIP] username column already exists"
+else
+  $MYSQL_CMD -e "ALTER TABLE users ADD COLUMN username VARCHAR(100) DEFAULT NULL AFTER id" 2>&1
+  echo "[DONE] username column added to users table"
+fi
+
+# 4. Reload Apache
 systemctl reload httpd
 echo "[DONE] Apache reloaded"
 
-# 3. Register ignet-api as a systemd service (in case it was killed and not restarted)
+# 5. Restart ignet-api systemd service
 systemctl restart ignet-api
 echo "[DONE] ignet-api restarted"
 
-# 4. Verify all services are running
+# 6. Verify all services are running
 echo ""
 echo "=== Service status ==="
 systemctl is-active ignet-biobert ignet-biosummarai ignet-api redis mariadb httpd | \

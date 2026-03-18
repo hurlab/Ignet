@@ -1,14 +1,45 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api, setToken } from '../api.js'
+import { api } from '../api.js'
+import { useAuth } from '../AuthContext.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 
 export default function Login() {
+  const auth = useAuth()
+  const navigate = useNavigate()
   const [tab, setTab] = useState('signin')
   const [form, setForm] = useState({ email: '', password: '', username: '', confirm: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const navigate = useNavigate()
+
+  // If already logged in, show profile info + logout button
+  if (auth?.user) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-12">
+        <div className="bg-white border border-gray-200 rounded-lg shadow-sm p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-navy">Your Profile</h2>
+          {auth.user.username && (
+            <div>
+              <span className="text-xs font-medium text-gray-500">Username</span>
+              <p className="text-sm text-gray-800">{auth.user.username}</p>
+            </div>
+          )}
+          {auth.user.email && (
+            <div>
+              <span className="text-xs font-medium text-gray-500">Email</span>
+              <p className="text-sm text-gray-800">{auth.user.email}</p>
+            </div>
+          )}
+          <button
+            onClick={() => { auth.logout(); navigate('/') }}
+            className="w-full bg-navy hover:bg-navy-dark text-white font-semibold py-2 rounded text-sm transition-colors"
+          >
+            Sign Out
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   function updateField(field) {
     return (e) => setForm((prev) => ({ ...prev, [field]: e.target.value }))
@@ -19,13 +50,8 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
-      const data = await api.login(form.email, form.password)
-      if (data?.token) {
-        setToken(data.token)
-        navigate('/')
-      } else {
-        setError('Login failed: no token received')
-      }
+      await auth.login(form.email, form.password)
+      navigate('/')
     } catch (err) {
       setError(err.message)
     } finally {

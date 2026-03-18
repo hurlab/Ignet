@@ -16,8 +16,9 @@ export default function Explore() {
       api.stats(),
     ])
       .then(([genesData, statsData]) => {
-        setTopGenes(genesData?.genes ?? [])
-        setStats(statsData)
+        setTopGenes(genesData?.data ?? genesData?.genes ?? [])
+        const stats = statsData?.data ?? statsData
+        setStats(stats)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))

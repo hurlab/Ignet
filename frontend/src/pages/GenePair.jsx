@@ -3,6 +3,21 @@ import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 
+function downloadCSV(interactions, gene1, gene2) {
+  if (!interactions?.length) return
+  const header = 'Gene1,Gene2,PMID,Sentence,Score\n'
+  const rows = interactions.map(row =>
+    [gene1, gene2, row.PMID || '', `"${(row.sentence_text || '').replace(/"/g, '""')}"`, row.score ?? ''].join(',')
+  ).join('\n')
+  const blob = new Blob([header + rows], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `ignet-pair-${gene1}-${gene2}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function GenePair() {
   const [gene1, setGene1] = useState('')
   const [gene2, setGene2] = useState('')
@@ -72,6 +87,13 @@ export default function GenePair() {
 
       {loading && <LoadingSpinner message="Running interaction prediction..." />}
 
+      {!pairData && !loading && !error && (
+        <div className="text-center py-12 space-y-4">
+          <p className="text-gray-400 text-sm">Enter two gene symbols to explore their interaction evidence.</p>
+          <p className="text-gray-300 text-xs">Examples: BRCA1 + TP53, IFNG + TNF, IL6 + STAT3</p>
+        </div>
+      )}
+
       {pairData && (() => {
         const pmids = [...new Set((pairData.interactions ?? []).map((r) => r.PMID).filter(Boolean))]
         return (
@@ -120,7 +142,15 @@ export default function GenePair() {
             {/* Evidence table */}
             {pairData.interactions?.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
-                <div className="text-xs font-medium text-gray-600 mb-2">Evidence Sentences</div>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="text-xs font-medium text-gray-600">Evidence Sentences</div>
+                  <button
+                    onClick={() => downloadCSV(pairData.interactions, pairData.gene1, pairData.gene2)}
+                    className="bg-navy hover:bg-navy-dark text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
+                  >
+                    Download CSV
+                  </button>
+                </div>
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-gray-500 border-b">

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
@@ -6,6 +6,22 @@ import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
 
 const LIMIT_OPTIONS = [50, 100, 200, 500]
+
+function downloadCSV(pairs, query) {
+  if (!pairs?.length) return
+  const header = 'Gene1,Gene2,Score,PMID,Sentence\n'
+  const rows = pairs.map(p =>
+    [p.geneSymbol1 || p.gene1, p.geneSymbol2 || p.gene2, p.score || '', p.PMID || p.pmid || '',
+     `"${(p.sentence || '').replace(/"/g, '""')}"`].join(',')
+  ).join('\n')
+  const blob = new Blob([header + rows], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `ignet-network-${query.replace(/\s+/g, '_')}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
 
 const MAX_GRAPH_EDGES = 500
 
@@ -55,16 +71,17 @@ export default function NetworkSearch() {
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [selectedNode, setSelectedNode] = useState(null)
+  const didAutoSearch = useRef(false)
 
-  async function handleSearch(e) {
-    e?.preventDefault()
-    if (!query.trim()) return
+  async function runSearch(searchQuery, searchLimit) {
+    const q = (searchQuery ?? query).trim()
+    if (!q) return
     setLoading(true)
     setError(null)
     setResult(null)
     setSelectedNode(null)
     try {
-      const data = await api.networkSearch(query.trim(), limit)
+      const data = await api.networkSearch(q, searchLimit ?? limit)
       setResult(data)
     } catch (err) {
       setError(err.message)
@@ -73,10 +90,18 @@ export default function NetworkSearch() {
     }
   }
 
-  // Auto-search if query param provided
+  async function handleSearch(e) {
+    e?.preventDefault()
+    await runSearch()
+  }
+
+  // Auto-search on mount if URL contains ?q=
   useEffect(() => {
-    if (searchParams.get('q')) {
-      handleSearch()
+    const q = searchParams.get('q')
+    if (q && !didAutoSearch.current) {
+      didAutoSearch.current = true
+      setQuery(q)
+      runSearch(q, limit)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -130,6 +155,23 @@ export default function NetworkSearch() {
 
       {loading && <LoadingSpinner message="Building network from PubMed data..." />}
 
+      {!result && !loading && !error && (
+        <div className="text-center py-8 space-y-4">
+          <p className="text-gray-400 text-sm">Enter PubMed keywords to build a gene interaction network.</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {['vaccine immunity', 'BRCA1 breast cancer', 'IFNG tuberculosis', 'COVID-19 cytokine'].map((q) => (
+              <button
+                key={q}
+                onClick={() => { setQuery(q); runSearch(q, limit) }}
+                className="bg-blue-50 text-navy text-xs font-medium px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {result && (
         <div className="space-y-4">
           {/* Stats */}
@@ -153,9 +195,9 @@ export default function NetworkSearch() {
             </div>
           )}
 
-          {/* Export button */}
-          {result.query_id && (
-            <div>
+          {/* Export buttons */}
+          <div className="flex flex-wrap gap-2">
+            {result.query_id && (
               <a
                 href={`/api/v1/network/${result.query_id}/export/graphml`}
                 download
@@ -163,14 +205,34 @@ export default function NetworkSearch() {
               >
                 Export GraphML
               </a>
-            </div>
-          )}
+            )}
+            <button
+              onClick={() => downloadCSV(result.gene_pairs, query)}
+              className="bg-navy hover:bg-navy-dark text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
+            >
+              Download CSV
+            </button>
+          </div>
 
           <div className="flex gap-4 flex-wrap lg:flex-nowrap">
             {/* Graph */}
             <div className="flex-1 min-w-0">
               <NetworkGraph elements={elements} onNodeClick={setSelectedNode} />
               <p className="text-[11px] text-gray-400 mt-1">Click a node to view details</p>
+              <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mt-2 px-1">
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-full bg-[#2b6cb0]"></span>
+                  Gene node (size = connections)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-3 h-3 rounded-full bg-[#ed8936]"></span>
+                  Selected node
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-6 h-0.5 bg-[#a0aec0]"></span>
+                  Co-occurrence (width = frequency)
+                </span>
+              </div>
             </div>
 
             {/* Node info panel */}

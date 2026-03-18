@@ -39,9 +39,11 @@ import logging as _logging
 _jwt_secret = os.getenv("JWT_SECRET")
 if not _jwt_secret:
     _jwt_secret = _secrets.token_hex(32)
-    _logging.getLogger(__name__).warning(
-        "JWT_SECRET not set in environment; generated a random secret. "
-        "Tokens will be invalidated on restart. Set JWT_SECRET in .env for production."
+    _log = _logging.getLogger(__name__)
+    _log.error(
+        "PRODUCTION WARNING: JWT_SECRET not set. Generated a random secret. "
+        "All tokens will be INVALIDATED on restart. "
+        "Set JWT_SECRET in biosummarAI/.env for production use."
     )
 JWT_SECRET: str = _jwt_secret
 
@@ -50,8 +52,10 @@ _fernet_key = os.getenv("FERNET_KEY")
 if not _fernet_key:
     from cryptography.fernet import Fernet as _Fernet
     _fernet_key = _Fernet.generate_key().decode()
-    _logging.getLogger(__name__).warning(
-        "FERNET_KEY not set in environment; generated a random key. "
-        "Stored API keys will be unreadable after restart. Set FERNET_KEY in .env for production."
+    _log = _logging.getLogger(__name__)
+    _log.error(
+        "PRODUCTION WARNING: FERNET_KEY not set. Generated a random key. "
+        "Stored API keys will be UNREADABLE after restart. "
+        "Set FERNET_KEY in biosummarAI/.env for production use."
     )
 FERNET_KEY: str = _fernet_key

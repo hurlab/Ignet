@@ -125,6 +125,25 @@ export default function BioSummarAI() {
         </p>
       </div>
 
+      {/* Example gene sets */}
+      {selectedGenes.length === 0 && !summary && (
+        <div className="text-center py-6 space-y-3">
+          <p className="text-gray-400 text-sm">Select genes to generate an AI-powered literature summary.</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {[
+              { label: 'Immune signaling', genes: ['IFNG', 'TNF', 'IL6', 'STAT1'] },
+              { label: 'Tumor suppressors', genes: ['BRCA1', 'TP53', 'RB1'] },
+              { label: 'Vaccine targets', genes: ['TLR4', 'CD80', 'IL12A'] },
+            ].map(({ label, genes }) => (
+              <button key={label} onClick={() => genes.forEach(g => addGene(g))}
+                className="bg-blue-50 text-navy text-xs font-medium px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors">
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Gene selection */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
         <h2 className="font-semibold text-gray-700 text-sm">Select Genes</h2>

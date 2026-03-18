@@ -10,9 +10,14 @@ from flask_cors import CORS
 def create_app() -> Flask:
     """Create and configure the Flask application."""
     app = Flask(__name__)
+    app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
 
-    # Enable CORS for all /api/* routes
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
+    # Enable CORS for all /api/* routes — restricted to known origins
+    CORS(app, resources={r"/api/*": {
+        "origins": ["https://ignet.org", "https://www.ignet.org", "http://localhost:*"],
+        "allow_headers": ["Content-Type", "Authorization"],
+        "methods": ["GET", "POST", "DELETE", "OPTIONS"],
+    }})
 
     # Register blueprints
     from routes.genes import genes_bp

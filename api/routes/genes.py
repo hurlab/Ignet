@@ -5,32 +5,16 @@ GET /api/v1/genes/search          - search genes by symbol/name
 GET /api/v1/genes/<symbol>/neighbors - gene interaction neighbors
 """
 
-import re
 import logging
 
 from flask import Blueprint, jsonify, request
 
 from db import db_connection, get_redis
+from utils import sanitize_gene_symbol
 
 logger = logging.getLogger(__name__)
 
 genes_bp = Blueprint("genes", __name__)
-
-# ---------------------------------------------------------------------------
-# Input sanitisation helpers
-# ---------------------------------------------------------------------------
-
-_GENE_SYMBOL_RE = re.compile(r"^[A-Za-z0-9._-]{1,60}$")
-
-
-def _sanitize_gene_symbol(value: str) -> str | None:
-    """Return the symbol if valid, otherwise None."""
-    if not value:
-        return None
-    value = value.strip()
-    if _GENE_SYMBOL_RE.match(value):
-        return value
-    return None
 
 
 def _parse_pagination(args) -> tuple[int, int]:
@@ -206,7 +190,7 @@ def gene_neighbors(symbol: str):
       sort_by   - column to sort by (score, hasVaccine, neighbor, PMID)
       order     - ASC or DESC
     """
-    clean_symbol = _sanitize_gene_symbol(symbol)
+    clean_symbol = sanitize_gene_symbol(symbol)
     if not clean_symbol:
         return jsonify({"error": "InvalidInput", "message": "Invalid gene symbol."}), 400
 

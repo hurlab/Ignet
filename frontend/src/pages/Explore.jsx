@@ -60,6 +60,10 @@ export default function Explore() {
           <h2 className="text-base font-semibold text-gray-700">
             Top {topGenes.length} Most Connected Genes
           </h2>
+          <p className="text-gray-500 text-sm mb-4">
+            Browse the most connected genes in the Ignet database, ranked by interaction partner count.
+            Click a gene to explore its network.
+          </p>
 
           {/* Gene cloud */}
           <div className="bg-white border border-gray-200 rounded-lg p-4">

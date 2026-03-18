@@ -4,6 +4,24 @@ import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 
+function downloadCSV(neighbors, geneSymbol) {
+  if (!neighbors?.length) return
+  const header = 'Rank,Gene,CoOccurrences,Score\n'
+  const rows = neighbors.map((n, i) => {
+    const sym = n.neighbor ?? n.symbol ?? n.gene ?? n
+    const count = n.count ?? n.cooccurrence ?? ''
+    const score = typeof n.score === 'number' ? n.score : (n.score ?? '')
+    return [i + 1, sym, count, score].join(',')
+  }).join('\n')
+  const blob = new Blob([header + rows], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `ignet-gene-${geneSymbol}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 export default function Gene() {
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
@@ -99,13 +117,36 @@ export default function Gene() {
 
       {loading && <LoadingSpinner message="Fetching gene interactions..." />}
 
+      {!gene && !loading && !error && (
+        <div className="text-center py-12 space-y-4">
+          <p className="text-gray-400 text-sm">Search for a gene symbol to see its interaction partners.</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {['BRCA1', 'TP53', 'IFNG', 'TNF', 'IL6'].map((g) => (
+              <button
+                key={g}
+                onClick={() => { setQuery(g); searchGene(g) }}
+                className="bg-blue-50 text-navy text-xs font-medium px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
+              >
+                {g}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {gene && neighbors.length > 0 && (
         <div className="space-y-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-base font-bold text-navy">{gene}</h2>
             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
               {neighbors.length} neighbors
             </span>
+            <button
+              onClick={() => downloadCSV(neighbors, gene)}
+              className="bg-navy hover:bg-navy-dark text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
+            >
+              Download CSV
+            </button>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">

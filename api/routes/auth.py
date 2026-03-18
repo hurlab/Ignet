@@ -114,6 +114,7 @@ def login():
         return jsonify({"error": "InternalServerError", "message": "Login failed."}), 500
 
     if not user or not check_password(password, user["password_hash"]):
+        logger.warning("Failed login attempt for email=%s from ip=%s", email, request.remote_addr)
         return jsonify({"error": "Unauthorized", "message": "Invalid email or password."}), 401
 
     # Update last_login (non-fatal)

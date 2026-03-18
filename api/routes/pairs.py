@@ -4,29 +4,16 @@ Gene-pair interaction endpoints.
 GET /api/v1/pairs/<sym1>/<sym2> - evidence sentences for a gene pair
 """
 
-import re
 import logging
 
 from flask import Blueprint, jsonify, request
 
 from db import db_connection
+from utils import sanitize_gene_symbol
 
 logger = logging.getLogger(__name__)
 
 pairs_bp = Blueprint("pairs", __name__)
-
-# ---------------------------------------------------------------------------
-# Input sanitisation helpers (duplicated intentionally; no shared state)
-# ---------------------------------------------------------------------------
-
-_GENE_SYMBOL_RE = re.compile(r"^[A-Za-z0-9._-]{1,60}$")
-
-
-def _sanitize_gene_symbol(value: str) -> str | None:
-    value = value.strip()
-    if _GENE_SYMBOL_RE.match(value):
-        return value
-    return None
 
 
 def _parse_pagination(args) -> tuple[int, int]:
@@ -63,8 +50,8 @@ def get_pair_interactions(sym1: str, sym2: str):
       sort_by   - sort column
       order     - ASC or DESC
     """
-    clean1 = _sanitize_gene_symbol(sym1)
-    clean2 = _sanitize_gene_symbol(sym2)
+    clean1 = sanitize_gene_symbol(sym1)
+    clean2 = sanitize_gene_symbol(sym2)
     if not clean1 or not clean2:
         return jsonify({"error": "InvalidInput", "message": "Invalid gene symbol(s)."}), 400
 

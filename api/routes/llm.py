@@ -7,12 +7,12 @@ POST /api/v1/predict    - forward sentences to BioBERT NER service
 """
 
 import logging
-import re
 
 import requests
 from flask import Blueprint, g, jsonify, request
 
 from config import BIOSUMMARAI_URL, BIOBERT_URL
+from utils import sanitize_gene_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -72,18 +72,6 @@ def _get_user_openai_key() -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# Input sanitisation
-# ---------------------------------------------------------------------------
-
-_SAFE_GENE_RE = re.compile(r"[^A-Za-z0-9._-]")
-
-
-def _sanitize_gene_symbol(value: str) -> str:
-    """Strip characters that are not valid in gene symbols."""
-    return _SAFE_GENE_RE.sub("", str(value))
-
-
-# ---------------------------------------------------------------------------
 # POST /api/v1/summarize
 # ---------------------------------------------------------------------------
 
@@ -116,7 +104,7 @@ def summarize():
         genes_raw = body["genes"]
         if not isinstance(genes_raw, list):
             return jsonify({"error": "InvalidInput", "message": "'genes' must be an array."}), 400
-        body["genes"] = [_sanitize_gene_symbol(g) for g in genes_raw if g]
+        body["genes"] = [sanitize_gene_symbol(g) for g in genes_raw if g]
 
     # Optionally attach the user's BYOK OpenAI key
     byok_key = _get_user_openai_key()

@@ -17,6 +17,7 @@ import requests
 from flask import Blueprint, Response, jsonify, request
 
 from db import db_connection, get_redis
+from utils import sanitize_gene_symbol
 
 logger = logging.getLogger(__name__)
 
@@ -40,13 +41,6 @@ _PMID_CHUNK = 500
 # ---------------------------------------------------------------------------
 # Input sanitisation
 # ---------------------------------------------------------------------------
-
-_SAFE_GENE_RE = re.compile(r"[^A-Za-z0-9._-]")
-
-
-def _sanitize_gene_symbol(value: str) -> str:
-    """Strip characters that are not valid in gene symbols."""
-    return _SAFE_GENE_RE.sub("", value)
 
 
 def _sanitize_keywords(value: str) -> str:
@@ -286,8 +280,8 @@ def network_graph(query_id: int):
     edges: list[dict] = []
 
     for pair in pairs:
-        g1 = _sanitize_gene_symbol(str(pair.get("gene1", "")))
-        g2 = _sanitize_gene_symbol(str(pair.get("gene2", "")))
+        g1 = sanitize_gene_symbol(str(pair.get("gene1", "")))
+        g2 = sanitize_gene_symbol(str(pair.get("gene2", "")))
         if not g1 or not g2:
             continue
         unique_genes.add(g1)
@@ -363,8 +357,8 @@ def network_export_graphml(query_id: int):
     edge_elements: list[tuple[str, str, dict]] = []
 
     for pair in pairs:
-        g1 = _sanitize_gene_symbol(str(pair.get("gene1", "")))
-        g2 = _sanitize_gene_symbol(str(pair.get("gene2", "")))
+        g1 = sanitize_gene_symbol(str(pair.get("gene1", "")))
+        g2 = sanitize_gene_symbol(str(pair.get("gene2", "")))
         if not g1 or not g2:
             continue
         unique_genes.add(g1)

@@ -3,6 +3,7 @@ import { Routes, Route } from 'react-router-dom'
 import Layout from './components/Layout.jsx'
 import LoadingSpinner from './components/LoadingSpinner.jsx'
 import NotFound from './pages/NotFound.jsx'
+import ErrorBoundary from './components/ErrorBoundary.jsx'
 
 const Home = lazy(() => import('./pages/Home.jsx'))
 const NetworkSearch = lazy(() => import('./pages/NetworkSearch.jsx'))
@@ -15,21 +16,23 @@ const Explore = lazy(() => import('./pages/Explore.jsx'))
 
 function App() {
   return (
-    <Suspense fallback={<LoadingSpinner />}>
-      <Routes>
-        <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
-          <Route path="network" element={<NetworkSearch />} />
-          <Route path="gene" element={<Gene />} />
-          <Route path="genepair" element={<GenePair />} />
-          <Route path="biosummarai" element={<BioSummarAI />} />
-          <Route path="login" element={<Login />} />
-          <Route path="analyze" element={<AnalyzeText />} />
-          <Route path="explore" element={<Explore />} />
-          <Route path="*" element={<NotFound />} />
-        </Route>
-      </Routes>
-    </Suspense>
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingSpinner />}>
+        <Routes>
+          <Route path="/" element={<Layout />}>
+            <Route index element={<Home />} />
+            <Route path="network" element={<NetworkSearch />} />
+            <Route path="gene" element={<Gene />} />
+            <Route path="genepair" element={<GenePair />} />
+            <Route path="biosummarai" element={<BioSummarAI />} />
+            <Route path="login" element={<Login />} />
+            <Route path="analyze" element={<AnalyzeText />} />
+            <Route path="explore" element={<Explore />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </ErrorBoundary>
   )
 }
 

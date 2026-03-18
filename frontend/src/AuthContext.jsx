@@ -28,13 +28,19 @@ export function AuthProvider({ children }) {
     setUser(profile)
   }
 
+  async function loginWithToken(token) {
+    setToken(token)
+    const profile = await api.profile()
+    setUser(profile)
+  }
+
   function logout() {
     removeToken()
     setUser(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithToken, logout }}>
       {children}
     </AuthContext.Provider>
   )

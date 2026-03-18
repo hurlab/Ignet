@@ -68,9 +68,14 @@ export default function Login() {
     setError(null)
     setLoading(true)
     try {
-      await api.register(form.username, form.email, form.password)
-      setTab('signin')
-      setError(null)
+      const response = await api.register(form.username, form.email, form.password)
+      if (response?.token) {
+        await auth.loginWithToken(response.token)
+        navigate('/')
+      } else {
+        setTab('signin')
+        setError(null)
+      }
     } catch (err) {
       setError(err.message)
     } finally {

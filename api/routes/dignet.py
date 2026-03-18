@@ -11,6 +11,7 @@ import logging
 import re
 import time
 import xml.etree.ElementTree as ET
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 import requests
@@ -18,6 +19,7 @@ from flask import Blueprint, Response, jsonify, request
 
 from db import db_connection, get_redis
 from utils import sanitize_gene_symbol
+from utils.ino_classifier import INO_COLORS, classify_ino
 
 logger = logging.getLogger(__name__)
 
@@ -117,11 +119,12 @@ def _upsert_query(conn, keywords: str, pmids: list[int]) -> int:
 def _load_query(conn, query_id: int) -> dict | None:
     """
     Load a t_pubmed_query row by c_query_int_id.
-    Returns normalised dict with 'id', 'keywords', 'pmid_list', 'created_at' or None.
+    Returns normalised dict with 'id', 'query_hash', 'keywords', 'pmid_list', 'created_at' or None.
     """
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
-        """SELECT c_query_int_id AS id, c_query_text AS keywords,
+        """SELECT c_query_int_id AS id, c_query_id AS query_hash,
+                  c_query_text AS keywords,
                   c_pubmed_records AS pmid_list, c_query_ts AS created_at
            FROM t_pubmed_query WHERE c_query_int_id = %s""",
         (query_id,),
@@ -141,31 +144,115 @@ def _is_cache_valid(row: dict) -> bool:
     return datetime.now(tz=timezone.utc) - created_at < timedelta(seconds=_CACHE_TTL_SECONDS)
 
 
-def _fetch_gene_pairs(conn, pmids: list[int]) -> list[dict]:
+def _fetch_gene_pairs(
+    conn,
+    pmids: list[int],
+    has_vaccine: bool | None = None,
+) -> list[dict]:
     """
     Query t_sentence_hit_gene2gene_Host for gene pairs matching the given PMIDs.
     Processes in chunks of _PMID_CHUNK to avoid oversized IN clauses.
+
+    Args:
+        conn: Active database connection.
+        pmids: List of PubMed IDs to filter on.
+        has_vaccine: When True, restrict to rows where hasVaccine = 1.
+                     When False, restrict to rows where hasVaccine = 0.
+                     When None (default), no filter is applied.
     """
     if not pmids:
         return []
+
+    vaccine_clause = ""
+    if has_vaccine is True:
+        vaccine_clause = " AND hasVaccine = 1"
+    elif has_vaccine is False:
+        vaccine_clause = " AND hasVaccine = 0"
 
     pairs: list[dict] = []
     for i in range(0, len(pmids), _PMID_CHUNK):
         chunk = pmids[i : i + _PMID_CHUNK]
         placeholders = ",".join(["%s"] * len(chunk))
         sql = f"""
-            SELECT geneSymbol1 AS gene1,
-                   geneSymbol2 AS gene2,
+            SELECT geneSymbol1  AS gene1,
+                   geneSymbol2  AS gene2,
                    score,
-                   PMID        AS pmid
+                   PMID         AS pmid,
+                   sentenceID   AS sentenceID
             FROM t_sentence_hit_gene2gene_Host
-            WHERE PMID IN ({placeholders})
+            WHERE PMID IN ({placeholders}){vaccine_clause}
         """
         cursor = conn.cursor(dictionary=True)
         cursor.execute(sql, chunk)
         pairs.extend(cursor.fetchall())
 
     return pairs
+
+
+# ---------------------------------------------------------------------------
+# INO and centrality helpers
+# ---------------------------------------------------------------------------
+
+
+def _build_ino_map(conn, sentence_ids: list[int]) -> dict[int, str]:
+    """
+    Batch-query ino_host25 for the given sentence IDs and return a map of
+    sentence_id -> dominant INO category (most frequent for that sentence).
+    """
+    if not sentence_ids:
+        return {}
+
+    placeholders = ",".join(["%s"] * len(sentence_ids))
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        f"SELECT sentence_id, matching_phrase FROM ino_host25 WHERE sentence_id IN ({placeholders})",
+        tuple(sentence_ids),
+    )
+    rows = cursor.fetchall()
+
+    # Group phrases by sentence_id then pick most frequent category
+    phrase_groups: dict[int, list[str]] = {}
+    for row in rows:
+        sid = row["sentence_id"]
+        phrase_groups.setdefault(sid, []).append(classify_ino(row["matching_phrase"] or ""))
+
+    ino_map: dict[int, str] = {}
+    for sid, categories in phrase_groups.items():
+        most_common = Counter(categories).most_common(1)[0][0]
+        ino_map[sid] = most_common
+
+    return ino_map
+
+
+def _build_centrality_map(
+    conn, gene_symbols: list[str], query_hash: str
+) -> dict[str, dict[str, float]]:
+    """
+    Query t_centrality_score_dignet for the given gene symbols and query hash.
+    Returns a map of genesymbol -> {score_type: score} with types d, p, c, b, e.
+    """
+    if not gene_symbols or not query_hash:
+        return {}
+
+    placeholders = ",".join(["%s"] * len(gene_symbols))
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        f"""SELECT genesymbol, score_type, score
+            FROM t_centrality_score_dignet
+            WHERE genesymbol IN ({placeholders})
+              AND c_query_id = %s""",
+        tuple(gene_symbols) + (query_hash,),
+    )
+    rows = cursor.fetchall()
+
+    centrality_map: dict[str, dict[str, float]] = {}
+    for row in rows:
+        gene = row["genesymbol"]
+        centrality_map.setdefault(gene, {})[row["score_type"]] = (
+            float(row["score"]) if row["score"] is not None else 0.0
+        )
+
+    return centrality_map
 
 
 # ---------------------------------------------------------------------------
@@ -263,9 +350,25 @@ def network_graph(query_id: int):
     """
     Return a Cytoscape.js-compatible graph for the given query_id.
 
+    Query Parameters:
+        has_vaccine  - "true"/"false": filter edges by hasVaccine flag
+        ino_type     - one of positive_regulation, negative_regulation,
+                       binding, phosphorylation, other, unknown:
+                       filter edges to only include the specified INO category
+
     Response JSON:
         query_id, keywords, elements.nodes, elements.edges, stats
+        Each node carries: id, label, centrality {d, p, c, b, e}
+        Each edge carries: source, target, score, pmid, ino_category, ino_color
     """
+    # Parse optional filter params
+    has_vaccine_param = request.args.get("has_vaccine")
+    has_vaccine: bool | None = None
+    if has_vaccine_param is not None:
+        has_vaccine = has_vaccine_param.lower() in ("true", "1", "yes")
+
+    ino_type_filter: str | None = request.args.get("ino_type")
+
     try:
         with db_connection() as conn:
             row = _load_query(conn, query_id)
@@ -273,7 +376,25 @@ def network_graph(query_id: int):
                 return jsonify({"error": "NotFound", "message": f"query_id {query_id} not found."}), 404
 
             pmids = [int(p) for p in row["pmid_list"].split(",") if p.strip().isdigit()]
-            pairs = _fetch_gene_pairs(conn, pmids)
+            pairs = _fetch_gene_pairs(conn, pmids, has_vaccine=has_vaccine)
+
+            # Batch-fetch INO categories for all sentence IDs
+            sentence_ids = [
+                int(p["sentenceID"])
+                for p in pairs
+                if p.get("sentenceID") is not None
+            ]
+            ino_map = _build_ino_map(conn, sentence_ids)
+
+            # Determine all unique genes for centrality lookup
+            gene_symbols = list(
+                {sanitize_gene_symbol(str(p.get("gene1", ""))) for p in pairs}
+                | {sanitize_gene_symbol(str(p.get("gene2", ""))) for p in pairs}
+            )
+            gene_symbols = [g for g in gene_symbols if g]
+
+            query_hash: str = row.get("query_hash") or ""
+            centrality_map = _build_centrality_map(conn, gene_symbols, query_hash)
 
     except Exception as exc:
         logger.exception("Error in network_graph: %s", exc)
@@ -288,6 +409,18 @@ def network_graph(query_id: int):
         g2 = sanitize_gene_symbol(str(pair.get("gene2", "")))
         if not g1 or not g2:
             continue
+
+        # Resolve INO category for this edge via sentenceID
+        sid = pair.get("sentenceID")
+        if sid is not None:
+            ino_category = ino_map.get(int(sid), "unknown")
+        else:
+            ino_category = "unknown"
+
+        # Apply optional INO type filter
+        if ino_type_filter and ino_category != ino_type_filter:
+            continue
+
         unique_genes.add(g1)
         unique_genes.add(g2)
         edges.append({
@@ -296,10 +429,28 @@ def network_graph(query_id: int):
                 "target": g2,
                 "score": pair.get("score"),
                 "pmid": pair.get("pmid"),
+                "ino_category": ino_category,
+                "ino_color": INO_COLORS.get(ino_category, INO_COLORS["unknown"]),
             }
         })
 
-    nodes = [{"data": {"id": g, "label": g}} for g in sorted(unique_genes)]
+    # Build nodes with centrality data
+    nodes: list[dict] = []
+    for gene in sorted(unique_genes):
+        centrality = centrality_map.get(gene, {})
+        nodes.append({
+            "data": {
+                "id": gene,
+                "label": gene,
+                "centrality": {
+                    "d": centrality.get("d", 0.0),
+                    "p": centrality.get("p", 0.0),
+                    "c": centrality.get("c", 0.0),
+                    "b": centrality.get("b", 0.0),
+                    "e": centrality.get("e", 0.0),
+                },
+            }
+        })
 
     return jsonify({
         "query_id": query_id,

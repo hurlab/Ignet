@@ -16,12 +16,13 @@ export default function Footer() {
                 { label: 'FAQs', href: '/ignet_legacy/faq.php' },
                 { label: 'Links', href: '/ignet_legacy/links.php' },
                 { label: 'Contact Us', href: '/ignet_legacy/contact.php' },
+                { label: 'API Docs', href: '/api-docs', internal: true },
               ].map((item) => (
                 <li key={item.label}>
                   <a
                     href={item.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                    target={item.internal ? undefined : '_blank'}
+                    rel={item.internal ? undefined : 'noopener noreferrer'}
                     className="text-gray-500 hover:text-navy text-sm transition-colors"
                   >
                     {item.label}

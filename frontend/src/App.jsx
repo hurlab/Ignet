@@ -13,6 +13,7 @@ const BioSummarAI = lazy(() => import('./pages/BioSummarAI.jsx'))
 const Login = lazy(() => import('./pages/Login.jsx'))
 const AnalyzeText = lazy(() => import('./pages/AnalyzeText.jsx'))
 const Explore = lazy(() => import('./pages/Explore.jsx'))
+const ApiDocs = lazy(() => import('./pages/ApiDocs.jsx'))
 
 function App() {
   return (
@@ -28,6 +29,7 @@ function App() {
             <Route path="login" element={<Login />} />
             <Route path="analyze" element={<AnalyzeText />} />
             <Route path="explore" element={<Explore />} />
+            <Route path="api-docs" element={<ApiDocs />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

@@ -56,7 +56,8 @@ export const api = {
   searchGenes: (q) => request(`/genes/search?q=${encodeURIComponent(q)}`),
   autocompleteGenes: (q, limit = 10) => request(`/genes/autocomplete?q=${encodeURIComponent(q)}&limit=${limit}`),
   geneNeighbors: (sym) => request(`/genes/${encodeURIComponent(sym)}/neighbors`),
-  genePair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}`),
+  genePair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}?include_summary=true`),
+  predictPair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}/predict`, { method: 'POST' }),
 
   dignetSearch: (keywords, limit) => request('/dignet/search', {
     method: 'POST',

@@ -28,6 +28,8 @@ export default function GenePair() {
   const [showDropdown1, setShowDropdown1] = useState(false)
   const [suggestions2, setSuggestions2] = useState([])
   const [showDropdown2, setShowDropdown2] = useState(false)
+  const [predicting, setPredicting] = useState(false)
+  const [predictResult, setPredictResult] = useState(null)
   const debounceRef1 = useRef(null)
   const debounceRef2 = useRef(null)
 
@@ -81,15 +83,43 @@ export default function GenePair() {
     setLoading(true)
     setError(null)
     setPairData(null)
+    setPredictResult(null)
 
     try {
       const raw = await api.genePair(g1, g2)
-      const data = raw?.data ?? raw
-      setPairData(data)
+      // Flatten: backend wraps in { data: {...}, interactions, total, prediction_summary }
+      const interactions = raw?.interactions ?? []
+      const total = raw?.total ?? 0
+      const prediction_summary = raw?.prediction_summary ?? null
+      const meta = raw?.data ?? {}
+      setPairData({ ...meta, interactions, total, prediction_summary })
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function handlePredict() {
+    const g1 = gene1.trim().toUpperCase()
+    const g2 = gene2.trim().toUpperCase()
+    if (!g1 || !g2) return
+    setPredicting(true)
+    setPredictResult(null)
+    try {
+      const result = await api.predictPair(g1, g2)
+      setPredictResult(result)
+      // Refresh pair data to reflect newly scored sentences
+      const raw = await api.genePair(g1, g2)
+      const interactions = raw?.interactions ?? []
+      const total = raw?.total ?? 0
+      const prediction_summary = raw?.prediction_summary ?? null
+      const meta = raw?.data ?? {}
+      setPairData({ ...meta, interactions, total, prediction_summary })
+    } catch (err) {
+      setPredictResult({ error: err.message })
+    } finally {
+      setPredicting(false)
     }
   }
 
@@ -199,6 +229,35 @@ export default function GenePair() {
               </div>
             </div>
 
+            {/* BioBERT Prediction Summary */}
+            {pairData?.prediction_summary && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                <h3 className="font-semibold text-navy text-sm">BioBERT Prediction Summary</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+                  <div>
+                    <div className="text-lg font-bold text-navy">{pairData.prediction_summary.scored_sentences}</div>
+                    <div className="text-xs text-gray-500">Scored Sentences</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-navy">
+                      {pairData.prediction_summary.avg_confidence != null
+                        ? (pairData.prediction_summary.avg_confidence * 100).toFixed(1) + '%'
+                        : 'N/A'}
+                    </div>
+                    <div className="text-xs text-gray-500">Avg Confidence</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-accent">{pairData.prediction_summary.high_confidence_count}</div>
+                    <div className="text-xs text-gray-500">High Confidence ({'>'} 80%)</div>
+                  </div>
+                  <div>
+                    <div className="text-lg font-bold text-gray-600">{pairData.prediction_summary.total_sentences}</div>
+                    <div className="text-xs text-gray-500">Total Sentences</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* PMID links */}
             {pmids.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -227,13 +286,27 @@ export default function GenePair() {
               <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs font-medium text-gray-600">Evidence Sentences</div>
-                  <button
-                    onClick={() => downloadCSV(pairData.interactions, pairData.gene1, pairData.gene2)}
-                    className="bg-navy hover:bg-navy-dark text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
-                  >
-                    Download CSV
-                  </button>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handlePredict}
+                      disabled={predicting}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
+                    >
+                      {predicting ? 'Predicting...' : 'Re-predict Unscored'}
+                    </button>
+                    <button
+                      onClick={() => downloadCSV(pairData.interactions, pairData.gene1, pairData.gene2)}
+                      className="bg-navy hover:bg-navy-dark text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
+                    >
+                      Download CSV
+                    </button>
+                  </div>
                 </div>
+                {predictResult && (
+                  <div className={`text-xs mb-2 px-2 py-1 rounded ${predictResult.error ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
+                    {predictResult.error ? predictResult.error : predictResult.message}
+                  </div>
+                )}
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-gray-500 border-b">
@@ -246,7 +319,19 @@ export default function GenePair() {
                   <tbody>
                     {pairData.interactions.slice(0, 20).map((row, i) => (
                       <tr key={i} className="border-b border-gray-50">
-                        <td className="py-1 pr-2 font-mono">{row.score?.toFixed(3) ?? '—'}</td>
+                        <td className="py-1 pr-2 font-mono whitespace-nowrap">
+                          {typeof row.score === 'number' ? (
+                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+                              row.score > 0.8
+                                ? 'bg-green-100 text-green-700'
+                                : row.score > 0.5
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-gray-100 text-gray-600'
+                            }`}>
+                              {(row.score * 100).toFixed(0)}%
+                            </span>
+                          ) : '—'}
+                        </td>
                         <td className="py-1 pr-2">
                           <a
                             href={`https://pubmed.ncbi.nlm.nih.gov/${row.PMID}`}
@@ -257,8 +342,15 @@ export default function GenePair() {
                             {row.PMID}
                           </a>
                         </td>
-                        <td className="py-1 pr-2 max-w-md truncate">{row.sentence_text ?? '—'}</td>
-                        <td className="py-1">{row.ino_term ?? '—'}</td>
+                        <td className="py-1 pr-2 max-w-md">
+                          <span className="truncate block">{row.sentence_text ?? '—'}</span>
+                          {row.matching_phrase && (
+                            <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded mt-0.5 inline-block">
+                              {row.matching_phrase}
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-1">{row.ino_term ?? row.matching_phrase ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>

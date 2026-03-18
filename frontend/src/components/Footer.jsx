@@ -60,10 +60,16 @@ export default function Footer() {
             <h4 className="font-semibold text-gray-700 mb-3 text-xs uppercase tracking-wide">
               Affiliated Institutions
             </h4>
-            <div className="flex items-center gap-4">
-              <span className="text-xs text-gray-400 font-semibold">UM</span>
-              <span className="text-xs text-gray-400 font-semibold">UND</span>
-              <span className="text-xs text-gray-400 font-semibold">Bogazici</span>
+            <div className="flex items-center gap-5">
+              <a href="https://und.edu" target="_blank" rel="noopener noreferrer" title="University of North Dakota">
+                <img src="/ignet/images/UND_logo.svg" alt="University of North Dakota" className="h-10 opacity-70 hover:opacity-100 transition-opacity" />
+              </a>
+              <a href="https://umich.edu" target="_blank" rel="noopener noreferrer" title="University of Michigan">
+                <img src="/ignet/images/UM_logo.svg.png" alt="University of Michigan" className="h-10 opacity-70 hover:opacity-100 transition-opacity" />
+              </a>
+              <a href="https://bogazici.edu.tr" target="_blank" rel="noopener noreferrer" title="Bogazici University">
+                <img src="/ignet/images/1200px-Bogazici_University_logo.svg.png" alt="Bogazici University" className="h-10 opacity-70 hover:opacity-100 transition-opacity" />
+              </a>
             </div>
           </div>
         </div>

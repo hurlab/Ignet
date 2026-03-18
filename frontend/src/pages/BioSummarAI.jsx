@@ -3,6 +3,36 @@ import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 
+function renderMarkdown(text) {
+  if (!text) return null
+  return text.split('\n').map((line, i) => {
+    // Bold
+    line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    line = line.replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Inline code
+    line = line.replace(/`(.+?)`/g, '<code class="bg-gray-100 px-1 rounded text-sm">$1</code>')
+
+    // Headers
+    if (line.startsWith('### ')) return <h4 key={i} className="font-semibold text-navy mt-3 mb-1 text-sm">{line.slice(4)}</h4>
+    if (line.startsWith('## ')) return <h3 key={i} className="font-bold text-navy mt-4 mb-1">{line.slice(3)}</h3>
+    if (line.startsWith('# ')) return <h2 key={i} className="text-lg font-bold text-navy mt-4 mb-2">{line.slice(2)}</h2>
+
+    // Numbered list
+    const numMatch = line.match(/^(\d+)\.\s+(.*)/)
+    if (numMatch) return <p key={i} className="ml-4 mb-1" dangerouslySetInnerHTML={{ __html: `<span class="text-gray-400 mr-1">${numMatch[1]}.</span>${numMatch[2]}` }} />
+
+    // Bullet list
+    if (line.startsWith('- ') || line.startsWith('* ')) return <p key={i} className="ml-4 mb-1" dangerouslySetInnerHTML={{ __html: `<span class="text-gray-400 mr-1">&bull;</span>${line.slice(2)}` }} />
+
+    // Empty line = paragraph break
+    if (!line.trim()) return <div key={i} className="h-2" />
+
+    // Regular paragraph
+    return <p key={i} className="mb-1" dangerouslySetInnerHTML={{ __html: line }} />
+  })
+}
+
 function GeneTag({ symbol, onRemove }) {
   return (
     <span className="inline-flex items-center gap-1 bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded-full">
@@ -24,6 +54,7 @@ export default function BioSummarAI() {
   const [selectedGenes, setSelectedGenes] = useState([])
   const [summarizing, setSummarizing] = useState(false)
   const [summary, setSummary] = useState(null)
+  const [entities, setEntities] = useState(null)
   const [error, setError] = useState(null)
   const [chatMessages, setChatMessages] = useState([])
   const [chatInput, setChatInput] = useState('')
@@ -78,10 +109,12 @@ export default function BioSummarAI() {
     setSummarizing(true)
     setError(null)
     setSummary(null)
+    setEntities(null)
     setChatMessages([])
     try {
       const data = await api.summarize(selectedGenes)
-      setSummary(data?.Summary?.reply ?? data?.summary ?? data?.text ?? JSON.stringify(data))
+      setSummary(data?.data?.reply ?? data?.Summary?.reply ?? data?.reply ?? data?.summary ?? data?.text ?? JSON.stringify(data))
+      setEntities(data?.entities ?? data?.data?.entities ?? null)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -201,9 +234,50 @@ export default function BioSummarAI() {
       {summary && (
         <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
           <h2 className="font-semibold text-gray-700 text-sm">Summary</h2>
-          <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed text-xs whitespace-pre-wrap">
-            {summary}
+          <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed space-y-1">
+            {renderMarkdown(summary)}
           </div>
+
+          {entities && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+              {entities.genes?.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-semibold text-navy text-sm mb-2">Top Genes</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {entities.genes.slice(0, 15).map(g => (
+                      <span key={g.term} className="bg-blue-50 text-navy text-xs px-2 py-1 rounded-full">
+                        {g.term} <span className="text-gray-400">({g.count})</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {entities.drugs?.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-semibold text-navy text-sm mb-2">Top Drugs</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {entities.drugs.slice(0, 15).map(d => (
+                      <span key={d.term} className="bg-green-50 text-green-800 text-xs px-2 py-1 rounded-full">
+                        {d.term} <span className="text-gray-400">({d.count})</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {entities.diseases?.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-lg p-3">
+                  <h4 className="font-semibold text-navy text-sm mb-2">Top Diseases</h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {entities.diseases.slice(0, 15).map(d => (
+                      <span key={d.term} className="bg-red-50 text-red-800 text-xs px-2 py-1 rounded-full">
+                        {d.term} <span className="text-gray-400">({d.count})</span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Chat */}
           <div className="border-t border-gray-100 pt-4 space-y-3">

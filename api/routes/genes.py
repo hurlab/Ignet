@@ -233,7 +233,7 @@ def autocomplete_genes():
 # GET /api/v1/genes/<symbol>/neighbors
 # ---------------------------------------------------------------------------
 
-_SORT_COLS = {"score", "hasVaccine", "neighbor", "PMID"}
+_SORT_COLS = {"count", "score", "neighbor", "unique_pmids"}
 _SORT_ORDERS = {"ASC", "DESC"}
 
 
@@ -248,7 +248,7 @@ def gene_neighbors(symbol: str):
       keywords  - full-text keyword filter on sentence
       page      - page number (default 1)
       per_page  - results per page (default 50, max 200)
-      sort_by   - column to sort by (score, hasVaccine, neighbor, PMID)
+      sort_by   - column to sort by (count, score, neighbor, unique_pmids)
       order     - ASC or DESC
     """
     clean_symbol = sanitize_gene_symbol(symbol)
@@ -262,9 +262,9 @@ def gene_neighbors(symbol: str):
     page, per_page = _parse_pagination(request.args)
     offset = (page - 1) * per_page
 
-    sort_by_raw = request.args.get("sort_by", "score").strip()
+    sort_by_raw = request.args.get("sort_by", "count").strip()
     order_raw = request.args.get("order", "DESC").strip().upper()
-    sort_col = sort_by_raw if sort_by_raw in _SORT_COLS else "score"
+    sort_col = sort_by_raw if sort_by_raw in _SORT_COLS else "count"
     sort_order = order_raw if order_raw in _SORT_ORDERS else "DESC"
 
     # Build score filter
@@ -303,9 +303,9 @@ def gene_neighbors(symbol: str):
         with db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
 
-            # COUNT using UNION
+            # COUNT distinct neighbors using UNION
             count_sql = f"""
-                SELECT COUNT(*) AS total FROM (
+                SELECT COUNT(DISTINCT neighbor) AS total FROM (
                     (SELECT geneSymbol2 AS neighbor
                      FROM t_sentence_hit_gene2gene_Host
                      WHERE geneSymbol1 = %s {filters})
@@ -319,9 +319,12 @@ def gene_neighbors(symbol: str):
             row = cursor.fetchone()
             total = int(row["total"]) if row else 0
 
-            # Data query using UNION
+            # Aggregated data query: one row per unique neighbor
             data_sql = f"""
-                SELECT neighbor, score, hasVaccine, PMID, sentenceID
+                SELECT neighbor,
+                       COUNT(*) AS count,
+                       COUNT(DISTINCT PMID) AS unique_pmids,
+                       MAX(score) AS score
                 FROM (
                     (SELECT geneSymbol2 AS neighbor, score, hasVaccine, PMID, sentenceID
                      FROM t_sentence_hit_gene2gene_Host
@@ -331,6 +334,7 @@ def gene_neighbors(symbol: str):
                      FROM t_sentence_hit_gene2gene_Host
                      WHERE geneSymbol2 = %s {filters})
                 ) AS combined
+                GROUP BY neighbor
                 ORDER BY {sort_col} {sort_order}
                 LIMIT %s OFFSET %s
             """

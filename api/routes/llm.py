@@ -12,6 +12,7 @@ import requests
 from flask import Blueprint, g, jsonify, request
 
 from config import BIOSUMMARAI_URL, BIOBERT_URL
+from db import db_connection
 from utils import sanitize_gene_symbol
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,66 @@ def summarize():
             timeout=_LLM_TIMEOUT,
         )
         upstream.raise_for_status()
+
+        # Enrich response with entity lists from biosummary25_Host
+        try:
+            result = upstream.json()
+            genes_input = body.get("genes", [])
+            if genes_input:
+                with db_connection() as conn:
+                    cursor = conn.cursor(dictionary=True)
+                    placeholders = ", ".join(["%s"] * len(genes_input))
+
+                    # Get PMIDs for these genes
+                    cursor.execute(
+                        f"SELECT DISTINCT PMID FROM t_sentence_hit_gene2gene_Host "
+                        f"WHERE geneSymbol1 IN ({placeholders}) OR geneSymbol2 IN ({placeholders}) LIMIT 1000",
+                        genes_input * 2
+                    )
+                    pmids = [r["PMID"] for r in cursor.fetchall()]
+
+                    if pmids:
+                        pmid_ph = ", ".join(["%s"] * len(pmids))
+
+                        # Top gene symbols
+                        cursor.execute(
+                            f"SELECT gene_symbols, COUNT(*) AS cnt FROM biosummary25_Host "
+                            f"WHERE pmid IN ({pmid_ph}) AND gene_symbols IS NOT NULL AND gene_symbols != '' "
+                            f"GROUP BY gene_symbols ORDER BY cnt DESC LIMIT 20",
+                            tuple(pmids)
+                        )
+                        top_genes = [{"term": r["gene_symbols"], "count": r["cnt"]} for r in cursor.fetchall()]
+
+                        # Top drug terms
+                        cursor.execute(
+                            f"SELECT drug_term, COUNT(*) AS cnt FROM biosummary25_Host "
+                            f"WHERE pmid IN ({pmid_ph}) AND drug_term IS NOT NULL AND drug_term != '' "
+                            f"GROUP BY drug_term ORDER BY cnt DESC LIMIT 20",
+                            tuple(pmids)
+                        )
+                        top_drugs = [{"term": r["drug_term"], "count": r["cnt"]} for r in cursor.fetchall()]
+
+                        # Top HDO (disease) terms
+                        cursor.execute(
+                            f"SELECT hdo_term, COUNT(*) AS cnt FROM biosummary25_Host "
+                            f"WHERE pmid IN ({pmid_ph}) AND hdo_term IS NOT NULL AND hdo_term != '' "
+                            f"GROUP BY hdo_term ORDER BY cnt DESC LIMIT 20",
+                            tuple(pmids)
+                        )
+                        top_diseases = [{"term": r["hdo_term"], "count": r["cnt"]} for r in cursor.fetchall()]
+
+                        result["entities"] = {
+                            "genes": top_genes,
+                            "drugs": top_drugs,
+                            "diseases": top_diseases,
+                        }
+                        cursor.close()
+
+                return jsonify(result), upstream.status_code
+        except Exception as ent_exc:
+            logger.debug("Entity enrichment failed (non-fatal): %s", ent_exc)
+            # Fall through to return the original response
+
         return jsonify(upstream.json()), upstream.status_code
 
     except requests.Timeout:

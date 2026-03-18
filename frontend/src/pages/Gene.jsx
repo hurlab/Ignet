@@ -6,12 +6,18 @@ import ErrorMessage from '../components/ErrorMessage.jsx'
 
 function downloadCSV(neighbors, geneSymbol) {
   if (!neighbors?.length) return
-  const header = 'Rank,Gene,CoOccurrences,Score\n'
+  const hasUniquePmids = neighbors.some((n) => n.unique_pmids != null)
+  const header = hasUniquePmids
+    ? 'Rank,Gene,CoOccurrences,PMIDs,Score\n'
+    : 'Rank,Gene,CoOccurrences,Score\n'
   const rows = neighbors.map((n, i) => {
     const sym = n.neighbor ?? n.symbol ?? n.gene ?? n
     const count = n.count ?? n.cooccurrence ?? ''
+    const pmids = n.unique_pmids ?? ''
     const score = typeof n.score === 'number' ? n.score : (n.score ?? '')
-    return [i + 1, sym, count, score].join(',')
+    return hasUniquePmids
+      ? [i + 1, sym, count, pmids, score].join(',')
+      : [i + 1, sym, count, score].join(',')
   }).join('\n')
   const blob = new Blob([header + rows], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
@@ -125,13 +131,30 @@ export default function Gene() {
       <form onSubmit={handleSearch} className="bg-white border border-gray-200 rounded-lg p-4 flex gap-3 items-end">
         <div className="flex-1">
           <label className="block text-xs font-medium text-gray-600 mb-1">Gene Symbol</label>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="e.g. IFNG, TP53, BRCA1"
-            className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
-          />
+          <div className="relative" onClick={(e) => e.stopPropagation()}>
+            <input
+              type="text"
+              value={query}
+              onChange={handleInputChange}
+              onKeyDown={(e) => { if (e.key === 'Escape') setShowDropdown(false) }}
+              placeholder="e.g. IFNG, TP53, BRCA1"
+              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+            />
+            {showDropdown && suggestions.length > 0 && (
+              <ul className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
+                {suggestions.map((s) => (
+                  <li
+                    key={s.symbol || s.gene_id}
+                    onClick={() => { setQuery(s.symbol); setShowDropdown(false); searchGene(s.symbol) }}
+                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm"
+                  >
+                    <span className="font-medium text-navy">{s.symbol}</span>
+                    {s.description && <span className="text-gray-400 text-xs ml-2 truncate">{s.description}</span>}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </div>
         <button
           type="submit"
@@ -185,6 +208,9 @@ export default function Gene() {
                   <th className="text-left px-3 py-2 font-medium text-gray-600">Rank</th>
                   <th className="text-left px-3 py-2 font-medium text-gray-600">Symbol</th>
                   <th className="text-right px-3 py-2 font-medium text-gray-600">Co-occurrences</th>
+                  {neighbors.some((n) => n.unique_pmids != null) && (
+                    <th className="text-right px-3 py-2 font-medium text-gray-600">PMIDs</th>
+                  )}
                   <th className="text-right px-3 py-2 font-medium text-gray-600">Score</th>
                   <th className="px-3 py-2" />
                 </tr>
@@ -199,6 +225,9 @@ export default function Gene() {
                       <td className="px-3 py-1.5 text-gray-400">{i + 1}</td>
                       <td className="px-3 py-1.5 font-medium text-navy">{sym}</td>
                       <td className="px-3 py-1.5 text-right text-gray-600">{count}</td>
+                      {neighbors.some((nb) => nb.unique_pmids != null) && (
+                        <td className="px-3 py-1.5 text-right text-gray-600">{n.unique_pmids ?? '—'}</td>
+                      )}
                       <td className="px-3 py-1.5 text-right text-gray-600">{score}</td>
                       <td className="px-3 py-1.5">
                         <button

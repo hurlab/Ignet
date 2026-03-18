@@ -87,38 +87,49 @@ def _ncbi_search_pmids(keywords: str) -> list[int]:
 def _upsert_query(conn, keywords: str, pmids: list[int]) -> int:
     """
     Insert or update a row in t_pubmed_query for the given keywords.
-    Returns the query_id (auto-increment primary key).
+    Actual schema: c_query_int_id (PK auto), c_query_text, c_query_id (hash),
+                   c_pubmed_records (CSV of PMIDs), c_num_pubmed_records, c_query_ts.
+    Returns c_query_int_id.
     """
     pmid_csv = ",".join(str(p) for p in pmids)
+    query_hash = hashlib.md5(keywords.encode()).hexdigest()[:8]
     cursor = conn.cursor()
-    # t_pubmed_query schema assumed: id, keywords, pmid_list (TEXT), created_at
+    # Check if this keyword search already exists
     cursor.execute(
-        """
-        INSERT INTO t_pubmed_query (keywords, pmid_list, created_at)
-        VALUES (%s, %s, NOW())
-        ON DUPLICATE KEY UPDATE
-            pmid_list  = VALUES(pmid_list),
-            created_at = NOW()
-        """,
-        (keywords, pmid_csv),
-    )
-    # Retrieve the inserted or updated row id
-    cursor.execute(
-        "SELECT id FROM t_pubmed_query WHERE keywords = %s ORDER BY id DESC LIMIT 1",
+        "SELECT c_query_int_id FROM t_pubmed_query WHERE c_query_text = %s ORDER BY c_query_int_id DESC LIMIT 1",
         (keywords,),
     )
     row = cursor.fetchone()
-    return int(row[0]) if row else 0
+    if row:
+        qid = int(row[0])
+        cursor.execute(
+            "UPDATE t_pubmed_query SET c_pubmed_records = %s, c_num_pubmed_records = %s, c_query_ts = NOW() WHERE c_query_int_id = %s",
+            (pmid_csv, len(pmids), qid),
+        )
+        conn.commit()
+        return qid
+    cursor.execute(
+        """
+        INSERT INTO t_pubmed_query
+            (c_query_text, c_query_id, c_pubmed_records, c_num_pubmed_records, c_query_ts)
+        VALUES (%s, %s, %s, %s, NOW())
+        """,
+        (keywords, query_hash, pmid_csv, len(pmids)),
+    )
+    conn.commit()
+    return cursor.lastrowid
 
 
 def _load_query(conn, query_id: int) -> dict | None:
     """
-    Load a t_pubmed_query row by id.
-    Returns a dict with 'id', 'keywords', 'pmid_list', 'created_at' or None.
+    Load a t_pubmed_query row by c_query_int_id.
+    Returns normalised dict with 'id', 'keywords', 'pmid_list', 'created_at' or None.
     """
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
-        "SELECT id, keywords, pmid_list, created_at FROM t_pubmed_query WHERE id = %s",
+        """SELECT c_query_int_id AS id, c_query_text AS keywords,
+                  c_pubmed_records AS pmid_list, c_query_ts AS created_at
+           FROM t_pubmed_query WHERE c_query_int_id = %s""",
         (query_id,),
     )
     return cursor.fetchone()
@@ -131,7 +142,6 @@ def _is_cache_valid(row: dict) -> bool:
         return False
     if isinstance(created_at, str):
         created_at = datetime.fromisoformat(created_at)
-    # Ensure UTC-aware comparison
     if created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=timezone.utc)
     return datetime.now(tz=timezone.utc) - created_at < timedelta(seconds=_CACHE_TTL_SECONDS)
@@ -199,7 +209,10 @@ def network_search():
             if use_cache:
                 cursor = conn.cursor(dictionary=True)
                 cursor.execute(
-                    "SELECT id, keywords, pmid_list, created_at FROM t_pubmed_query WHERE keywords = %s LIMIT 1",
+                    """SELECT c_query_int_id AS id, c_query_text AS keywords,
+                              c_pubmed_records AS pmid_list, c_query_ts AS created_at
+                       FROM t_pubmed_query WHERE c_query_text = %s
+                       ORDER BY c_query_int_id DESC LIMIT 1""",
                     (keywords,),
                 )
                 cached = cursor.fetchone()

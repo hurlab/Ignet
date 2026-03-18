@@ -57,7 +57,7 @@ def search_genes():
 
     Query params:
       q        - search term (required)
-      species  - optional species filter (maps to tax_id in t_gene_annotation)
+      species  - optional species filter (maps to tax_id in t_gene_info)
       page     - page number (default 1)
       per_page - results per page (default 50, max 200)
     """
@@ -69,79 +69,40 @@ def search_genes():
     page, per_page = _parse_pagination(request.args)
     offset = (page - 1) * per_page
 
-    # Parameterised wildcard for LIKE search
     like_term = f"%{q}%"
-    # Full-text search term (user input passed directly to AGAINST)
-    # Strip characters that break BOOLEAN MODE syntax
-    ft_term = re.sub(r"[+\-><()~*\"@]", " ", q).strip()
 
     try:
         with db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
 
-            # COUNT query - try full-text first, fall back to LIKE
-            try:
-                count_sql = """
-                    SELECT COUNT(*) AS total
-                    FROM t_gene_annotation
-                    WHERE MATCH(symbol, locustag, synonyms, dbxrefs, description)
-                          AGAINST (%s IN BOOLEAN MODE)
-                """
-                count_params = [ft_term + "*"]
-                if species:
-                    count_sql += " AND tax_id = %s"
-                    count_params.append(species)
-                cursor.execute(count_sql, count_params)
-                row = cursor.fetchone()
-                total = int(row["total"]) if row else 0
+            # t_gene_info has columns: GeneID, Symbol, Synonyms, description, tax_id
+            count_sql = """
+                SELECT COUNT(*) AS total
+                FROM t_gene_info
+                WHERE (Symbol LIKE %s OR Synonyms LIKE %s OR description LIKE %s)
+            """
+            count_params = [like_term, like_term, like_term]
+            if species:
+                count_sql += " AND tax_id = %s"
+                count_params.append(species)
+            cursor.execute(count_sql, count_params)
+            row = cursor.fetchone()
+            total = int(row["total"]) if row else 0
 
-                if total == 0:
-                    # Fall back to LIKE for partial symbol matches
-                    raise ValueError("ft_zero")
-            except Exception:
-                count_sql = """
-                    SELECT COUNT(*) AS total
-                    FROM t_gene_annotation
-                    WHERE (symbol LIKE %s OR synonyms LIKE %s OR description LIKE %s)
-                """
-                count_params = [like_term, like_term, like_term]
-                if species:
-                    count_sql += " AND tax_id = %s"
-                    count_params.append(species)
-                cursor.execute(count_sql, count_params)
-                row = cursor.fetchone()
-                total = int(row["total"]) if row else 0
-
-                # Fetch page with LIKE
-                data_sql = """
-                    SELECT *
-                    FROM t_gene_annotation
-                    WHERE (symbol LIKE %s OR synonyms LIKE %s OR description LIKE %s)
-                """
-                data_params = [like_term, like_term, like_term]
-                if species:
-                    data_sql += " AND tax_id = %s"
-                    data_params.append(species)
-                data_sql += " ORDER BY symbol ASC LIMIT %s OFFSET %s"
-                data_params += [per_page, offset]
-                cursor.execute(data_sql, data_params)
-                genes = cursor.fetchall()
-            else:
-                # Fetch page with full-text
-                data_sql = """
-                    SELECT *
-                    FROM t_gene_annotation
-                    WHERE MATCH(symbol, locustag, synonyms, dbxrefs, description)
-                          AGAINST (%s IN BOOLEAN MODE)
-                """
-                data_params = [ft_term + "*"]
-                if species:
-                    data_sql += " AND tax_id = %s"
-                    data_params.append(species)
-                data_sql += " LIMIT %s OFFSET %s"
-                data_params += [per_page, offset]
-                cursor.execute(data_sql, data_params)
-                genes = cursor.fetchall()
+            data_sql = """
+                SELECT GeneID, Symbol, Synonyms, description, tax_id,
+                       type_of_gene, chromosome
+                FROM t_gene_info
+                WHERE (Symbol LIKE %s OR Synonyms LIKE %s OR description LIKE %s)
+            """
+            data_params = [like_term, like_term, like_term]
+            if species:
+                data_sql += " AND tax_id = %s"
+                data_params.append(species)
+            data_sql += " ORDER BY Symbol ASC LIMIT %s OFFSET %s"
+            data_params += [per_page, offset]
+            cursor.execute(data_sql, data_params)
+            genes = cursor.fetchall()
 
     except Exception as exc:
         logger.exception("Error in search_genes: %s", exc)

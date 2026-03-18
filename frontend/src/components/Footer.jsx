@@ -5,7 +5,7 @@ export default function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
           {/* Resources */}
           <div>
-            <h4 className="font-semibold text-gray-700 mb-3 text-xs uppercase tracking-wide">
+            <h4 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">
               Resources
             </h4>
             <ul className="space-y-1">
@@ -22,7 +22,7 @@ export default function Footer() {
                     href={item.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-gray-500 hover:text-navy text-xs transition-colors"
+                    className="text-gray-500 hover:text-navy text-sm transition-colors"
                   >
                     {item.label}
                   </a>
@@ -33,7 +33,7 @@ export default function Footer() {
 
           {/* Legal */}
           <div>
-            <h4 className="font-semibold text-gray-700 mb-3 text-xs uppercase tracking-wide">
+            <h4 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">
               Legal
             </h4>
             <ul className="space-y-1">
@@ -46,7 +46,7 @@ export default function Footer() {
                     href={item.href}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-gray-500 hover:text-navy text-xs transition-colors"
+                    className="text-gray-500 hover:text-navy text-sm transition-colors"
                   >
                     {item.label}
                   </a>
@@ -57,7 +57,7 @@ export default function Footer() {
 
           {/* University logos */}
           <div>
-            <h4 className="font-semibold text-gray-700 mb-3 text-xs uppercase tracking-wide">
+            <h4 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">
               Affiliated Institutions
             </h4>
             <div className="flex items-center gap-5">
@@ -75,7 +75,7 @@ export default function Footer() {
         </div>
 
         <div className="border-t border-gray-200 pt-4">
-          <p className="text-center text-gray-400 text-xs">
+          <p className="text-center text-gray-400 text-sm">
             Copyright &copy; 2016&ndash;2026 Ignet. All rights reserved.
           </p>
         </div>

@@ -49,7 +49,7 @@ export default function Header() {
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors whitespace-nowrap ${
+                `flex items-center gap-1 px-2 py-1 rounded text-sm font-medium transition-colors whitespace-nowrap ${
                   isActive
                     ? 'bg-blue-700 text-white'
                     : 'text-blue-100 hover:bg-blue-800 hover:text-white'
@@ -73,11 +73,11 @@ export default function Header() {
             value={pubmedQuery}
             onChange={(e) => setPubmedQuery(e.target.value)}
             placeholder="PubMed search..."
-            className="bg-blue-800 text-white placeholder-blue-300 text-xs px-2 py-1 rounded border border-blue-600 focus:outline-none focus:border-blue-400 w-36"
+            className="bg-blue-800 text-white placeholder-blue-300 text-sm px-2 py-1 rounded border border-blue-600 focus:outline-none focus:border-blue-400 w-36"
           />
           <button
             type="submit"
-            className="bg-accent hover:bg-orange-500 text-white text-xs font-semibold px-3 py-1 rounded transition-colors"
+            className="bg-accent hover:bg-orange-500 text-white text-sm font-semibold px-3 py-1 rounded transition-colors"
           >
             Go
           </button>
@@ -105,12 +105,12 @@ export default function Header() {
           </a>
           {auth?.user ? (
             <>
-              <span className="text-blue-100 text-xs truncate max-w-[120px]">
+              <span className="text-blue-100 text-sm truncate max-w-[120px]">
                 {auth.user.username ?? auth.user.email}
               </span>
               <button
                 onClick={() => auth.logout()}
-                className="border border-blue-400 text-blue-100 hover:bg-blue-700 hover:text-white text-xs font-medium px-3 py-1 rounded transition-colors"
+                className="border border-blue-400 text-blue-100 hover:bg-blue-700 hover:text-white text-sm font-medium px-3 py-1 rounded transition-colors"
               >
                 Sign Out
               </button>
@@ -118,7 +118,7 @@ export default function Header() {
           ) : (
             <Link
               to="/login"
-              className="border border-blue-400 text-blue-100 hover:bg-blue-700 hover:text-white text-xs font-medium px-3 py-1 rounded transition-colors"
+              className="border border-blue-400 text-blue-100 hover:bg-blue-700 hover:text-white text-sm font-medium px-3 py-1 rounded transition-colors"
             >
               Sign In
             </Link>

@@ -1,11 +1,14 @@
 """
 Gene-related API endpoints.
 
-GET /api/v1/genes/search          - search genes by symbol/name
-GET /api/v1/genes/<symbol>/neighbors - gene interaction neighbors
+GET /api/v1/genes/search              - search genes by symbol/name
+GET /api/v1/genes/autocomplete        - fast prefix search for gene symbols
+GET /api/v1/genes/top                 - top connected genes
+GET /api/v1/genes/<symbol>/neighbors  - gene interaction neighbors
 """
 
 import logging
+import re
 
 from flask import Blueprint, jsonify, request
 
@@ -93,7 +96,7 @@ def search_genes():
         return jsonify({"error": "DatabaseError", "message": "Failed to query genes."}), 500
 
     return jsonify({
-        "genes": genes,
+        "data": genes,
         "total": total,
         "page": page,
         "per_page": per_page,
@@ -155,7 +158,7 @@ def top_genes():
         logger.exception("Error in top_genes: %s", exc)
         return jsonify({"error": "DatabaseError", "message": "Failed to query top genes."}), 500
 
-    result = {"genes": genes, "total": len(genes)}
+    result = {"data": genes, "total": len(genes)}
 
     # Cache for 24 hours
     if redis_client:
@@ -166,6 +169,64 @@ def top_genes():
             pass
 
     return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/genes/autocomplete
+# ---------------------------------------------------------------------------
+
+
+@genes_bp.route("/genes/autocomplete", methods=["GET"])
+def autocomplete_genes():
+    """
+    Fast prefix search on gene symbols.
+
+    Query params:
+      q     - prefix to search (required, min 2 chars)
+      limit - max results to return (default 10, max 20)
+
+    Returns genes whose Symbol starts with the given prefix.
+    """
+    q = request.args.get("q", "").strip()
+    if len(q) < 2:
+        return jsonify({
+            "error": "InvalidInput",
+            "message": "Query parameter 'q' must be at least 2 characters.",
+        }), 400
+
+    # Allow only alphanumeric and a few safe chars for prefix search
+    if not re.match(r"^[A-Za-z0-9._-]{2,60}$", q):
+        return jsonify({
+            "error": "InvalidInput",
+            "message": "Query parameter 'q' contains invalid characters.",
+        }), 400
+
+    try:
+        limit = min(20, max(1, int(request.args.get("limit", 10))))
+    except (ValueError, TypeError):
+        limit = 10
+
+    prefix = f"{q}%"
+
+    try:
+        with db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                "SELECT GeneID, Symbol, description FROM t_gene_info WHERE Symbol LIKE %s LIMIT %s",
+                (prefix, limit),
+            )
+            genes = cursor.fetchall()
+
+    except Exception as exc:
+        logger.exception("Error in autocomplete_genes: %s", exc)
+        return jsonify({"error": "DatabaseError", "message": "Failed to query genes."}), 500
+
+    results = [
+        {"gene_id": row["GeneID"], "symbol": row["Symbol"], "description": row["description"]}
+        for row in genes
+    ]
+
+    return jsonify({"data": results, "total": len(results)})
 
 
 # ---------------------------------------------------------------------------
@@ -285,7 +346,7 @@ def gene_neighbors(symbol: str):
 
     return jsonify({
         "gene": clean_symbol,
-        "neighbors": neighbors,
+        "data": neighbors,
         "total": total,
         "page": page,
         "per_page": per_page,

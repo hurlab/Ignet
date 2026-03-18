@@ -134,10 +134,12 @@ def get_pair_interactions(sym1: str, sym2: str):
         return jsonify({"error": "DatabaseError", "message": "Failed to query gene pair interactions."}), 500
 
     return jsonify({
-        "gene1": clean1,
-        "gene2": clean2,
+        "data": {
+            "gene1": clean1,
+            "gene2": clean2,
+            "page": page,
+            "per_page": per_page,
+        },
         "interactions": interactions,
         "total": total,
-        "page": page,
-        "per_page": per_page,
     })

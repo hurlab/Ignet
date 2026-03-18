@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
@@ -29,7 +29,16 @@ export default function Gene() {
   const [error, setError] = useState(null)
   const [gene, setGene] = useState(null)
   const [neighbors, setNeighbors] = useState([])
+  const [suggestions, setSuggestions] = useState([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const debounceRef = useRef(null)
   const navigate = useNavigate()
+
+  useEffect(() => {
+    function handleClickOutside() { setShowDropdown(false) }
+    document.addEventListener('click', handleClickOutside)
+    return () => document.removeEventListener('click', handleClickOutside)
+  }, [])
 
   // Auto-search if query param provided
   useEffect(() => {
@@ -41,13 +50,33 @@ export default function Gene() {
         api.geneNeighbors(sym)
           .then((data) => {
             setGene(sym)
-            setNeighbors(Array.isArray(data) ? data : (data?.neighbors ?? []))
+            setNeighbors(data?.data ?? (Array.isArray(data) ? data : (data?.neighbors ?? [])))
           })
           .catch((err) => setError(err.message))
           .finally(() => setLoading(false))
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleInputChange(e) {
+    const val = e.target.value
+    setQuery(val)
+
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+
+    if (val.trim().length >= 2) {
+      debounceRef.current = setTimeout(async () => {
+        try {
+          const res = await api.autocompleteGenes(val.trim())
+          setSuggestions(res.data || res || [])
+          setShowDropdown(true)
+        } catch { setSuggestions([]) }
+      }, 300)
+    } else {
+      setSuggestions([])
+      setShowDropdown(false)
+    }
+  }
 
   async function handleSearch(e) {
     e?.preventDefault()
@@ -60,7 +89,7 @@ export default function Gene() {
     try {
       const data = await api.geneNeighbors(sym)
       setGene(sym)
-      setNeighbors(Array.isArray(data) ? data : (data?.neighbors ?? []))
+      setNeighbors(data?.data ?? (Array.isArray(data) ? data : (data?.neighbors ?? [])))
     } catch (err) {
       setError(err.message)
     } finally {
@@ -78,7 +107,7 @@ export default function Gene() {
     api.geneNeighbors(sym)
       .then((data) => {
         setGene(sym)
-        setNeighbors(Array.isArray(data) ? data : (data?.neighbors ?? []))
+        setNeighbors(data?.data ?? (Array.isArray(data) ? data : (data?.neighbors ?? [])))
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))

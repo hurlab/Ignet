@@ -214,12 +214,14 @@ def network_search():
                     pmids = [int(p) for p in cached["pmid_list"].split(",") if p.strip().isdigit()]
                     pairs = _fetch_gene_pairs(conn, pmids)
                     return jsonify({
-                        "query_id": cached["id"],
-                        "keywords": keywords,
-                        "pmid_count": len(pmids),
-                        "gene_pairs": pairs,
-                        "total_pairs": len(pairs),
-                        "cached": True,
+                        "data": {
+                            "query_id": cached["id"],
+                            "keywords": keywords,
+                            "gene_pairs": pairs,
+                            "total_pairs": len(pairs),
+                            "pmid_count": len(pmids),
+                            "cached": True,
+                        }
                     })
 
             # Not cached (or cache bypassed) — call NCBI
@@ -240,12 +242,14 @@ def network_search():
         return jsonify({"error": "DatabaseError", "message": "Failed to query database."}), 500
 
     return jsonify({
-        "query_id": query_id,
-        "keywords": keywords,
-        "pmid_count": len(pmids),
-        "gene_pairs": pairs,
-        "total_pairs": len(pairs),
-        "cached": False,
+        "data": {
+            "query_id": query_id,
+            "keywords": keywords,
+            "gene_pairs": pairs,
+            "total_pairs": len(pairs),
+            "pmid_count": len(pmids),
+            "cached": False,
+        }
     })
 
 

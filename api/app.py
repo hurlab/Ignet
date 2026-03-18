@@ -5,12 +5,23 @@ Flask application factory for the Ignet REST API.
 import logging
 from flask import Flask, jsonify
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 
 def create_app() -> Flask:
     """Create and configure the Flask application."""
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
+
+    # Rate limiting — in-memory storage (resets on restart, fine for single-server)
+    limiter = Limiter(
+        get_remote_address,
+        app=app,
+        default_limits=["60 per minute"],
+        storage_uri="memory://",
+    )
+    app.limiter = limiter
 
     # Enable CORS for all /api/* routes — restricted to known origins
     CORS(app, resources={r"/api/*": {
@@ -36,8 +47,13 @@ def create_app() -> Flask:
     app.register_blueprint(auth_bp, url_prefix="/api/v1")
     app.register_blueprint(admin_bp, url_prefix="/api/v1")
 
-    # Health check
+    # Stricter rate limits on auth endpoints
+    limiter.limit("5 per minute")(app.view_functions["auth.register"])
+    limiter.limit("10 per minute")(app.view_functions["auth.login"])
+
+    # Health check (exempt from rate limiting)
     @app.route("/api/v1/health", methods=["GET"])
+    @limiter.exempt
     def health():
         return jsonify({"status": "ok", "service": "ignet-api"})
 
@@ -61,6 +77,10 @@ def create_app() -> Flask:
         return response
 
     # Error handlers
+    @app.errorhandler(429)
+    def ratelimit_handler(exc):
+        return jsonify({"error": "TooManyRequests", "message": "Rate limit exceeded. Please try again later."}), 429
+
     @app.errorhandler(400)
     def bad_request(exc):
         return jsonify({"error": "BadRequest", "message": str(exc)}), 400

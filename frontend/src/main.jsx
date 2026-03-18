@@ -7,7 +7,7 @@ import { AuthProvider } from './AuthContext.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter basename="/ignet/dist-react">
+    <BrowserRouter basename="/ignet">
       <AuthProvider>
         <App />
       </AuthProvider>

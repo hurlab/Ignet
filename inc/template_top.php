@@ -19,7 +19,7 @@
           <button type="submit" name="submit" value="GO"
                   class="bg-[#ed8936] hover:bg-orange-500 text-white px-3 py-1.5 rounded text-sm font-medium transition">Go</button>
         </form>
-        <a href="/ignet_legacy/" class="text-xs text-blue-300/70 hover:text-blue-100 transition">v1.0</a>
+        <a href="/ignet/" class="text-xs text-emerald-300 hover:text-emerald-100 font-medium transition">v2.0</a>
         <a href="/ignet/login.php" class="text-sm font-medium text-blue-100 hover:text-white border border-blue-300/40 px-3 py-1 rounded transition hover:bg-white/10">Sign In</a>
       </div>
     </div>

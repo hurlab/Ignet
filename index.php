@@ -39,21 +39,20 @@ include('inc/template_top.php');
 <main class="max-w-7xl mx-auto px-4 py-6">
   <!-- InstanceBeginEditable name="Main" -->
 
-    <!-- Under Construction Banner -->
-    <div class="bg-amber-50 border-2 border-dashed border-amber-400 rounded-xl p-6 text-center mb-8 mt-4">
-      <div class="text-6xl mb-3">🚧</div>
-      <h2 class="text-lg font-bold text-amber-800 mb-2">Ignet 2.0 is Under Active Development</h2>
-      <p class="text-amber-700 text-sm max-w-xl mx-auto mb-4">
-        We are rebuilding Ignet with a modern interface, new AI-powered tools, and a REST API.
-        Some features may be incomplete or behave unexpectedly during this transition.
+    <!-- Ignet 2.0 Announcement Banner -->
+    <div class="bg-blue-50 border-2 border-blue-300 rounded-xl p-6 text-center mb-8 mt-4">
+      <div class="text-5xl mb-3">🚀</div>
+      <h2 class="text-lg font-bold text-navy mb-2">Ignet 2.0 is Now Available</h2>
+      <p class="text-gray-600 text-sm max-w-xl mx-auto mb-4">
+        Ignet has been rebuilt with a modern React interface, interactive network visualization,
+        AI-powered gene summaries, CSV export, and a REST API with 19 endpoints.
       </p>
-      <a href="/ignet_legacy/"
-         class="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-6 py-2.5 rounded-lg transition text-sm shadow-sm">
-        <span class="text-lg">📦</span>
-        Go to Previous Version (Ignet 1.0)
+      <a href="/ignet/"
+         class="inline-flex items-center gap-2 bg-navy hover:bg-navy-dark text-white font-semibold px-6 py-2.5 rounded-lg transition text-sm shadow-sm">
+        Go to Ignet 2.0
       </a>
-      <p class="text-amber-600 text-xs mt-3">
-        The previous version remains fully functional at <code class="bg-amber-100 px-1 rounded">/ignet_legacy/</code>
+      <p class="text-gray-400 text-xs mt-3">
+        You are viewing the legacy interface. It remains fully functional.
       </p>
     </div>
 

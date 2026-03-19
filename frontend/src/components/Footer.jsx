@@ -10,12 +10,10 @@ export default function Footer() {
             </h4>
             <ul className="space-y-1">
               {[
-                { label: 'About', href: '/ignet_legacy/about.php' },
-                { label: 'Documents', href: '/ignet_legacy/document.php' },
-                { label: 'Help', href: '/ignet_legacy/help.php' },
-                { label: 'FAQs', href: '/ignet_legacy/faq.php' },
+                { label: 'About', href: '/ignet_legacy/introduction.php' },
+                { label: 'FAQs', href: '/ignet_legacy/faqs.php' },
                 { label: 'Links', href: '/ignet_legacy/links.php' },
-                { label: 'Contact Us', href: '/ignet_legacy/contact.php' },
+                { label: 'Contact Us', href: '/ignet_legacy/contact_us.php' },
                 { label: 'API Docs', href: '/api-docs', internal: true },
               ].map((item) => (
                 <li key={item.label}>
@@ -40,7 +38,7 @@ export default function Footer() {
             <ul className="space-y-1">
               {[
                 { label: 'Disclaimer', href: '/ignet_legacy/disclaimer.php' },
-                { label: 'Acknowledgements', href: '/ignet_legacy/acknowledgement.php' },
+                { label: 'Acknowledgements', href: '/ignet_legacy/acknowledgements.php' },
               ].map((item) => (
                 <li key={item.label}>
                   <a

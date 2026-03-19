@@ -4,15 +4,15 @@ import { useAuth } from '../AuthContext.jsx'
 
 const navLinks = [
   { label: 'Dignet', to: '/dignet' },
-  { label: 'Analyze Text', to: '/analyze', badge: 'NEW' },
   { label: 'Gene', to: '/gene' },
   { label: 'GenePair', to: '/genepair' },
+  { label: 'Enrichment', to: '/enrichment' },
+  { label: 'Compare', to: '/compare' },
   { label: 'BioSummarAI', to: '/biosummarai' },
-  { label: 'Compare', to: '/compare', badge: 'NEW' },
-  { label: 'Explore', to: '/explore', badge: 'NEW' },
-  { label: 'Enrichment', to: '/enrichment', badge: 'NEW' },
-  { label: 'INO', to: '/ino', badge: 'NEW' },
-  { label: 'Assistant', to: '/assistant', badge: 'NEW' },
+  { label: 'Analyze Text', to: '/analyze' },
+  { label: 'Explore', to: '/explore' },
+  { label: 'INO', to: '/ino' },
+  { label: 'Assistant', to: '/assistant' },
 ]
 
 export default function Header() {

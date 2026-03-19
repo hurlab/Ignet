@@ -12,6 +12,7 @@ const navLinks = [
   { label: 'Explore', to: '/explore', badge: 'NEW' },
   { label: 'Enrichment', to: '/enrichment', badge: 'NEW' },
   { label: 'INO', to: '/ino', badge: 'NEW' },
+  { label: 'Assistant', to: '/assistant', badge: 'NEW' },
 ]
 
 export default function Header() {

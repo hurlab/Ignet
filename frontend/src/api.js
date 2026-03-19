@@ -104,6 +104,11 @@ export const api = {
 
   inoTerms: (limit = 50) => request(`/ino/terms?limit=${limit}`),
   inoTermGenes: (term, page = 1) => request(`/ino/terms/${encodeURIComponent(term)}/genes?page=${page}`),
+
+  assistantAsk: (question, history = []) => request('/assistant/ask', {
+    method: 'POST',
+    body: JSON.stringify({ question, conversation_history: history }),
+  }),
 }
 
 export { getToken, setToken, removeToken }

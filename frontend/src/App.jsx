@@ -17,6 +17,7 @@ const ApiDocs = lazy(() => import('./pages/ApiDocs.jsx'))
 const Compare = lazy(() => import('./pages/Compare.jsx'))
 const Enrichment = lazy(() => import('./pages/Enrichment.jsx'))
 const InoExplorer = lazy(() => import('./pages/InoExplorer.jsx'))
+const Assistant = lazy(() => import('./pages/Assistant.jsx'))
 
 function App() {
   return (
@@ -35,6 +36,7 @@ function App() {
             <Route path="compare" element={<Compare />} />
             <Route path="enrichment" element={<Enrichment />} />
             <Route path="ino" element={<InoExplorer />} />
+            <Route path="assistant" element={<Assistant />} />
             <Route path="api-docs" element={<ApiDocs />} />
             <Route path="*" element={<NotFound />} />
           </Route>

@@ -68,7 +68,7 @@ def _ncbi_search_pmids(keywords: str) -> list[int]:
     search_url = (
         f"{_NCBI_BASE}/esearch.fcgi"
         f"?db=pubmed&term={requests.utils.quote(keywords)}"
-        f"&retmax=5000&retmode=json&sort=relevance"
+        f"&retmax=9999&retmode=json&sort=relevance"
     )
     resp = requests.get(search_url, timeout=20)
     resp.raise_for_status()

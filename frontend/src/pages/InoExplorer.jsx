@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 
 function downloadCsv(term, rows) {
@@ -14,6 +15,8 @@ function downloadCsv(term, rows) {
 }
 
 export default function InoExplorer() {
+  const [searchParams] = useSearchParams()
+
   const [terms, setTerms] = useState([])
   const [termsLoading, setTermsLoading] = useState(true)
   const [termsError, setTermsError] = useState(null)
@@ -57,6 +60,15 @@ export default function InoExplorer() {
         setTermLoading(false)
       })
   }, [])
+
+  // Auto-select term from ?term= URL parameter on mount
+  useEffect(() => {
+    const termParam = searchParams.get('term')
+    if (termParam && !selectedTerm) {
+      setSelectedTerm(termParam)
+      loadTermGenes(termParam, 1)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function selectTerm(term) {
     setSelectedTerm(term)

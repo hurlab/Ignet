@@ -41,6 +41,34 @@ const coreTools = [
     icon: '🌐',
     badge: 'NEW',
   },
+  {
+    title: 'Enrichment',
+    description: 'Paste a gene list to analyze pairwise interactions, INO types, and associated drugs and diseases.',
+    to: '/enrichment',
+    icon: '📊',
+    badge: 'NEW',
+  },
+  {
+    title: 'Compare Networks',
+    description: 'Compare two PubMed-driven gene networks side by side with overlap analysis.',
+    to: '/compare',
+    icon: '⚖️',
+    badge: 'NEW',
+  },
+  {
+    title: 'INO Explorer',
+    description: 'Browse 800+ interaction types from the Interaction Network Ontology.',
+    to: '/ino',
+    icon: '🔖',
+    badge: 'NEW',
+  },
+  {
+    title: 'AI Assistant',
+    description: 'Ask questions about gene interactions and get answers grounded in PubMed evidence.',
+    to: '/assistant',
+    icon: '💬',
+    badge: 'NEW',
+  },
 ]
 
 const apiInfo = {

@@ -4,6 +4,7 @@ import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
+import ExportDropdown from '../components/ExportDropdown.jsx'
 
 const LIMIT_OPTIONS = [50, 100, 200, 500]
 
@@ -228,21 +229,10 @@ export default function Dignet() {
 
           {/* Export buttons */}
           <div className="flex flex-wrap gap-2">
-            {result.query_id && (
-              <a
-                href={`/api/v1/dignet/${result.query_id}/export/graphml`}
-                download
-                className="inline-flex items-center gap-1 bg-white border border-gray-300 hover:border-blue-400 text-gray-600 hover:text-blue-600 text-xs font-medium px-3 py-1.5 rounded transition-colors"
-              >
-                Export GraphML
-              </a>
-            )}
-            <button
-              onClick={() => downloadCSV(result.gene_pairs, query)}
-              className="bg-navy hover:bg-navy-dark text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
-            >
-              Download CSV
-            </button>
+            <ExportDropdown>
+              <button onClick={() => downloadCSV(result.gene_pairs, query)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50">CSV</button>
+              <a href={`/api/v1/dignet/${result.query_id || result.data?.query_id}/export/graphml`} download className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50">GraphML</a>
+            </ExportDropdown>
           </div>
 
           {/* Filter controls */}

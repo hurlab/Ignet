@@ -13,6 +13,7 @@ from flask import Blueprint, g, jsonify, request
 
 from config import BIOSUMMARAI_URL, BIOBERT_URL
 from db import db_connection
+from middleware import check_daily_llm_limit, track_llm_usage
 from utils import sanitize_gene_symbol
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,10 @@ def summarize():
 
     The BioSummarAI service performs the actual DB lookup and GPT call.
     """
+    allowed, msg = check_daily_llm_limit()
+    if not allowed:
+        return jsonify({"error": "RateLimited", "message": msg}), 429
+
     body = request.get_json(silent=True)
     if body is None:
         return jsonify({"error": "InvalidJSON", "message": "Request body must be valid JSON."}), 400
@@ -175,11 +180,13 @@ def summarize():
                         }
                         cursor.close()
 
+                track_llm_usage()
                 return jsonify(result), upstream.status_code
         except Exception as ent_exc:
             logger.debug("Entity enrichment failed (non-fatal): %s", ent_exc)
             # Fall through to return the original response
 
+        track_llm_usage()
         return jsonify(upstream.json()), upstream.status_code
 
     except requests.Timeout:
@@ -223,6 +230,10 @@ def chat():
         conversation_history  - list of prior messages (required)
         prompt                - new user message (required)
     """
+    allowed, msg = check_daily_llm_limit()
+    if not allowed:
+        return jsonify({"error": "RateLimited", "message": msg}), 429
+
     body = request.get_json(silent=True)
     if body is None:
         return jsonify({"error": "InvalidJSON", "message": "Request body must be valid JSON."}), 400
@@ -249,6 +260,7 @@ def chat():
             timeout=_LLM_TIMEOUT,
         )
         upstream.raise_for_status()
+        track_llm_usage()
         return jsonify(upstream.json()), upstream.status_code
 
     except requests.Timeout:

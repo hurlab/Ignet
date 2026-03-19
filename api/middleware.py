@@ -92,6 +92,90 @@ def require_admin(f: Callable) -> Callable:
 # ---------------------------------------------------------------------------
 
 
+def check_daily_llm_limit() -> tuple[bool, str]:
+    """
+    Check if the current request is within the daily LLM usage limit.
+
+    Returns (allowed, message):
+      - (True, "") if the request should proceed
+      - (False, "message") if the limit is exceeded
+
+    Rules:
+      - Authenticated users: always allowed (unlimited)
+      - Anonymous users: 3 GPT-4o requests per day per IP
+    """
+    # If user is already set on g (e.g. @require_auth was used), always allow
+    user = getattr(g, "user", None)
+
+    # Try to extract user from a Bearer token even without @require_auth
+    if not user:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer "):
+            payload = decode_jwt(auth_header[len("Bearer "):])
+            if payload:
+                user = {"id": payload["sub"]}
+
+    if user:
+        return True, ""
+
+    # Check anonymous daily usage by IP
+    ip = request.remote_addr or "unknown"
+    try:
+        from db import get_db  # local import to avoid circular deps
+
+        conn = get_db()
+        try:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                """SELECT COUNT(*) AS cnt FROM usage_events
+                   WHERE ip_address = %s
+                   AND event_type = 'llm_request'
+                   AND DATE(created_at) = CURDATE()""",
+                (ip,),
+            )
+            row = cursor.fetchone()
+            count = row["cnt"] if row else 0
+            cursor.close()
+        finally:
+            conn.close()
+
+        if count >= 3:
+            return (
+                False,
+                "Daily limit reached (3 AI requests per day). Sign in for unlimited access.",
+            )
+        return True, ""
+
+    except Exception as exc:
+        logger.debug("LLM limit check failed (allowing): %s", exc)
+        return True, ""  # Fail open
+
+
+def track_llm_usage() -> None:
+    """Record an LLM usage event for rate limiting."""
+    ip = request.remote_addr or "unknown"
+    user = getattr(g, "user", None)
+    user_id = user["id"] if user else None
+    try:
+        from db import get_db  # local import to avoid circular deps
+
+        conn = get_db()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """INSERT INTO usage_events (event_type, endpoint, user_id, ip_address)
+                   VALUES (%s, %s, %s, %s)""",
+                ("llm_request", request.path, user_id, ip),
+            )
+            conn.commit()
+            cursor.close()
+        finally:
+            conn.close()
+
+    except Exception as exc:
+        logger.debug("LLM usage tracking failed: %s", exc)
+
+
 def track_usage(endpoint_name: str, user_id: int | None = None) -> None:
     """
     Insert one row into usage_events.

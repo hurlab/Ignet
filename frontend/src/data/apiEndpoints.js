@@ -2,6 +2,7 @@ export const API_CATEGORIES = [
   { id: 'genes', label: 'Genes', description: 'Gene search, autocomplete, and neighbor interactions' },
   { id: 'pairs', label: 'Gene Pairs', description: 'Pairwise interaction evidence with BioBERT scores' },
   { id: 'dignet', label: 'Dignet', description: 'PubMed-driven network search and visualization' },
+  { id: 'ino', label: 'INO', description: 'Browse Interaction Network Ontology terms' },
   { id: 'llm', label: 'AI / LLM', description: 'BioSummarAI summarization and chat' },
   { id: 'auth', label: 'Authentication', description: 'User registration, login, and API key management' },
   { id: 'admin', label: 'Admin', description: 'Platform statistics (admin only)' },
@@ -99,6 +100,75 @@ export const API_ENDPOINTS = [
     params: [{ name: 'genes', type: 'array', required: true, desc: 'Array of gene symbols' }],
     example: { request: '{"genes": ["TNF", "IL6", "IFNG"]}', response: '{"reply": "Summary text...", "conversation_history": [...], "entities": {"genes": [...], "drugs": [...], "diseases": [...]}}' },
     snippets: { curl: "curl -X POST 'https://ignet.org/api/v1/summarize' -H 'Content-Type: application/json' -d '{\"genes\": [\"TNF\", \"IL6\"]}'", python: "requests.post('https://ignet.org/api/v1/summarize', json={'genes': ['TNF', 'IL6']}).json()", r: 'content(POST("https://ignet.org/api/v1/summarize", body=list(genes=list("TNF", "IL6")), encode="json"))' }
+  },
+  {
+    id: 'genes-report', category: 'genes', method: 'GET', path: '/api/v1/genes/:symbol/report',
+    description: 'Comprehensive gene report card with centrality scores, INO distribution, drug/disease associations.',
+    auth: false,
+    params: [{ name: 'symbol', type: 'path', required: true, desc: 'Gene symbol (e.g., TNF)' }],
+    example: { request: '/api/v1/genes/TNF/report', response: '{"gene_info": {...}, "centrality": {...}, "top_neighbors": [...], "ino_distribution": [...], "drugs": [...], "diseases": [...]}' },
+    snippets: { curl: "curl 'https://ignet.org/api/v1/genes/TNF/report'", python: "requests.get('https://ignet.org/api/v1/genes/TNF/report').json()", r: 'content(GET("https://ignet.org/api/v1/genes/TNF/report"))' }
+  },
+  {
+    id: 'pairs-predict', category: 'pairs', method: 'POST', path: '/api/v1/pairs/:sym1/:sym2/predict',
+    description: 'Run BioBERT prediction on unscored sentences for a gene pair. Stores results in database.',
+    auth: false,
+    params: [
+      { name: 'sym1', type: 'path', required: true, desc: 'First gene symbol' },
+      { name: 'sym2', type: 'path', required: true, desc: 'Second gene symbol' },
+    ],
+    example: { request: '/api/v1/pairs/TNF/IL6/predict', response: '{"scored_count": 50, "avg_confidence": 0.72, "message": "Scored 50 sentences"}' },
+    snippets: { curl: "curl -X POST 'https://ignet.org/api/v1/pairs/TNF/IL6/predict'", python: "requests.post('https://ignet.org/api/v1/pairs/TNF/IL6/predict').json()", r: 'content(POST("https://ignet.org/api/v1/pairs/TNF/IL6/predict"))' }
+  },
+  {
+    id: 'dignet-compare', category: 'dignet', method: 'POST', path: '/api/v1/dignet/compare',
+    description: 'Compare two PubMed-driven gene networks. Returns shared/unique genes and overlap statistics.',
+    auth: false,
+    params: [
+      { name: 'query_a', type: 'string', required: true, desc: 'First PubMed search query' },
+      { name: 'query_b', type: 'string', required: true, desc: 'Second PubMed search query' },
+    ],
+    example: { request: '{"query_a": "vaccine IFNG", "query_b": "cancer IFNG"}', response: '{"shared_genes": [...], "unique_a": [...], "unique_b": [...], "overlap": {"shared": 45, "jaccard": 0.32}}' },
+    snippets: { curl: "curl -X POST 'https://ignet.org/api/v1/dignet/compare' -H 'Content-Type: application/json' -d '{\"query_a\": \"vaccine IFNG\", \"query_b\": \"cancer IFNG\"}'", python: "requests.post('https://ignet.org/api/v1/dignet/compare', json={'query_a': 'vaccine IFNG', 'query_b': 'cancer IFNG'}).json()", r: 'content(POST("https://ignet.org/api/v1/dignet/compare", body=list(query_a="vaccine IFNG", query_b="cancer IFNG"), encode="json"))' }
+  },
+  {
+    id: 'enrichment', category: 'genes', method: 'POST', path: '/api/v1/enrichment/analyze',
+    description: 'Analyze a gene set: find pairwise interactions, INO distribution, drug/disease associations.',
+    auth: false,
+    params: [{ name: 'genes', type: 'array', required: true, desc: 'Array of gene symbols (2-500)' }],
+    example: { request: '{"genes": ["TNF", "IL6", "IFNG", "IL1B"]}', response: '{"coverage": 4, "coverage_pct": 100, "interactions": [...], "ino_distribution": [...], "drugs": [...], "diseases": [...]}' },
+    snippets: { curl: "curl -X POST 'https://ignet.org/api/v1/enrichment/analyze' -H 'Content-Type: application/json' -d '{\"genes\": [\"TNF\", \"IL6\", \"IFNG\"]}'", python: "requests.post('https://ignet.org/api/v1/enrichment/analyze', json={'genes': ['TNF', 'IL6', 'IFNG']}).json()", r: 'content(POST("https://ignet.org/api/v1/enrichment/analyze", body=list(genes=list("TNF", "IL6")), encode="json"))' }
+  },
+  {
+    id: 'ino-terms', category: 'genes', method: 'GET', path: '/api/v1/ino/terms',
+    description: 'List top INO (Interaction Network Ontology) terms with occurrence counts.',
+    auth: false,
+    params: [{ name: 'limit', type: 'int', required: false, desc: 'Number of terms (default 50, max 100)' }],
+    example: { request: '/api/v1/ino/terms?limit=5', response: '{"data": [{"term": "increase", "count": 523000}], "total": 5}' },
+    snippets: { curl: "curl 'https://ignet.org/api/v1/ino/terms?limit=10'", python: "requests.get('https://ignet.org/api/v1/ino/terms', params={'limit': 10}).json()", r: 'content(GET("https://ignet.org/api/v1/ino/terms", query=list(limit=10)))' }
+  },
+  {
+    id: 'ino-term-genes', category: 'genes', method: 'GET', path: '/api/v1/ino/terms/:term/genes',
+    description: 'Get gene pairs associated with a specific INO interaction type.',
+    auth: false,
+    params: [
+      { name: 'term', type: 'path', required: true, desc: 'INO term (e.g., increase, inhibit)' },
+      { name: 'page', type: 'int', required: false, desc: 'Page number' },
+      { name: 'per_page', type: 'int', required: false, desc: 'Results per page (max 200)' },
+    ],
+    example: { request: '/api/v1/ino/terms/increase/genes?per_page=5', response: '{"term": "increase", "data": [{"gene1": "TNF", "gene2": "IL6", "evidence_count": 1234}], "total": 5000}' },
+    snippets: { curl: "curl 'https://ignet.org/api/v1/ino/terms/increase/genes?per_page=5'", python: "requests.get('https://ignet.org/api/v1/ino/terms/increase/genes', params={'per_page': 5}).json()", r: 'content(GET("https://ignet.org/api/v1/ino/terms/increase/genes", query=list(per_page=5)))' }
+  },
+  {
+    id: 'assistant-ask', category: 'llm', method: 'POST', path: '/api/v1/assistant/ask',
+    description: 'Ask a question about gene interactions. RAG-powered: retrieves PubMed evidence and answers with citations.',
+    auth: false,
+    params: [
+      { name: 'question', type: 'string', required: true, desc: 'Natural language question' },
+      { name: 'conversation_history', type: 'array', required: false, desc: 'Previous messages for follow-up' },
+    ],
+    example: { request: '{"question": "What is the role of TNF in vaccine adjuvants?"}', response: '{"answer": "TNF plays...", "cited_pmids": ["12345678"], "evidence_count": 30}' },
+    snippets: { curl: "curl -X POST 'https://ignet.org/api/v1/assistant/ask' -H 'Content-Type: application/json' -d '{\"question\": \"What is the role of TNF in vaccine adjuvants?\"}'", python: "requests.post('https://ignet.org/api/v1/assistant/ask', json={'question': 'What is the role of TNF?'}).json()", r: 'content(POST("https://ignet.org/api/v1/assistant/ask", body=list(question="What is the role of TNF?"), encode="json"))' }
   },
   {
     id: 'auth-register', category: 'auth', method: 'POST', path: '/api/v1/auth/register',

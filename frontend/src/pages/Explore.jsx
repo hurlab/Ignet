@@ -76,9 +76,9 @@ export default function Explore() {
                 const maxCount = inoTerms[0]?.count || 1
                 const relSize = Math.max(0.7, Math.min(1.8, 0.7 + (t.count / maxCount) * 1.1))
                 return (
-                  <a
+                  <Link
                     key={t.term}
-                    href={`/ignet/ino?term=${encodeURIComponent(t.term)}`}
+                    to={`/ino?term=${encodeURIComponent(t.term)}`}
                     style={{ fontSize: `${relSize}rem` }}
                     className="inline-flex items-baseline gap-1 px-2 py-1 rounded-full bg-purple-50 text-purple-800 hover:bg-purple-100 transition-colors"
                   >
@@ -86,7 +86,7 @@ export default function Explore() {
                     <span className="text-purple-400" style={{ fontSize: '0.65rem' }}>
                       {t.count >= 1000 ? `${(t.count / 1000).toFixed(0)}k` : t.count}
                     </span>
-                  </a>
+                  </Link>
                 )
               })}
             </div>
@@ -118,8 +118,12 @@ export default function Explore() {
                         </div>
                       </td>
                       <td className="px-3 py-1.5">
-                        <a href={`/ignet/ino?term=${encodeURIComponent(t.term)}`}
-                           className="text-purple-600 hover:underline text-xs">View</a>
+                        <Link
+                          to={`/ino?term=${encodeURIComponent(t.term)}`}
+                          className="text-purple-600 hover:underline text-xs"
+                        >
+                          View
+                        </Link>
                       </td>
                     </tr>
                   )

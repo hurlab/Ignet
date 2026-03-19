@@ -4,6 +4,7 @@ import re
 from flask import Blueprint, jsonify, request
 from db import db_connection
 from config import BIOSUMMARAI_URL
+from middleware import check_daily_llm_limit, track_llm_usage
 import requests as http_requests
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,10 @@ def _extract_keywords(text):
 
 @assistant_bp.route("/assistant/ask", methods=["POST"])
 def ask():
+    allowed, msg = check_daily_llm_limit()
+    if not allowed:
+        return jsonify({"error": "RateLimited", "message": msg}), 429
+
     body = request.get_json(silent=True)
     if not body or "question" not in body:
         return jsonify({"error": "MissingParameter", "message": "Provide 'question'."}), 400
@@ -130,6 +135,7 @@ Please answer the question based on the evidence above. Cite specific PMIDs for 
     # Build updated conversation history
     new_history = messages + [{"role": "assistant", "content": answer}]
 
+    track_llm_usage()
     return jsonify({
         "answer": answer,
         "cited_pmids": sorted(cited_pmids),

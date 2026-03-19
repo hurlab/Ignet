@@ -31,6 +31,7 @@ export default function GenePair() {
   const [showDropdown2, setShowDropdown2] = useState(false)
   const [predicting, setPredicting] = useState(false)
   const [predictResult, setPredictResult] = useState(null)
+  const [sortBy, setSortBy] = useState('score') // 'score' or 'pmid'
   const debounceRef1 = useRef(null)
   const debounceRef2 = useRef(null)
 
@@ -283,7 +284,12 @@ export default function GenePair() {
             )}
 
             {/* Evidence table */}
-            {pairData.interactions?.length > 0 && (
+            {pairData.interactions?.length > 0 && (() => {
+              const sorted = [...(pairData?.interactions || [])].sort((a, b) => {
+                if (sortBy === 'score') return (b.score ?? -1) - (a.score ?? -1)
+                return (b.PMID ?? 0) - (a.PMID ?? 0)
+              })
+              return (
               <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
                 <div className="flex items-center justify-between mb-2">
                   <div className="text-xs font-medium text-gray-600">Evidence Sentences</div>
@@ -308,6 +314,11 @@ export default function GenePair() {
                     {predictResult.error ? predictResult.error : predictResult.message}
                   </div>
                 )}
+                <div className="flex gap-2 text-xs mb-2">
+                  <span className="text-gray-500">Sort by:</span>
+                  <button onClick={() => setSortBy('score')} className={sortBy === 'score' ? 'font-bold text-navy' : 'text-gray-400'}>Confidence</button>
+                  <button onClick={() => setSortBy('pmid')} className={sortBy === 'pmid' ? 'font-bold text-navy' : 'text-gray-400'}>PMID</button>
+                </div>
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-gray-500 border-b">
@@ -318,7 +329,7 @@ export default function GenePair() {
                     </tr>
                   </thead>
                   <tbody>
-                    {pairData.interactions.slice(0, 20).map((row, i) => (
+                    {sorted.slice(0, 20).map((row, i) => (
                       <tr key={i} className="border-b border-gray-50">
                         <td className="py-1 pr-2 font-mono whitespace-nowrap">
                           {typeof row.score === 'number' ? (
@@ -360,7 +371,8 @@ export default function GenePair() {
                   <div className="text-xs text-gray-400 mt-2">Showing 20 of {pairData.total} results</div>
                 )}
               </div>
-            )}
+              )
+            })()}
           </div>
         )
       })()}

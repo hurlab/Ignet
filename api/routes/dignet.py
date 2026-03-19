@@ -32,7 +32,7 @@ dignet_bp = Blueprint("dignet", __name__)
 # NCBI eUtils base URL
 _NCBI_BASE = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
 # Maximum PMIDs to retrieve from NCBI per query
-_NCBI_MAX_PMIDS = 1000
+_NCBI_MAX_PMIDS = 9999
 # Rate limit: NCBI allows 3 req/s without API key
 _NCBI_SLEEP = 0.34
 # Cache TTL: 7 days in seconds

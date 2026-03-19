@@ -102,6 +102,7 @@ export default function Dignet() {
   const [entitiesLoading, setEntitiesLoading] = useState(false)
   const [activeHighlight, setActiveHighlight] = useState(null)
   const didAutoSearch = useRef(false)
+  const abortRef = useRef(null)
 
   useEffect(() => {
     api.dignetYearRange().then((data) => {
@@ -116,6 +117,12 @@ export default function Dignet() {
   const runSearch = useCallback(async (searchQuery, searchLimit, filters) => {
     const q = (searchQuery ?? query).trim()
     if (!q) return
+
+    // Cancel any in-flight request
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setLoading(true)
     setError(null)
     setResult(null)
@@ -125,6 +132,7 @@ export default function Dignet() {
     try {
       const activeFilters = filters ?? { ino_type: inoFilter, has_vaccine: vaccineOnly }
       const raw = await api.dignetSearch(q, searchLimit ?? limit, activeFilters)
+      if (controller.signal.aborted) return // stale result
       const data = raw?.data ?? raw
       setResult(data)
 
@@ -142,6 +150,7 @@ export default function Dignet() {
           .finally(() => setEntitiesLoading(false))
       }
     } catch (err) {
+      if (controller.signal.aborted || err.name === 'AbortError') return
       setError(err.message)
     } finally {
       setLoading(false)

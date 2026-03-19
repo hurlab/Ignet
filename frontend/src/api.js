@@ -60,17 +60,21 @@ export const api = {
   genePair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}?include_summary=true`),
   predictPair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}/predict`, { method: 'POST' }),
 
-  // filters: { ino_type?: string, has_vaccine?: boolean }
+  // filters: { ino_type?: string, has_vaccine?: boolean, year_min?: number, year_max?: number }
   dignetSearch: (keywords, limit, filters = {}) => {
     const params = new URLSearchParams()
     if (filters.ino_type) params.set('ino_type', filters.ino_type)
     if (filters.has_vaccine) params.set('has_vaccine', 'true')
+    if (filters.year_min != null) params.set('year_min', String(filters.year_min))
+    if (filters.year_max != null) params.set('year_max', String(filters.year_max))
     const qs = params.toString()
     return request(`/dignet/search${qs ? `?${qs}` : ''}`, {
       method: 'POST',
       body: JSON.stringify({ keywords }),
     })
   },
+
+  dignetYearRange: () => request('/dignet/year-range'),
 
   dignetCompare: (queryA, queryB) =>
     request('/dignet/compare', {

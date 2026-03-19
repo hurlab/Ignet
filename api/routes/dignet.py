@@ -148,6 +148,8 @@ def _fetch_gene_pairs(
     conn,
     pmids: list[int],
     has_vaccine: bool | None = None,
+    year_min: int | None = None,
+    year_max: int | None = None,
 ) -> list[dict]:
     """
     Query t_sentence_hit_gene2gene_Host for gene pairs matching the given PMIDs.
@@ -159,6 +161,8 @@ def _fetch_gene_pairs(
         has_vaccine: When True, restrict to rows where hasVaccine = 1.
                      When False, restrict to rows where hasVaccine = 0.
                      When None (default), no filter is applied.
+        year_min: When set, restrict to PMIDs with pub_year >= year_min.
+        year_max: When set, restrict to PMIDs with pub_year <= year_max.
     """
     if not pmids:
         return []
@@ -169,21 +173,46 @@ def _fetch_gene_pairs(
     elif has_vaccine is False:
         vaccine_clause = " AND hasVaccine = 0"
 
+    use_year_filter = year_min is not None or year_max is not None
+
     pairs: list[dict] = []
     for i in range(0, len(pmids), _PMID_CHUNK):
         chunk = pmids[i : i + _PMID_CHUNK]
         placeholders = ",".join(["%s"] * len(chunk))
-        sql = f"""
-            SELECT geneSymbol1  AS gene1,
-                   geneSymbol2  AS gene2,
-                   score,
-                   PMID         AS pmid,
-                   sentenceID   AS sentenceID
-            FROM t_sentence_hit_gene2gene_Host
-            WHERE PMID IN ({placeholders}){vaccine_clause}
-        """
+        params: list = list(chunk)
+
+        if use_year_filter:
+            year_clause = ""
+            if year_min is not None:
+                year_clause += " AND py.pub_year >= %s"
+                params.append(year_min)
+            if year_max is not None:
+                year_clause += " AND py.pub_year <= %s"
+                params.append(year_max)
+            sql = f"""
+                SELECT h.geneSymbol1  AS gene1,
+                       h.geneSymbol2  AS gene2,
+                       h.score,
+                       h.PMID         AS pmid,
+                       h.sentenceID   AS sentenceID,
+                       py.pub_year
+                FROM t_sentence_hit_gene2gene_Host h
+                JOIN t_pmid_year py ON py.PMID = h.PMID
+                WHERE h.PMID IN ({placeholders}){vaccine_clause}{year_clause}
+            """
+        else:
+            sql = f"""
+                SELECT geneSymbol1  AS gene1,
+                       geneSymbol2  AS gene2,
+                       score,
+                       PMID         AS pmid,
+                       sentenceID   AS sentenceID
+                FROM t_sentence_hit_gene2gene_Host
+                WHERE PMID IN ({placeholders}){vaccine_clause}
+            """
+
         cursor = conn.cursor(dictionary=True)
-        cursor.execute(sql, chunk)
+        cursor.execute(sql, params)
         pairs.extend(cursor.fetchall())
 
     return pairs
@@ -253,6 +282,28 @@ def _build_centrality_map(
         )
 
     return centrality_map
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/dignet/year-range
+# ---------------------------------------------------------------------------
+
+
+@dignet_bp.route("/dignet/year-range", methods=["GET"])
+def year_range():
+    """Return min and max publication year from t_pmid_year."""
+    try:
+        with db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                "SELECT MIN(pub_year) AS min_year, MAX(pub_year) AS max_year FROM t_pmid_year WHERE pub_year > 1970"
+            )
+            row = cursor.fetchone()
+            cursor.close()
+    except Exception as exc:
+        logger.exception("Error in year_range: %s", exc)
+        return jsonify({"error": "DatabaseError"}), 500
+    return jsonify(row)
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +420,11 @@ def network_graph(query_id: int):
 
     ino_type_filter: str | None = request.args.get("ino_type")
 
+    year_min_param = request.args.get("year_min")
+    year_max_param = request.args.get("year_max")
+    year_min = int(year_min_param) if year_min_param else None
+    year_max = int(year_max_param) if year_max_param else None
+
     try:
         with db_connection() as conn:
             row = _load_query(conn, query_id)
@@ -376,7 +432,7 @@ def network_graph(query_id: int):
                 return jsonify({"error": "NotFound", "message": f"query_id {query_id} not found."}), 404
 
             pmids = [int(p) for p in row["pmid_list"].split(",") if p.strip().isdigit()]
-            pairs = _fetch_gene_pairs(conn, pmids, has_vaccine=has_vaccine)
+            pairs = _fetch_gene_pairs(conn, pmids, has_vaccine=has_vaccine, year_min=year_min, year_max=year_max)
 
             # Batch-fetch INO categories for all sentence IDs
             sentence_ids = [
@@ -423,16 +479,17 @@ def network_graph(query_id: int):
 
         unique_genes.add(g1)
         unique_genes.add(g2)
-        edges.append({
-            "data": {
-                "source": g1,
-                "target": g2,
-                "score": pair.get("score"),
-                "pmid": pair.get("pmid"),
-                "ino_category": ino_category,
-                "ino_color": INO_COLORS.get(ino_category, INO_COLORS["unknown"]),
-            }
-        })
+        edge_data = {
+            "source": g1,
+            "target": g2,
+            "score": pair.get("score"),
+            "pmid": pair.get("pmid"),
+            "ino_category": ino_category,
+            "ino_color": INO_COLORS.get(ino_category, INO_COLORS["unknown"]),
+        }
+        if pair.get("pub_year") is not None:
+            edge_data["pub_year"] = int(pair["pub_year"])
+        edges.append({"data": edge_data})
 
     # Build nodes with centrality data
     nodes: list[dict] = []

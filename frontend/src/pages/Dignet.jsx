@@ -90,11 +90,24 @@ export default function Dignet() {
   const [limit, setLimit] = useState(100)
   const [inoFilter, setInoFilter] = useState('')
   const [vaccineOnly, setVaccineOnly] = useState(false)
+  const [yearMin, setYearMin] = useState(1975)
+  const [yearMax, setYearMax] = useState(2026)
+  const [yearRange, setYearRange] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [selectedNode, setSelectedNode] = useState(null)
   const didAutoSearch = useRef(false)
+
+  useEffect(() => {
+    api.dignetYearRange().then((data) => {
+      if (data?.min_year != null && data?.max_year != null) {
+        setYearRange(data)
+        setYearMin(data.min_year)
+        setYearMax(data.max_year)
+      }
+    }).catch(() => {})
+  }, [])
 
   const runSearch = useCallback(async (searchQuery, searchLimit, filters) => {
     const q = (searchQuery ?? query).trim()
@@ -258,6 +271,22 @@ export default function Dignet() {
               />
               Vaccine only
             </label>
+            {yearRange && (
+              <div className="flex items-center gap-2">
+                <label className="text-xs text-gray-500">Years:</label>
+                <input type="number" value={yearMin} onChange={e => setYearMin(+e.target.value)}
+                  min={yearRange.min_year} max={yearRange.max_year}
+                  className="w-16 text-xs border border-gray-300 rounded px-1 py-1 text-center" />
+                <span className="text-xs text-gray-400">&mdash;</span>
+                <input type="number" value={yearMax} onChange={e => setYearMax(+e.target.value)}
+                  min={yearRange.min_year} max={yearRange.max_year}
+                  className="w-16 text-xs border border-gray-300 rounded px-1 py-1 text-center" />
+                <button onClick={() => runSearch(query, limit, { ino_type: inoFilter, has_vaccine: vaccineOnly, year_min: yearMin, year_max: yearMax })}
+                  className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded">
+                  Apply
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex gap-4 flex-wrap lg:flex-nowrap">

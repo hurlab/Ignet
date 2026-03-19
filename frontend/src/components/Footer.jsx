@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom'
+
 export default function Footer() {
   return (
     <footer className="bg-gray-100 border-t border-gray-200 mt-auto">
@@ -10,21 +12,19 @@ export default function Footer() {
             </h4>
             <ul className="space-y-1">
               {[
-                { label: 'About', href: '/ignet_legacy/introduction.php' },
-                { label: 'FAQs', href: '/ignet_legacy/faqs.php' },
-                { label: 'Links', href: '/ignet_legacy/links.php' },
-                { label: 'Contact Us', href: '/ignet_legacy/contact_us.php' },
-                { label: 'API Docs', href: '/api-docs', internal: true },
+                { label: 'About', to: '/about' },
+                { label: 'FAQs', to: '/faqs' },
+                { label: 'Links', to: '/links' },
+                { label: 'Contact Us', to: '/contact' },
+                { label: 'API Docs', to: '/api-docs' },
               ].map((item) => (
                 <li key={item.label}>
-                  <a
-                    href={item.href}
-                    target={item.internal ? undefined : '_blank'}
-                    rel={item.internal ? undefined : 'noopener noreferrer'}
+                  <Link
+                    to={item.to}
                     className="text-gray-500 hover:text-navy text-sm transition-colors"
                   >
                     {item.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -37,18 +37,16 @@ export default function Footer() {
             </h4>
             <ul className="space-y-1">
               {[
-                { label: 'Disclaimer', href: '/ignet_legacy/disclaimer.php' },
-                { label: 'Acknowledgements', href: '/ignet_legacy/acknowledgements.php' },
+                { label: 'Disclaimer', to: '/disclaimer' },
+                { label: 'Acknowledgements', to: '/acknowledgements' },
               ].map((item) => (
                 <li key={item.label}>
-                  <a
-                    href={item.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <Link
+                    to={item.to}
                     className="text-gray-500 hover:text-navy text-sm transition-colors"
                   >
                     {item.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>

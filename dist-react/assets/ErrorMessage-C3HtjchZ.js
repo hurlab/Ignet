@@ -1,0 +1,1 @@
+import{t as e}from"./jsx-runtime-DAs1UGHr.js";var t=e();function n({message:e}){return e?(0,t.jsx)(`div`,{className:`bg-red-50 border border-red-200 text-red-700 rounded-md px-4 py-3 text-sm`,children:e}):null}export{n as t};

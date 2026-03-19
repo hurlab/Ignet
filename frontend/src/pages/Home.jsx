@@ -121,7 +121,7 @@ export default function Home() {
       {/* Hero */}
       <section className="text-center py-10 space-y-4">
         <h1 className="text-3xl md:text-4xl font-bold text-navy leading-tight">
-          Integrative Gene Interaction Network
+          Integrative Gene Network
         </h1>
         <p className="text-gray-500 max-w-2xl mx-auto text-sm">
           Discover gene co-occurrence and interaction networks from PubMed biomedical literature

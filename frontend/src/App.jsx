@@ -18,6 +18,12 @@ const Compare = lazy(() => import('./pages/Compare.jsx'))
 const Enrichment = lazy(() => import('./pages/Enrichment.jsx'))
 const InoExplorer = lazy(() => import('./pages/InoExplorer.jsx'))
 const Assistant = lazy(() => import('./pages/Assistant.jsx'))
+const About = lazy(() => import('./pages/About.jsx'))
+const Faqs = lazy(() => import('./pages/Faqs.jsx'))
+const Contact = lazy(() => import('./pages/Contact.jsx'))
+const Links = lazy(() => import('./pages/Links.jsx'))
+const Disclaimer = lazy(() => import('./pages/Disclaimer.jsx'))
+const Acknowledgements = lazy(() => import('./pages/Acknowledgements.jsx'))
 
 function App() {
   return (
@@ -38,6 +44,12 @@ function App() {
             <Route path="ino" element={<InoExplorer />} />
             <Route path="assistant" element={<Assistant />} />
             <Route path="api-docs" element={<ApiDocs />} />
+            <Route path="about" element={<About />} />
+            <Route path="faqs" element={<Faqs />} />
+            <Route path="contact" element={<Contact />} />
+            <Route path="links" element={<Links />} />
+            <Route path="disclaimer" element={<Disclaimer />} />
+            <Route path="acknowledgements" element={<Acknowledgements />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

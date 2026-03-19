@@ -5,6 +5,7 @@ import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
 import ExportDropdown from '../components/ExportDropdown.jsx'
+import EntitySidebar from '../components/EntitySidebar.jsx'
 
 const LIMIT_OPTIONS = [50, 100, 200, 500]
 
@@ -97,6 +98,9 @@ export default function Dignet() {
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [selectedNode, setSelectedNode] = useState(null)
+  const [entities, setEntities] = useState(null)
+  const [entitiesLoading, setEntitiesLoading] = useState(false)
+  const [activeHighlight, setActiveHighlight] = useState(null)
   const didAutoSearch = useRef(false)
 
   useEffect(() => {
@@ -116,11 +120,27 @@ export default function Dignet() {
     setError(null)
     setResult(null)
     setSelectedNode(null)
+    setEntities(null)
+    setActiveHighlight(null)
     try {
       const activeFilters = filters ?? { ino_type: inoFilter, has_vaccine: vaccineOnly }
       const raw = await api.dignetSearch(q, searchLimit ?? limit, activeFilters)
       const data = raw?.data ?? raw
       setResult(data)
+
+      // Non-blocking entity enrichment fetch
+      const genes = [...new Set([
+        ...(data.gene_pairs || []).map(p => p.gene1),
+        ...(data.gene_pairs || []).map(p => p.gene2),
+      ].filter(Boolean))]
+
+      if (genes.length >= 2) {
+        setEntitiesLoading(true)
+        api.enrichment(genes.slice(0, 200))
+          .then(setEntities)
+          .catch(() => setEntities(null))
+          .finally(() => setEntitiesLoading(false))
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -305,20 +325,35 @@ export default function Dignet() {
               </div>
             </div>
 
-            {/* Node info panel */}
-            <div className="w-full lg:w-64 flex-shrink-0">
-              <div className="bg-white border border-gray-200 rounded-lg p-4 h-full">
+            {/* Right sidebar */}
+            <div className="w-full lg:w-72 flex-shrink-0">
+              <div className="bg-white border border-gray-200 rounded-lg p-3 h-full overflow-y-auto max-h-[550px]">
                 {selectedNode ? (
                   <div className="space-y-3">
+                    <button
+                      onClick={() => setSelectedNode(null)}
+                      className="text-[10px] text-gray-400 hover:text-gray-600 underline"
+                    >
+                      Back to overview
+                    </button>
                     <h3 className="font-semibold text-navy text-sm">{selectedNode.label}</h3>
-                    <div className="text-xs text-gray-500">Connections: {selectedNode.degree}</div>
+                    <a
+                      href={`/ignet/gene?q=${encodeURIComponent(selectedNode.label)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-block text-xs bg-navy text-white px-2 py-0.5 rounded hover:bg-navy-dark transition-colors mt-1"
+                    >
+                      Open Report Card
+                    </a>
+                    <div className="text-xs text-gray-500 mt-1">Connections: {selectedNode.degree}</div>
                     {selectedNode.neighbors?.length > 0 && (
                       <div>
                         <div className="text-xs font-medium text-gray-600 mb-1">Top Neighbors</div>
                         <ul className="space-y-0.5">
                           {selectedNode.neighbors.slice(0, 10).map((n) => (
-                            <li key={n} className="text-xs text-blue-600 hover:underline cursor-pointer">
-                              {n}
+                            <li key={n}>
+                              <a href={`/ignet/gene?q=${encodeURIComponent(n)}`} target="_blank" rel="noopener noreferrer"
+                                className="text-xs text-blue-600 hover:underline cursor-pointer">{n}</a>
                             </li>
                           ))}
                         </ul>
@@ -326,9 +361,13 @@ export default function Dignet() {
                     )}
                   </div>
                 ) : (
-                  <div className="text-gray-400 text-xs text-center pt-8">
-                    Select a node to view gene details
-                  </div>
+                  <EntitySidebar
+                    entities={entities}
+                    loading={entitiesLoading}
+                    activeHighlight={activeHighlight}
+                    onHighlight={(type, term) => setActiveHighlight(activeHighlight === term ? null : term)}
+                    onClearHighlight={() => setActiveHighlight(null)}
+                  />
                 )}
               </div>
             </div>

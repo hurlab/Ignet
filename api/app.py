@@ -38,6 +38,8 @@ def create_app() -> Flask:
     from routes.llm import llm_bp
     from routes.auth import auth_bp
     from routes.admin import admin_bp
+    from routes.enrichment import enrichment_bp
+    from routes.ino import ino_bp
 
     app.register_blueprint(genes_bp, url_prefix="/api/v1")
     app.register_blueprint(pairs_bp, url_prefix="/api/v1")
@@ -46,6 +48,8 @@ def create_app() -> Flask:
     app.register_blueprint(llm_bp, url_prefix="/api/v1")
     app.register_blueprint(auth_bp, url_prefix="/api/v1")
     app.register_blueprint(admin_bp, url_prefix="/api/v1")
+    app.register_blueprint(enrichment_bp, url_prefix="/api/v1")
+    app.register_blueprint(ino_bp, url_prefix="/api/v1")
 
     # Stricter rate limits on auth endpoints
     limiter.limit("5 per minute")(app.view_functions["auth.register"])

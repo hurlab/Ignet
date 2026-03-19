@@ -551,3 +551,122 @@ def network_export_graphml(query_id: int):
             "Content-Type": "application/xml; charset=utf-8",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/dignet/compare
+# ---------------------------------------------------------------------------
+
+
+def _run_search(conn, keywords: str) -> tuple[list[int], list[dict]]:
+    """
+    Run a PubMed search for *keywords* with caching, returning (pmids, pairs).
+    Reuses the same cache / NCBI logic as :func:`network_search`.
+    """
+    # Check cache first
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute(
+        """SELECT c_query_int_id AS id, c_query_text AS keywords,
+                  c_pubmed_records AS pmid_list, c_query_ts AS created_at
+           FROM t_pubmed_query WHERE c_query_text = %s
+           ORDER BY c_query_int_id DESC LIMIT 1""",
+        (keywords,),
+    )
+    cached = cursor.fetchone()
+    if cached and _is_cache_valid(cached):
+        pmids = [int(p) for p in cached["pmid_list"].split(",") if p.strip().isdigit()]
+        pairs = _fetch_gene_pairs(conn, pmids)
+        return pmids, pairs
+
+    # Not cached -- call NCBI
+    pmids = _ncbi_search_pmids(keywords)
+    _upsert_query(conn, keywords, pmids)
+    pairs = _fetch_gene_pairs(conn, pmids)
+    return pmids, pairs
+
+
+@dignet_bp.route("/dignet/compare", methods=["POST"])
+def compare_networks():
+    """Compare two Dignet query results side by side."""
+    body = request.get_json(silent=True)
+    if not body:
+        return jsonify({"error": "InvalidJSON"}), 400
+
+    query_a = _sanitize_keywords(body.get("query_a") or "")
+    query_b = _sanitize_keywords(body.get("query_b") or "")
+    if not query_a or not query_b:
+        return (
+            jsonify(
+                {
+                    "error": "MissingParameter",
+                    "message": "Provide query_a and query_b.",
+                }
+            ),
+            400,
+        )
+
+    try:
+        with db_connection() as conn:
+            pmids_a, pairs_a = _run_search(conn, query_a)
+            pmids_b, pairs_b = _run_search(conn, query_b)
+    except requests.Timeout:
+        return (
+            jsonify(
+                {"error": "NCBITimeout", "message": "NCBI request timed out. Try again later."}
+            ),
+            502,
+        )
+    except requests.RequestException as exc:
+        logger.error("NCBI request failed during compare: %s", exc)
+        return (
+            jsonify({"error": "NCBIError", "message": "Failed to contact NCBI eUtils."}),
+            502,
+        )
+    except Exception as exc:
+        logger.exception("Error in compare_networks: %s", exc)
+        return jsonify({"error": "DatabaseError"}), 500
+
+    def _extract_genes(pairs: list[dict]) -> set[str]:
+        genes: set[str] = set()
+        for p in pairs:
+            g1 = sanitize_gene_symbol(str(p.get("gene1", "")))
+            g2 = sanitize_gene_symbol(str(p.get("gene2", "")))
+            if g1:
+                genes.add(g1)
+            if g2:
+                genes.add(g2)
+        return genes
+
+    genes_a = _extract_genes(pairs_a)
+    genes_b = _extract_genes(pairs_b)
+
+    shared = genes_a & genes_b
+    unique_a = genes_a - genes_b
+    unique_b = genes_b - genes_a
+    union = genes_a | genes_b
+
+    return jsonify(
+        {
+            "query_a": {
+                "keywords": query_a,
+                "gene_count": len(genes_a),
+                "pair_count": len(pairs_a),
+                "pmid_count": len(pmids_a),
+            },
+            "query_b": {
+                "keywords": query_b,
+                "gene_count": len(genes_b),
+                "pair_count": len(pairs_b),
+                "pmid_count": len(pmids_b),
+            },
+            "shared_genes": sorted(shared),
+            "unique_a": sorted(unique_a),
+            "unique_b": sorted(unique_b),
+            "overlap": {
+                "shared": len(shared),
+                "unique_a": len(unique_a),
+                "unique_b": len(unique_b),
+                "jaccard": round(len(shared) / len(union), 4) if union else 0,
+            },
+        }
+    )

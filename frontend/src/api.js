@@ -72,6 +72,14 @@ export const api = {
     })
   },
 
+  dignetCompare: (queryA, queryB) =>
+    request('/dignet/compare', {
+      method: 'POST',
+      body: JSON.stringify({ query_a: queryA, query_b: queryB }),
+    }),
+
+  enrichment: (genes) => request('/enrichment/analyze', { method: 'POST', body: JSON.stringify({ genes }) }),
+
   summarize: (genes) => request('/summarize', {
     method: 'POST',
     body: JSON.stringify({ genes }),
@@ -93,6 +101,9 @@ export const api = {
   }),
 
   profile: () => request('/user/profile'),
+
+  inoTerms: (limit = 50) => request(`/ino/terms?limit=${limit}`),
+  inoTermGenes: (term, page = 1) => request(`/ino/terms/${encodeURIComponent(term)}/genes?page=${page}`),
 }
 
 export { getToken, setToken, removeToken }

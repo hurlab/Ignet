@@ -8,7 +8,10 @@ const navLinks = [
   { label: 'Gene', to: '/gene' },
   { label: 'GenePair', to: '/genepair' },
   { label: 'BioSummarAI', to: '/biosummarai' },
+  { label: 'Compare', to: '/compare', badge: 'NEW' },
   { label: 'Explore', to: '/explore', badge: 'NEW' },
+  { label: 'Enrichment', to: '/enrichment', badge: 'NEW' },
+  { label: 'INO', to: '/ino', badge: 'NEW' },
 ]
 
 export default function Header() {

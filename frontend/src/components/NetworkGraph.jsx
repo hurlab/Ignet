@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import CytoscapeComponent from 'react-cytoscapejs'
 
 const stylesheet = [
@@ -14,17 +14,12 @@ const stylesheet = [
       'text-outline-color': '#ffffff',
       'text-outline-width': 2,
       'min-zoomed-font-size': 8,
-      'background-color': '#2b6cb0',
+      // Node color mapped by degree centrality: light blue (low) to dark navy (high)
+      'background-color': 'mapData(centrality_d, 0, 1, #93c5fd, #1e3a5f)',
       width: 'mapData(degree, 1, 20, 20, 50)',
       height: 'mapData(degree, 1, 20, 20, 50)',
       'border-width': 2,
       'border-color': '#1a365d',
-    },
-  },
-  {
-    selector: 'node[?highDegree]',
-    style: {
-      'background-color': '#1a365d',
     },
   },
   {
@@ -37,8 +32,10 @@ const stylesheet = [
   {
     selector: 'edge',
     style: {
+      // Edge color driven by INO category color from backend
+      'line-color': 'data(ino_color)',
+      'target-arrow-color': 'data(ino_color)',
       width: 'mapData(weight, 1, 50, 1, 4)',
-      'line-color': '#a0aec0',
       opacity: 0.7,
       'curve-style': 'bezier',
     },
@@ -47,6 +44,7 @@ const stylesheet = [
     selector: 'edge:selected',
     style: {
       'line-color': '#ed8936',
+      'target-arrow-color': '#ed8936',
       opacity: 1,
     },
   },
@@ -63,10 +61,23 @@ const layout = {
 
 export default function NetworkGraph({ elements, onNodeClick }) {
   const [cy, setCy] = useState(null)
+  const [tooltip, setTooltip] = useState(null)
+  const cyRef = useRef(null)
+
+  function exportPNG() {
+    if (!cyRef.current) return
+    const dataUrl = cyRef.current.png({ bg: '#ffffff', full: true, scale: 2 })
+    const a = document.createElement('a')
+    a.href = dataUrl
+    a.download = 'ignet-network.png'
+    a.click()
+  }
 
   const handleCy = useCallback(
     (cyInstance) => {
       setCy(cyInstance)
+      cyRef.current = cyInstance
+
       cyInstance.on('tap', 'node', (evt) => {
         const node = evt.target
         if (onNodeClick) {
@@ -77,6 +88,18 @@ export default function NetworkGraph({ elements, onNodeClick }) {
             neighbors: node.neighborhood('node').map((n) => n.data('label')),
           })
         }
+      })
+
+      // Show INO category tooltip on edge hover
+      cyInstance.on('mouseover', 'edge', (evt) => {
+        const edge = evt.target
+        const cat = edge.data('ino_category') || 'unknown'
+        const renderedPos = evt.renderedPosition
+        setTooltip({ x: renderedPos.x, y: renderedPos.y, label: cat.replace(/_/g, ' ') })
+      })
+
+      cyInstance.on('mouseout', 'edge', () => {
+        setTooltip(null)
       })
     },
     [onNodeClick],
@@ -99,6 +122,22 @@ export default function NetworkGraph({ elements, onNodeClick }) {
         style={{ width: '100%', height: '500px' }}
         cy={handleCy}
       />
+      {tooltip && (
+        <div
+          className="absolute z-10 bg-gray-800 text-white text-xs px-2 py-1 rounded pointer-events-none capitalize"
+          style={{ left: tooltip.x + 8, top: tooltip.y - 24 }}
+        >
+          {tooltip.label}
+        </div>
+      )}
+      <div className="flex gap-2 p-2 border-t border-gray-100">
+        <button
+          onClick={exportPNG}
+          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors"
+        >
+          Export PNG
+        </button>
+      </div>
     </div>
   )
 }

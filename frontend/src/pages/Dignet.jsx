@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
@@ -9,12 +9,13 @@ const LIMIT_OPTIONS = [50, 100, 200, 500]
 
 function downloadCSV(pairs, query) {
   if (!pairs?.length) return
-  const header = 'Gene1,Gene2,Score,PMID,Sentence\n'
+  const comment = `# Ignet Dignet Network for "${query}" - https://ignet.org/ignet/dignet\n`
+  const header = 'Gene1,Gene2,Score,PMID,Sentence,INO_Category\n'
   const rows = pairs.map(p =>
     [p.geneSymbol1 || p.gene1, p.geneSymbol2 || p.gene2, p.score || '', p.PMID || p.pmid || '',
-     `"${(p.sentence || '').replace(/"/g, '""')}"`].join(',')
+     `"${(p.sentence || '').replace(/"/g, '""')}"`, p.ino_category || ''].join(',')
   ).join('\n')
-  const blob = new Blob([header + rows], { type: 'text/csv' })
+  const blob = new Blob([comment + header + rows], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
@@ -24,6 +25,9 @@ function downloadCSV(pairs, query) {
 }
 
 const MAX_GRAPH_EDGES = 500
+
+// INO category fallback color for edges that have no ino_color from the backend
+const INO_FALLBACK_COLOR = '#a0aec0'
 
 function buildElements(result) {
   const pairs = result?.gene_pairs
@@ -43,6 +47,9 @@ function buildElements(result) {
         source: g1,
         target: g2,
         weight: p.score ?? 1,
+        // INO fields from backend enrichment
+        ino_category: p.ino_category ?? 'unknown',
+        ino_color: p.ino_color ?? INO_FALLBACK_COLOR,
       },
     })
   })
@@ -52,12 +59,25 @@ function buildElements(result) {
     degrees[target] = (degrees[target] ?? 0) + 1
   })
   const maxDeg = Math.max(1, ...Object.values(degrees))
+
+  // Build node centrality map from API response if available
+  const centralityMap = {}
+  if (result?.elements?.nodes) {
+    result.elements.nodes.forEach((n) => {
+      if (n.data?.id && n.data?.centrality) {
+        centralityMap[n.data.id] = n.data.centrality
+      }
+    })
+  }
+
   const nodes = [...genes].map((g) => ({
     data: {
       id: g,
       label: g,
       degree: degrees[g] ?? 1,
       highDegree: (degrees[g] ?? 1) > maxDeg * 0.6,
+      // Degree centrality for node color mapping (0–1 range)
+      centrality_d: centralityMap[g]?.d ?? 0,
     },
   }))
   return [...nodes, ...edges]
@@ -67,13 +87,15 @@ export default function Dignet() {
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [limit, setLimit] = useState(100)
+  const [inoFilter, setInoFilter] = useState('')
+  const [vaccineOnly, setVaccineOnly] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [result, setResult] = useState(null)
   const [selectedNode, setSelectedNode] = useState(null)
   const didAutoSearch = useRef(false)
 
-  async function runSearch(searchQuery, searchLimit) {
+  const runSearch = useCallback(async (searchQuery, searchLimit, filters) => {
     const q = (searchQuery ?? query).trim()
     if (!q) return
     setLoading(true)
@@ -81,7 +103,8 @@ export default function Dignet() {
     setResult(null)
     setSelectedNode(null)
     try {
-      const raw = await api.dignetSearch(q, searchLimit ?? limit)
+      const activeFilters = filters ?? { ino_type: inoFilter, has_vaccine: vaccineOnly }
+      const raw = await api.dignetSearch(q, searchLimit ?? limit, activeFilters)
       const data = raw?.data ?? raw
       setResult(data)
     } catch (err) {
@@ -89,12 +112,19 @@ export default function Dignet() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [query, limit, inoFilter, vaccineOnly])
 
   async function handleSearch(e) {
     e?.preventDefault()
     await runSearch()
   }
+
+  // Re-fetch when filters change (only if a result already exists)
+  useEffect(() => {
+    if (result) {
+      runSearch(query, limit, { ino_type: inoFilter, has_vaccine: vaccineOnly })
+    }
+  }, [inoFilter, vaccineOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-search on mount if URL contains ?q=
   useEffect(() => {
@@ -102,7 +132,7 @@ export default function Dignet() {
     if (q && !didAutoSearch.current) {
       didAutoSearch.current = true
       setQuery(q)
-      runSearch(q, limit)
+      runSearch(q, limit, { ino_type: '', has_vaccine: false })
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -215,24 +245,44 @@ export default function Dignet() {
             </button>
           </div>
 
+          {/* Filter controls */}
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <label className="text-xs text-gray-500">Filter:</label>
+            <select
+              value={inoFilter}
+              onChange={e => setInoFilter(e.target.value)}
+              className="text-xs border border-gray-300 rounded px-2 py-1"
+            >
+              <option value="">All interaction types</option>
+              <option value="positive_regulation">Positive regulation</option>
+              <option value="negative_regulation">Negative regulation</option>
+              <option value="binding">Binding</option>
+              <option value="phosphorylation">Phosphorylation</option>
+              <option value="other">Other</option>
+            </select>
+            <label className="flex items-center gap-1 text-xs text-gray-500">
+              <input
+                type="checkbox"
+                checked={vaccineOnly}
+                onChange={e => setVaccineOnly(e.target.checked)}
+              />
+              Vaccine only
+            </label>
+          </div>
+
           <div className="flex gap-4 flex-wrap lg:flex-nowrap">
             {/* Graph */}
             <div className="flex-1 min-w-0">
               <NetworkGraph elements={elements} onNodeClick={setSelectedNode} />
-              <p className="text-[11px] text-gray-400 mt-1">Click a node to view details</p>
-              <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mt-2 px-1">
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-full bg-[#2b6cb0]"></span>
-                  Gene node (size = connections)
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-3 h-3 rounded-full bg-[#ed8936]"></span>
-                  Selected node
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-6 h-0.5 bg-[#a0aec0]"></span>
-                  Co-occurrence (width = frequency)
-                </span>
+              <p className="text-[11px] text-gray-400 mt-1">Click a node to view details. Hover an edge to see interaction type.</p>
+              <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mt-2">
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-[#38a169]"></span> Positive regulation</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-[#e53e3e]"></span> Negative regulation</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-[#3182ce]"></span> Binding</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-[#9f7aea]"></span> Phosphorylation</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-[#a0aec0]"></span> Other/Unknown</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-full bg-[#1e3a5f]"></span> High centrality</span>
+                <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-full bg-[#93c5fd]"></span> Low centrality</span>
               </div>
             </div>
 

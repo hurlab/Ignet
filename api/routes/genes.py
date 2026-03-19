@@ -5,6 +5,7 @@ GET /api/v1/genes/search              - search genes by symbol/name
 GET /api/v1/genes/autocomplete        - fast prefix search for gene symbols
 GET /api/v1/genes/top                 - top connected genes
 GET /api/v1/genes/<symbol>/neighbors  - gene interaction neighbors
+GET /api/v1/genes/<symbol>/report     - aggregated gene report card
 """
 
 import logging
@@ -354,4 +355,122 @@ def gene_neighbors(symbol: str):
         "total": total,
         "page": page,
         "per_page": per_page,
+    })
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/genes/<symbol>/report
+# ---------------------------------------------------------------------------
+
+
+@genes_bp.route("/genes/<symbol>/report", methods=["GET"])
+def gene_report(symbol: str):
+    """
+    Aggregated gene report card.
+
+    Returns gene metadata, centrality scores, top neighbors,
+    INO interaction type distribution, drug associations, and
+    disease associations in a single response.
+    """
+    clean = sanitize_gene_symbol(symbol)
+    if not clean:
+        return jsonify({"error": "InvalidSymbol", "message": "Invalid gene symbol."}), 400
+
+    try:
+        with db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+
+            # 1. Gene metadata from t_gene_info
+            cursor.execute(
+                "SELECT GeneID, Symbol, Synonyms, description, tax_id, type_of_gene, chromosome "
+                "FROM t_gene_info WHERE Symbol = %s",
+                (clean,),
+            )
+            gene_info = cursor.fetchone()
+
+            # 2. Centrality scores from t_centrality_score_dignet
+            cursor.execute(
+                "SELECT score_type, score FROM t_centrality_score_dignet WHERE genesymbol = %s",
+                (clean,),
+            )
+            centrality = {
+                row["score_type"]: float(row["score"]) if row["score"] else 0
+                for row in cursor.fetchall()
+            }
+
+            # 3. Top 20 neighbors
+            cursor.execute(
+                """
+                SELECT neighbor, COUNT(*) AS count, COUNT(DISTINCT PMID) AS unique_pmids
+                FROM (
+                    (SELECT geneSymbol2 AS neighbor, PMID
+                     FROM t_sentence_hit_gene2gene_Host WHERE geneSymbol1 = %s)
+                    UNION ALL
+                    (SELECT geneSymbol1 AS neighbor, PMID
+                     FROM t_sentence_hit_gene2gene_Host WHERE geneSymbol2 = %s)
+                ) AS combined
+                GROUP BY neighbor ORDER BY count DESC LIMIT 20
+                """,
+                (clean, clean),
+            )
+            top_neighbors = cursor.fetchall()
+
+            # 4. INO interaction type distribution
+            cursor.execute(
+                """
+                SELECT ino.matching_phrase, COUNT(*) AS cnt
+                FROM t_sentence_hit_gene2gene_Host h
+                JOIN ino_host25 ino ON ino.sentence_id = h.sentenceID
+                WHERE h.geneSymbol1 = %s OR h.geneSymbol2 = %s
+                GROUP BY ino.matching_phrase
+                ORDER BY cnt DESC LIMIT 20
+                """,
+                (clean, clean),
+            )
+            ino_distribution = [
+                {"term": r["matching_phrase"], "count": r["cnt"]}
+                for r in cursor.fetchall()
+            ]
+
+            # 5. Drug associations from biosummary25_Host
+            cursor.execute(
+                """
+                SELECT b.drug_term, COUNT(*) AS cnt
+                FROM t_sentence_hit_gene2gene_Host h
+                JOIN biosummary25_Host b ON b.pmid = h.PMID
+                WHERE (h.geneSymbol1 = %s OR h.geneSymbol2 = %s)
+                  AND b.drug_term IS NOT NULL AND b.drug_term != ''
+                GROUP BY b.drug_term ORDER BY cnt DESC LIMIT 15
+                """,
+                (clean, clean),
+            )
+            drugs = [{"term": r["drug_term"], "count": r["cnt"]} for r in cursor.fetchall()]
+
+            # 6. Disease associations from biosummary25_Host
+            cursor.execute(
+                """
+                SELECT b.hdo_term, COUNT(*) AS cnt
+                FROM t_sentence_hit_gene2gene_Host h
+                JOIN biosummary25_Host b ON b.pmid = h.PMID
+                WHERE (h.geneSymbol1 = %s OR h.geneSymbol2 = %s)
+                  AND b.hdo_term IS NOT NULL AND b.hdo_term != ''
+                GROUP BY b.hdo_term ORDER BY cnt DESC LIMIT 15
+                """,
+                (clean, clean),
+            )
+            diseases = [{"term": r["hdo_term"], "count": r["cnt"]} for r in cursor.fetchall()]
+
+            cursor.close()
+
+    except Exception as exc:
+        logger.exception("Error in gene_report: %s", exc)
+        return jsonify({"error": "DatabaseError", "message": "Failed to build gene report."}), 500
+
+    return jsonify({
+        "gene_info": gene_info,
+        "centrality": centrality,
+        "top_neighbors": top_neighbors,
+        "ino_distribution": ino_distribution,
+        "drugs": drugs,
+        "diseases": diseases,
     })

@@ -5,9 +5,10 @@ import ErrorMessage from '../components/ErrorMessage.jsx'
 
 function downloadCSV(interactions, gene1, gene2) {
   if (!interactions?.length) return
-  const header = 'Gene1,Gene2,PMID,Sentence,Score\n'
+  const header = 'Gene1,Gene2,PMID,Sentence,BioBERT_Score,INO_Term\n'
   const rows = interactions.map(row =>
-    [gene1, gene2, row.PMID || '', `"${(row.sentence_text || '').replace(/"/g, '""')}"`, row.score ?? ''].join(',')
+    [gene1, gene2, row.PMID || '', `"${(row.sentence_text || '').replace(/"/g, '""')}"`,
+     row.score ?? '', row.ino_term || row.matching_phrase || ''].join(',')
   ).join('\n')
   const blob = new Blob([header + rows], { type: 'text/csv' })
   const url = URL.createObjectURL(blob)

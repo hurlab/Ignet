@@ -56,13 +56,21 @@ export const api = {
   searchGenes: (q) => request(`/genes/search?q=${encodeURIComponent(q)}`),
   autocompleteGenes: (q, limit = 10) => request(`/genes/autocomplete?q=${encodeURIComponent(q)}&limit=${limit}`),
   geneNeighbors: (sym) => request(`/genes/${encodeURIComponent(sym)}/neighbors`),
+  geneReport: (sym) => request(`/genes/${encodeURIComponent(sym)}/report`),
   genePair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}?include_summary=true`),
   predictPair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}/predict`, { method: 'POST' }),
 
-  dignetSearch: (keywords, limit) => request('/dignet/search', {
-    method: 'POST',
-    body: JSON.stringify({ keywords }),
-  }),
+  // filters: { ino_type?: string, has_vaccine?: boolean }
+  dignetSearch: (keywords, limit, filters = {}) => {
+    const params = new URLSearchParams()
+    if (filters.ino_type) params.set('ino_type', filters.ino_type)
+    if (filters.has_vaccine) params.set('has_vaccine', 'true')
+    const qs = params.toString()
+    return request(`/dignet/search${qs ? `?${qs}` : ''}`, {
+      method: 'POST',
+      body: JSON.stringify({ keywords }),
+    })
+  },
 
   summarize: (genes) => request('/summarize', {
     method: 'POST',

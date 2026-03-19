@@ -28,6 +28,192 @@ function downloadCSV(neighbors, geneSymbol) {
   URL.revokeObjectURL(url)
 }
 
+// --- Report Card Sub-components ---
+
+function CentralityCards({ centrality }) {
+  if (!centrality || Object.keys(centrality).length === 0) return null
+
+  const labels = {
+    degree: 'Degree',
+    eigenvector: 'Eigenvector',
+    closeness: 'Closeness',
+    betweenness: 'Betweenness',
+  }
+
+  const entries = Object.entries(labels).map(([key, label]) => ({
+    key,
+    label,
+    value: centrality[key] ?? centrality[key.charAt(0).toUpperCase() + key.slice(1)] ?? 0,
+  }))
+
+  const maxVal = Math.max(...entries.map((e) => e.value), 0.001)
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      {entries.map((e) => (
+        <div key={e.key} className="bg-white border border-gray-200 rounded-lg p-3">
+          <div className="text-[11px] text-gray-500 font-medium uppercase tracking-wide mb-1">{e.label}</div>
+          <div className="text-lg font-bold text-navy">{e.value.toFixed(4)}</div>
+          <div className="mt-1.5 bg-gray-100 rounded-full h-1.5">
+            <div
+              className="bg-navy rounded-full h-1.5 transition-all"
+              style={{ width: `${Math.min((e.value / maxVal) * 100, 100)}%` }}
+            />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function InoBreakdown({ distribution }) {
+  if (!distribution?.length) return null
+  const maxCount = Math.max(...distribution.map((d) => d.count), 1)
+  const items = distribution.slice(0, 10)
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-4">
+      <h3 className="text-sm font-semibold text-navy mb-3">INO Interaction Types</h3>
+      <div className="space-y-1.5">
+        {items.map((item) => (
+          <div key={item.term} className="flex items-center gap-2 text-xs">
+            <span className="w-32 truncate text-gray-600" title={item.term}>{item.term}</span>
+            <div className="flex-1 bg-gray-100 rounded-full h-2">
+              <div
+                className="bg-navy rounded-full h-2"
+                style={{ width: `${(item.count / maxCount) * 100}%` }}
+              />
+            </div>
+            <span className="text-gray-400 w-10 text-right">{item.count}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function TagCloud({ items, colorClass }) {
+  if (!items?.length) return null
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((item) => (
+        <span
+          key={item.term}
+          className={`inline-block text-xs px-2 py-0.5 rounded-full ${colorClass}`}
+          title={`${item.term} (${item.count})`}
+        >
+          {item.term} <span className="opacity-60">({item.count})</span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function AiSummarySection({ gene }) {
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [summary, setSummary] = useState(null)
+  const [error, setError] = useState(null)
+
+  async function handleGenerate() {
+    if (summary) {
+      setOpen(!open)
+      return
+    }
+    setOpen(true)
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await api.summarize([gene])
+      setSummary(res?.summary ?? res?.data ?? JSON.stringify(res))
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-4">
+      <button
+        onClick={handleGenerate}
+        className="bg-navy hover:bg-navy-dark text-white text-xs font-semibold px-4 py-1.5 rounded transition-colors"
+      >
+        {summary ? (open ? 'Hide AI Summary' : 'Show AI Summary') : 'Generate AI Summary'}
+      </button>
+      {open && (
+        <div className="mt-3">
+          {loading && <LoadingSpinner message="Generating AI summary..." />}
+          {error && <ErrorMessage message={error} />}
+          {summary && (
+            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
+              {summary}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ReportCard({ reportData, gene }) {
+  if (!reportData) return null
+
+  const info = reportData.gene_info
+
+  return (
+    <div className="space-y-4">
+      {/* Gene Info Header */}
+      {info && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-start gap-3 flex-wrap">
+            <h2 className="text-lg font-bold text-navy">{info.Symbol}</h2>
+            {info.type_of_gene && (
+              <span className="text-[11px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded">{info.type_of_gene}</span>
+            )}
+            {info.chromosome && (
+              <span className="text-[11px] bg-blue-50 text-navy px-2 py-0.5 rounded">Chr {info.chromosome}</span>
+            )}
+          </div>
+          {info.description && (
+            <p className="text-sm text-gray-600 mt-1">{info.description}</p>
+          )}
+          {info.Synonyms && (
+            <p className="text-xs text-gray-400 mt-1">Synonyms: {info.Synonyms}</p>
+          )}
+        </div>
+      )}
+
+      {/* Centrality Scores */}
+      <CentralityCards centrality={reportData.centrality} />
+
+      {/* INO Breakdown */}
+      <InoBreakdown distribution={reportData.ino_distribution} />
+
+      {/* Drug Associations */}
+      {reportData.drugs?.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-navy mb-2">Drug Associations</h3>
+          <TagCloud items={reportData.drugs} colorClass="bg-blue-50 text-blue-700" />
+        </div>
+      )}
+
+      {/* Disease Associations */}
+      {reportData.diseases?.length > 0 && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-navy mb-2">Disease Associations</h3>
+          <TagCloud items={reportData.diseases} colorClass="bg-red-50 text-red-700" />
+        </div>
+      )}
+
+      {/* AI Summary */}
+      <AiSummarySection gene={gene} />
+    </div>
+  )
+}
+
+// --- Main Component ---
+
 export default function Gene() {
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
@@ -35,6 +221,7 @@ export default function Gene() {
   const [error, setError] = useState(null)
   const [gene, setGene] = useState(null)
   const [neighbors, setNeighbors] = useState([])
+  const [reportData, setReportData] = useState(null)
   const [suggestions, setSuggestions] = useState([])
   const [showDropdown, setShowDropdown] = useState(false)
   const debounceRef = useRef(null)
@@ -46,20 +233,34 @@ export default function Gene() {
     return () => document.removeEventListener('click', handleClickOutside)
   }, [])
 
+  async function fetchGeneData(sym) {
+    setLoading(true)
+    setError(null)
+    setGene(null)
+    setNeighbors([])
+    setReportData(null)
+    try {
+      const [neighborsRes, reportRes] = await Promise.all([
+        api.geneNeighbors(sym),
+        api.geneReport(sym).catch(() => null),
+      ])
+      setGene(sym)
+      setNeighbors(neighborsRes?.data ?? (Array.isArray(neighborsRes) ? neighborsRes : (neighborsRes?.neighbors ?? [])))
+      setReportData(reportRes)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   // Auto-search if query param provided
   useEffect(() => {
     if (searchParams.get('q')) {
       const sym = searchParams.get('q').trim().toUpperCase()
       if (sym) {
         setQuery(sym)
-        setLoading(true)
-        api.geneNeighbors(sym)
-          .then((data) => {
-            setGene(sym)
-            setNeighbors(data?.data ?? (Array.isArray(data) ? data : (data?.neighbors ?? [])))
-          })
-          .catch((err) => setError(err.message))
-          .finally(() => setLoading(false))
+        fetchGeneData(sym)
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -88,35 +289,12 @@ export default function Gene() {
     e?.preventDefault()
     const sym = query.trim().toUpperCase()
     if (!sym) return
-    setLoading(true)
-    setError(null)
-    setGene(null)
-    setNeighbors([])
-    try {
-      const data = await api.geneNeighbors(sym)
-      setGene(sym)
-      setNeighbors(data?.data ?? (Array.isArray(data) ? data : (data?.neighbors ?? [])))
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    await fetchGeneData(sym)
   }
 
   function searchGene(sym) {
     setQuery(sym)
-    setGene(null)
-    setNeighbors([])
-    setError(null)
-    // Trigger search immediately
-    setLoading(true)
-    api.geneNeighbors(sym)
-      .then((data) => {
-        setGene(sym)
-        setNeighbors(data?.data ?? (Array.isArray(data) ? data : (data?.neighbors ?? [])))
-      })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
+    fetchGeneData(sym)
   }
 
   return (
@@ -124,7 +302,7 @@ export default function Gene() {
       <div>
         <h1 className="text-xl font-bold text-navy mb-1">Gene Search</h1>
         <p className="text-gray-500 text-xs">
-          Search for a gene symbol to view its top interacting partners.
+          Search for a gene symbol to view its report card and interaction partners.
         </p>
       </div>
 
@@ -167,11 +345,11 @@ export default function Gene() {
 
       <ErrorMessage message={error} />
 
-      {loading && <LoadingSpinner message="Fetching gene interactions..." />}
+      {loading && <LoadingSpinner message="Fetching gene data..." />}
 
       {!gene && !loading && !error && (
         <div className="text-center py-12 space-y-4">
-          <p className="text-gray-400 text-sm">Search for a gene symbol to see its interaction partners.</p>
+          <p className="text-gray-400 text-sm">Search for a gene symbol to see its report card and interaction partners.</p>
           <div className="flex flex-wrap justify-center gap-2">
             {['BRCA1', 'TP53', 'IFNG', 'TNF', 'IL6'].map((g) => (
               <button
@@ -186,10 +364,14 @@ export default function Gene() {
         </div>
       )}
 
+      {/* Report Card Section */}
+      {gene && <ReportCard reportData={reportData} gene={gene} />}
+
+      {/* Neighbors Table */}
       {gene && neighbors.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-base font-bold text-navy">{gene}</h2>
+            <h2 className="text-base font-bold text-navy">Interaction Partners</h2>
             <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
               {neighbors.length} neighbors
             </span>
@@ -218,15 +400,15 @@ export default function Gene() {
               <tbody className="divide-y divide-gray-100">
                 {neighbors.map((n, i) => {
                   const sym = n.neighbor ?? n.symbol ?? n.gene ?? n
-                  const count = n.count ?? n.cooccurrence ?? '—'
-                  const score = typeof n.score === 'number' ? n.score.toFixed(4) : (n.score ?? '—')
+                  const count = n.count ?? n.cooccurrence ?? '\u2014'
+                  const score = typeof n.score === 'number' ? n.score.toFixed(4) : (n.score ?? '\u2014')
                   return (
                     <tr key={i} className="hover:bg-blue-50 transition-colors">
                       <td className="px-3 py-1.5 text-gray-400">{i + 1}</td>
                       <td className="px-3 py-1.5 font-medium text-navy">{sym}</td>
                       <td className="px-3 py-1.5 text-right text-gray-600">{count}</td>
                       {neighbors.some((nb) => nb.unique_pmids != null) && (
-                        <td className="px-3 py-1.5 text-right text-gray-600">{n.unique_pmids ?? '—'}</td>
+                        <td className="px-3 py-1.5 text-right text-gray-600">{n.unique_pmids ?? '\u2014'}</td>
                       )}
                       <td className="px-3 py-1.5 text-right text-gray-600">{score}</td>
                       <td className="px-3 py-1.5">

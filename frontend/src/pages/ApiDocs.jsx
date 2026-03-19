@@ -1,6 +1,191 @@
 import { useState } from 'react'
 import { API_CATEGORIES, API_ENDPOINTS } from '../data/apiEndpoints.js'
 
+// Default values for TryIt inputs, keyed by endpoint id
+const TRYIT_DEFAULTS = {
+  'genes-search':      { q: 'TNF' },
+  'genes-autocomplete':{ q: 'BRC' },
+  'genes-neighbors':   { symbol: 'TNF', per_page: '10' },
+  'genes-top':         { limit: '10' },
+  'pairs':             { sym1: 'TNF', sym2: 'IL6' },
+}
+
+function TryIt({ endpoint }) {
+  // Build initial param state: path params + query params, pre-filled with defaults
+  const defaults = TRYIT_DEFAULTS[endpoint.id] || {}
+
+  const [params, setParams] = useState(() => {
+    const initial = {}
+    endpoint.params?.forEach(p => {
+      if (defaults[p.name] !== undefined) {
+        initial[p.name] = defaults[p.name]
+      } else {
+        initial[p.name] = ''
+      }
+    })
+    return initial
+  })
+
+  const [body, setBody] = useState(() => {
+    if (endpoint.method === 'POST' && endpoint.example?.request) {
+      return endpoint.example.request
+    }
+    return '{}'
+  })
+
+  const [response, setResponse] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  // Build the constructed URL for display
+  function buildUrl() {
+    let url = endpoint.path
+    // Replace path params
+    endpoint.params?.filter(p => p.type === 'path').forEach(p => {
+      const val = params[p.name] || defaults[p.name] || p.name
+      url = url.replace(`:${p.name}`, encodeURIComponent(val))
+    })
+    // Add query params
+    const queryParts = endpoint.params
+      ?.filter(p => p.type !== 'path' && params[p.name])
+      ?.map(p => `${p.name}=${encodeURIComponent(params[p.name])}`)
+    if (queryParts && queryParts.length > 0) {
+      url += `?${queryParts.join('&')}`
+    }
+    return url
+  }
+
+  async function handleSend() {
+    setLoading(true)
+    setError(null)
+    setResponse(null)
+
+    try {
+      let url = endpoint.path
+      // Replace path params
+      endpoint.params?.filter(p => p.type === 'path').forEach(p => {
+        const val = params[p.name] || defaults[p.name] || p.name
+        url = url.replace(`:${p.name}`, encodeURIComponent(val))
+      })
+      // Add query params
+      const queryParts = endpoint.params
+        ?.filter(p => p.type !== 'path' && params[p.name])
+        ?.map(p => `${p.name}=${encodeURIComponent(params[p.name])}`)
+      if (queryParts && queryParts.length > 0) {
+        url += `?${queryParts.join('&')}`
+      }
+
+      const options = { headers: { 'Content-Type': 'application/json' } }
+      if (endpoint.method === 'POST') {
+        options.method = 'POST'
+        options.body = body
+      }
+
+      const res = await fetch(url, options)
+      let data
+      try {
+        data = await res.json()
+      } catch {
+        data = await res.text()
+      }
+      setResponse({ status: res.status, data })
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const constructedUrl = buildUrl()
+
+  return (
+    <div className="mt-3 border-t border-gray-100 pt-3">
+      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Try It</h4>
+
+      {/* Parameter inputs */}
+      {endpoint.params && endpoint.params.length > 0 && (
+        <div className="space-y-2 mb-3">
+          {endpoint.params.map(p => (
+            <div key={p.name} className="flex items-center gap-2">
+              <label className="text-xs text-gray-500 w-24 flex-shrink-0 truncate">
+                {p.name}
+                {p.required && <span className="text-red-400 ml-0.5">*</span>}
+              </label>
+              <input
+                type="text"
+                value={params[p.name] ?? ''}
+                onChange={e => setParams(prev => ({ ...prev, [p.name]: e.target.value }))}
+                placeholder={p.desc || p.name}
+                className="flex-1 text-xs border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400 bg-white"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* POST body textarea */}
+      {endpoint.method === 'POST' && (
+        <div className="mb-3">
+          <label className="text-xs text-gray-500 block mb-1">Request Body (JSON)</label>
+          <textarea
+            value={body}
+            onChange={e => setBody(e.target.value)}
+            rows={3}
+            className="w-full text-xs font-mono border border-gray-200 rounded px-2 py-1 focus:outline-none focus:border-blue-400 bg-white resize-y"
+          />
+        </div>
+      )}
+
+      {/* Constructed URL preview */}
+      <div className="mb-3 flex items-center gap-2">
+        <span className="text-xs text-gray-400 flex-shrink-0">URL:</span>
+        <code className="text-xs font-mono text-gray-700 bg-gray-50 border border-gray-100 rounded px-2 py-1 flex-1 break-all">
+          {constructedUrl}
+        </code>
+      </div>
+
+      {/* Send button */}
+      <button
+        onClick={handleSend}
+        disabled={loading}
+        className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-medium px-4 py-1.5 rounded transition-colors"
+      >
+        {loading ? 'Sending...' : 'Send Request'}
+      </button>
+
+      {/* Error display */}
+      {error && (
+        <div className="mt-2 bg-red-50 border border-red-200 rounded p-2 text-xs text-red-700">
+          Error: {error}
+        </div>
+      )}
+
+      {/* Response display */}
+      {response && (
+        <div className="mt-2">
+          <div className="flex items-center gap-2 mb-1">
+            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
+              response.status < 300
+                ? 'bg-green-100 text-green-700'
+                : response.status < 500
+                ? 'bg-yellow-100 text-yellow-700'
+                : 'bg-red-100 text-red-700'
+            }`}>
+              {response.status}
+            </span>
+            <span className="text-xs text-gray-400">Response</span>
+          </div>
+          <pre className="bg-gray-50 border border-gray-200 rounded p-2 text-xs font-mono overflow-auto max-h-60 whitespace-pre-wrap break-all">
+            {typeof response.data === 'string'
+              ? response.data
+              : JSON.stringify(response.data, null, 2)}
+          </pre>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // Method badge colors
 const METHOD_COLORS = {
   GET: 'bg-green-100 text-green-800 border border-green-200',
@@ -152,6 +337,14 @@ function EndpointCard({ endpoint }) {
           )}
 
           {endpoint.snippets && <CodeSnippetTabs snippets={endpoint.snippets} />}
+
+          {/* Try It live section */}
+          <details className="mt-3">
+            <summary className="text-xs text-blue-600 cursor-pointer hover:text-blue-800 select-none font-medium">
+              Try it live
+            </summary>
+            <TryIt endpoint={endpoint} />
+          </details>
         </div>
       )}
     </div>

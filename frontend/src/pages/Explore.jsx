@@ -9,16 +9,21 @@ export default function Explore() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [stats, setStats] = useState(null)
+  const [inoTerms, setInoTerms] = useState([])
 
   useEffect(() => {
     Promise.all([
       api.get('/genes/top?limit=100'),
       api.stats(),
+      api.inoTerms(30).catch(() => null),
     ])
-      .then(([genesData, statsData]) => {
+      .then(([genesData, statsData, inoData]) => {
         setTopGenes(genesData?.data ?? genesData?.genes ?? [])
         const stats = statsData?.data ?? statsData
         setStats(stats)
+        if (inoData) {
+          setInoTerms(inoData?.data ?? [])
+        }
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
@@ -53,6 +58,76 @@ export default function Explore() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* INO Interaction Type term cloud */}
+      {inoTerms.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="text-lg font-bold text-navy">Interaction Types (INO)</h2>
+          <p className="text-sm text-gray-500">
+            Most frequent interaction types in the Ignet database, classified by the
+            <a href="https://bioportal.bioontology.org/ontologies/INO" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline ml-1">
+              Interaction Network Ontology (INO)
+            </a>. Click a term to explore gene pairs with that interaction type.
+          </p>
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex flex-wrap gap-2">
+              {inoTerms.map(t => {
+                const maxCount = inoTerms[0]?.count || 1
+                const relSize = Math.max(0.7, Math.min(1.8, 0.7 + (t.count / maxCount) * 1.1))
+                return (
+                  <a
+                    key={t.term}
+                    href={`/ignet/ino?term=${encodeURIComponent(t.term)}`}
+                    style={{ fontSize: `${relSize}rem` }}
+                    className="inline-flex items-baseline gap-1 px-2 py-1 rounded-full bg-purple-50 text-purple-800 hover:bg-purple-100 transition-colors"
+                  >
+                    {t.term}
+                    <span className="text-purple-400" style={{ fontSize: '0.65rem' }}>
+                      {t.count >= 1000 ? `${(t.count / 1000).toFixed(0)}k` : t.count}
+                    </span>
+                  </a>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Top 10 INO terms table */}
+          <div className="bg-white border border-gray-200 rounded-lg overflow-hidden mt-4">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th className="text-left px-3 py-2 font-medium text-gray-600">Rank</th>
+                  <th className="text-left px-3 py-2 font-medium text-gray-600">Interaction Type</th>
+                  <th className="text-right px-3 py-2 font-medium text-gray-600">Occurrences</th>
+                  <th className="px-3 py-2 font-medium text-gray-600">Bar</th>
+                  <th className="px-3 py-2"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {inoTerms.slice(0, 10).map((t, i) => {
+                  const maxCount = inoTerms[0]?.count || 1
+                  return (
+                    <tr key={t.term} className="hover:bg-purple-50 transition-colors">
+                      <td className="px-3 py-1.5 text-gray-400">{i + 1}</td>
+                      <td className="px-3 py-1.5 font-medium text-purple-800">{t.term}</td>
+                      <td className="px-3 py-1.5 text-right text-gray-600">{t.count.toLocaleString()}</td>
+                      <td className="px-3 py-1.5 w-32">
+                        <div className="bg-gray-100 rounded-full h-2">
+                          <div className="bg-purple-400 rounded-full h-2" style={{ width: `${(t.count / maxCount) * 100}%` }} />
+                        </div>
+                      </td>
+                      <td className="px-3 py-1.5">
+                        <a href={`/ignet/ino?term=${encodeURIComponent(t.term)}`}
+                           className="text-purple-600 hover:underline text-xs">View</a>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
 
       {/* Top genes */}

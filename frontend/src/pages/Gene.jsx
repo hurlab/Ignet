@@ -3,6 +3,51 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
+import NetworkGraph from '../components/NetworkGraph.jsx'
+
+function buildMiniNetwork(gene, neighbors, reportData) {
+  if (!gene || !neighbors?.length) return []
+
+  // Take top 20 neighbors for the mini network
+  const topNeighbors = neighbors.slice(0, 20)
+
+  // Center node (the searched gene) — set centrality_d to 1 so it renders darkest
+  const nodes = [{
+    data: {
+      id: gene,
+      label: gene,
+      degree: topNeighbors.length,
+      centrality_d: 1,
+      isCenter: true,
+    },
+  }]
+
+  // Neighbor nodes and edges
+  const edges = []
+  topNeighbors.forEach((n, i) => {
+    const sym = n.neighbor ?? n.symbol ?? n.gene
+    if (!sym) return
+    nodes.push({
+      data: {
+        id: sym,
+        label: sym,
+        degree: 1,
+        centrality_d: 0,
+      },
+    })
+    edges.push({
+      data: {
+        id: `e${i}`,
+        source: gene,
+        target: sym,
+        weight: n.count || 1,
+        ino_color: '#a0aec0',
+      },
+    })
+  })
+
+  return [...nodes, ...edges]
+}
 
 function downloadCSV(neighbors, geneSymbol) {
   if (!neighbors?.length) return
@@ -366,6 +411,30 @@ export default function Gene() {
 
       {/* Report Card Section */}
       {gene && <ReportCard reportData={reportData} gene={gene} />}
+
+      {/* Mini Network Visualization */}
+      {gene && neighbors.length > 0 && (
+        <section className="bg-white border border-gray-200 rounded-lg p-4">
+          <h3 className="font-semibold text-navy text-sm mb-2">
+            Interaction Network — Top {Math.min(20, neighbors.length)} Partners
+          </h3>
+          <p className="text-xs text-gray-400 mb-2">
+            Click a node to search that gene. The center node is {gene}.
+          </p>
+          <div style={{ height: '350px' }}>
+            <NetworkGraph
+              elements={buildMiniNetwork(gene, neighbors, reportData)}
+              onNodeClick={(nodeData) => {
+                const nodeId = typeof nodeData === 'string' ? nodeData : nodeData?.id
+                if (nodeId && nodeId !== gene) {
+                  setQuery(nodeId)
+                  fetchGeneData(nodeId)
+                }
+              }}
+            />
+          </div>
+        </section>
+      )}
 
       {/* Neighbors Table */}
       {gene && neighbors.length > 0 && (

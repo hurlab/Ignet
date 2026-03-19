@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { useState, useEffect, useRef } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
@@ -153,10 +153,43 @@ function TagList({ items, color }) {
 }
 
 export default function Enrichment() {
+  const [searchParams] = useSearchParams()
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
+  const didAutoAnalyze = useRef(false)
+
+  // Auto-analyze if ?genes= URL param is provided (from Compare page)
+  useEffect(() => {
+    const genesParam = searchParams.get('genes')
+    if (genesParam && !didAutoAnalyze.current) {
+      didAutoAnalyze.current = true
+      const geneText = genesParam.replace(/,/g, ', ')
+      setInput(geneText)
+      // Trigger analysis after state update
+      setTimeout(() => {
+        const genes = parseGeneInput(geneText)
+        if (genes.length >= 2) {
+          runAnalysis(genes)
+        }
+      }, 0)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function runAnalysis(genes) {
+    setError(null)
+    setData(null)
+    setLoading(true)
+    try {
+      const result = await api.enrichment(genes)
+      setData(result)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   async function handleAnalyze() {
     setError(null)

@@ -1,5 +1,9 @@
 import { useState, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '../api.js'
+import NetworkGraph from '../components/NetworkGraph.jsx'
+import LoadingSpinner from '../components/LoadingSpinner.jsx'
+import ErrorMessage from '../components/ErrorMessage.jsx'
 
 function StatCard({ label, value, sub }) {
   return (
@@ -11,20 +15,66 @@ function StatCard({ label, value, sub }) {
   )
 }
 
-function GeneTagCloud({ genes, color }) {
+function GeneTagCloud({ genes, color, label }) {
   if (!genes.length) return <p className="text-sm text-gray-400 italic">None</p>
   return (
     <div className="flex flex-wrap gap-1.5">
       {genes.map((g) => (
-        <span
+        <Link
           key={g}
-          className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${color}`}
+          to={`/gene?q=${encodeURIComponent(g)}`}
+          className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full hover:opacity-80 transition-opacity ${color}`}
+          title={`View ${g} report card`}
         >
           {g}
-        </span>
+        </Link>
       ))}
     </div>
   )
+}
+
+function buildSharedNetwork(sharedGenes, enrichmentData) {
+  if (!enrichmentData?.interactions?.length) return []
+  const nodes = []
+  const edges = []
+  const geneSet = new Set(sharedGenes)
+  const degrees = {}
+
+  enrichmentData.interactions.forEach((p, i) => {
+    const g1 = p.gene1
+    const g2 = p.gene2
+    if (!geneSet.has(g1) || !geneSet.has(g2)) return
+    degrees[g1] = (degrees[g1] || 0) + 1
+    degrees[g2] = (degrees[g2] || 0) + 1
+    edges.push({
+      data: {
+        id: `e${i}`,
+        source: g1,
+        target: g2,
+        weight: p.evidence_count || 1,
+        ino_color: '#a0aec0',
+      },
+    })
+  })
+
+  const genesInEdges = new Set()
+  edges.forEach(({ data: { source, target } }) => {
+    genesInEdges.add(source)
+    genesInEdges.add(target)
+  })
+
+  genesInEdges.forEach((g) => {
+    nodes.push({
+      data: {
+        id: g,
+        label: g,
+        degree: degrees[g] || 1,
+        centrality_d: 0,
+      },
+    })
+  })
+
+  return [...nodes, ...edges]
 }
 
 function downloadCSV(data) {
@@ -33,7 +83,6 @@ function downloadCSV(data) {
   for (const g of data.shared_genes) rows.push(['Shared', g])
   for (const g of data.unique_a) rows.push([`Unique to ${data.query_a.keywords}`, g])
   for (const g of data.unique_b) rows.push([`Unique to ${data.query_b.keywords}`, g])
-
   const csv = rows.map((r) => r.map((c) => `"${c}"`).join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
@@ -50,6 +99,8 @@ export default function Compare() {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [sharedNetwork, setSharedNetwork] = useState(null)
+  const [networkLoading, setNetworkLoading] = useState(false)
 
   const handleCompare = useCallback(
     async (e) => {
@@ -62,10 +113,21 @@ export default function Compare() {
       }
       setError('')
       setResult(null)
+      setSharedNetwork(null)
       setLoading(true)
       try {
         const data = await api.dignetCompare(a, b)
         setResult(data)
+
+        // Auto-fetch shared gene subnetwork if there are shared genes
+        if (data.shared_genes?.length >= 2) {
+          setNetworkLoading(true)
+          try {
+            const enrichment = await api.enrichment(data.shared_genes)
+            setSharedNetwork(enrichment)
+          } catch { /* non-fatal */ }
+          setNetworkLoading(false)
+        }
       } catch (err) {
         setError(err.message || 'Comparison failed.')
       } finally {
@@ -74,6 +136,13 @@ export default function Compare() {
     },
     [queryA, queryB],
   )
+
+  function sendToEnrichment(genes) {
+    // Navigate to enrichment page with genes pre-filled via URL
+    window.location.href = `/ignet/enrichment?genes=${encodeURIComponent(genes.join(','))}`
+  }
+
+  const sharedElements = sharedNetwork ? buildSharedNetwork(result?.shared_genes || [], sharedNetwork) : []
 
   return (
     <div className="max-w-5xl mx-auto px-4 py-8">
@@ -114,25 +183,15 @@ export default function Compare() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-semibold px-4 py-2 rounded text-sm transition-colors"
+            className="w-full bg-navy hover:bg-navy-dark disabled:opacity-50 text-white font-semibold px-4 py-2 rounded text-sm transition-colors"
           >
             {loading ? 'Comparing...' : 'Compare'}
           </button>
         </div>
       </form>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded p-3 mb-6 text-sm">
-          {error}
-        </div>
-      )}
-
-      {loading && (
-        <div className="text-center py-12 text-gray-400">
-          <div className="inline-block w-8 h-8 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-3" />
-          <p className="text-sm">Running PubMed searches and comparing results...</p>
-        </div>
-      )}
+      <ErrorMessage message={error} />
+      {loading && <LoadingSpinner message="Running PubMed searches and comparing results..." />}
 
       {result && (
         <div className="space-y-8">
@@ -148,10 +207,7 @@ export default function Compare() {
               value={result.query_b.gene_count}
               sub={`${result.query_b.pair_count} pairs / ${result.query_b.pmid_count} PMIDs`}
             />
-            <StatCard
-              label="Shared Genes"
-              value={result.overlap.shared}
-            />
+            <StatCard label="Shared Genes" value={result.overlap.shared} />
             <StatCard
               label="Jaccard Index"
               value={result.overlap.jaccard}
@@ -185,33 +241,84 @@ export default function Compare() {
             </div>
           </div>
 
-          {/* Gene lists */}
+          {/* Gene lists: Unique A | Shared | Unique B (matches Venn layout) */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-sm font-semibold text-gray-600 mb-2">
-                Shared Genes ({result.shared_genes.length})
-              </h3>
-              <GeneTagCloud genes={result.shared_genes} color="bg-green-100 text-green-700" />
-            </div>
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-sm font-semibold text-blue-600 mb-2">
-                Unique to A ({result.unique_a.length})
-              </h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-blue-600">
+                  Unique to A ({result.unique_a.length})
+                </h3>
+                {result.unique_a.length >= 2 && (
+                  <button onClick={() => sendToEnrichment(result.unique_a)}
+                    className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded hover:bg-blue-100">
+                    Analyze
+                  </button>
+                )}
+              </div>
               <GeneTagCloud genes={result.unique_a} color="bg-blue-100 text-blue-700" />
             </div>
             <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-sm font-semibold text-orange-600 mb-2">
-                Unique to B ({result.unique_b.length})
-              </h3>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-green-700">
+                  Shared ({result.shared_genes.length})
+                </h3>
+                {result.shared_genes.length >= 2 && (
+                  <button onClick={() => sendToEnrichment(result.shared_genes)}
+                    className="text-[10px] bg-green-50 text-green-600 px-2 py-0.5 rounded hover:bg-green-100">
+                    Analyze
+                  </button>
+                )}
+              </div>
+              <GeneTagCloud genes={result.shared_genes} color="bg-green-100 text-green-700" />
+            </div>
+            <div className="bg-white rounded-lg shadow p-4">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-sm font-semibold text-orange-600">
+                  Unique to B ({result.unique_b.length})
+                </h3>
+                {result.unique_b.length >= 2 && (
+                  <button onClick={() => sendToEnrichment(result.unique_b)}
+                    className="text-[10px] bg-orange-50 text-orange-600 px-2 py-0.5 rounded hover:bg-orange-100">
+                    Analyze
+                  </button>
+                )}
+              </div>
               <GeneTagCloud genes={result.unique_b} color="bg-orange-100 text-orange-700" />
             </div>
           </div>
+
+          {/* Shared gene subnetwork */}
+          {networkLoading && <LoadingSpinner message="Building shared gene subnetwork..." />}
+          {sharedElements.length > 0 && (
+            <div className="bg-white rounded-lg shadow p-4">
+              <h2 className="text-sm font-semibold text-gray-600 mb-1">
+                Shared Gene Interaction Network ({sharedElements.filter(e => !e.data.source).length} genes, {sharedElements.filter(e => e.data.source).length} interactions)
+              </h2>
+              <p className="text-xs text-gray-400 mb-3">
+                How the {result.shared_genes.length} shared genes interact with each other. Click a node to view its report card.
+              </p>
+              <div style={{ height: '400px' }}>
+                <NetworkGraph
+                  elements={sharedElements}
+                  onNodeClick={(nodeData) => {
+                    const gene = typeof nodeData === 'string' ? nodeData : nodeData?.id || nodeData
+                    if (gene) window.location.href = `/ignet/gene?q=${encodeURIComponent(gene)}`
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          {result.shared_genes.length > 0 && !networkLoading && sharedElements.length === 0 && sharedNetwork && (
+            <div className="bg-gray-50 rounded-lg p-4 text-center text-sm text-gray-500">
+              No direct interactions found among the {result.shared_genes.length} shared genes.
+            </div>
+          )}
 
           {/* Export */}
           <div className="text-center">
             <button
               onClick={() => downloadCSV(result)}
-              className="inline-flex items-center gap-2 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium text-sm px-4 py-2 rounded transition-colors"
+              className="inline-flex items-center gap-2 bg-navy hover:bg-navy-dark text-white font-medium text-sm px-4 py-2 rounded transition-colors"
             >
               Export CSV
             </button>

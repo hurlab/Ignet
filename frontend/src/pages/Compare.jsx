@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import NetworkGraph from '../components/NetworkGraph.jsx'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
@@ -99,6 +99,7 @@ export default function Compare() {
   const [result, setResult] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const navigate = useNavigate()
   const [sharedNetwork, setSharedNetwork] = useState(null)
   const [networkLoading, setNetworkLoading] = useState(false)
 
@@ -138,8 +139,7 @@ export default function Compare() {
   )
 
   function sendToEnrichment(genes) {
-    // Navigate to enrichment page with genes pre-filled via URL
-    window.location.href = `/ignet/enrichment?genes=${encodeURIComponent(genes.join(','))}`
+    navigate(`/enrichment?genes=${encodeURIComponent(genes.join(','))}`)
   }
 
   const sharedElements = sharedNetwork ? buildSharedNetwork(result?.shared_genes || [], sharedNetwork) : []
@@ -302,7 +302,7 @@ export default function Compare() {
                   elements={sharedElements}
                   onNodeClick={(nodeData) => {
                     const gene = typeof nodeData === 'string' ? nodeData : nodeData?.id || nodeData
-                    if (gene) window.location.href = `/ignet/gene?q=${encodeURIComponent(gene)}`
+                    if (gene) navigate(`/gene?q=${encodeURIComponent(gene)}`)
                   }}
                 />
               </div>

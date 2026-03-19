@@ -59,12 +59,16 @@ def _ncbi_search_pmids(keywords: str) -> list[int]:
     """
     Query NCBI PubMed and return a list of PMIDs (up to _NCBI_MAX_PMIDS).
     Raises requests.RequestException on network failure.
+
+    Fetches up to 5000 PMIDs from NCBI, then filters to only those present
+    in t_sentence_hit_gene2gene_Host (our processed data). This ensures
+    results are actionable even for broad queries where PubMed returns
+    mostly recent papers not yet in the Ignet pipeline.
     """
-    # Step 1 – esearch to get PMIDs
     search_url = (
         f"{_NCBI_BASE}/esearch.fcgi"
         f"?db=pubmed&term={requests.utils.quote(keywords)}"
-        f"&retmax={_NCBI_MAX_PMIDS}&retmode=json"
+        f"&retmax=5000&retmode=json&sort=relevance"
     )
     resp = requests.get(search_url, timeout=20)
     resp.raise_for_status()
@@ -72,7 +76,35 @@ def _ncbi_search_pmids(keywords: str) -> list[int]:
 
     data = resp.json()
     id_list: list[str] = data.get("esearchresult", {}).get("idlist", [])
-    return [int(x) for x in id_list if x.isdigit()]
+    ncbi_pmids = [int(x) for x in id_list if x.isdigit()]
+
+    if not ncbi_pmids:
+        return []
+
+    # Filter to PMIDs that exist in our database
+    try:
+        with db_connection() as conn:
+            cursor = conn.cursor()
+            placeholders = ",".join(["%s"] * len(ncbi_pmids))
+            cursor.execute(
+                f"SELECT DISTINCT PMID FROM t_sentence_hit_gene2gene_Host "
+                f"WHERE PMID IN ({placeholders})",
+                tuple(ncbi_pmids),
+            )
+            db_pmids = {row[0] for row in cursor.fetchall()}
+            cursor.close()
+    except Exception as exc:
+        logger.warning("PMID filtering failed, using all PMIDs: %s", exc)
+        return ncbi_pmids[:_NCBI_MAX_PMIDS]
+
+    # Return only PMIDs in our DB, capped at limit
+    filtered = [p for p in ncbi_pmids if p in db_pmids]
+    logger.info(
+        "NCBI returned %d PMIDs, %d exist in Ignet DB (%.1f%% coverage)",
+        len(ncbi_pmids), len(filtered),
+        len(filtered) / len(ncbi_pmids) * 100 if ncbi_pmids else 0,
+    )
+    return filtered[:_NCBI_MAX_PMIDS]
 
 
 # ---------------------------------------------------------------------------

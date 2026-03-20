@@ -389,19 +389,41 @@ def gene_report(symbol: str):
             gene_info = cursor.fetchone()
 
             # 2. Centrality scores from t_centrality_score_dignet
-            # Use the largest query network (most genes) for the most representative scores
+            # Fetch all scores for this gene across all query networks
             cursor.execute(
-                """SELECT score_type, score FROM t_centrality_score_dignet
-                   WHERE genesymbol = %s
-                   AND c_query_id = (
-                       SELECT c_query_id FROM t_centrality_score_dignet
-                       GROUP BY c_query_id ORDER BY COUNT(*) DESC LIMIT 1
-                   )""",
+                "SELECT score_type, score, c_query_id FROM t_centrality_score_dignet WHERE genesymbol = %s",
                 (clean,),
             )
+            all_scores = cursor.fetchall()
+
+            # Find the largest query network ID
+            cursor.execute(
+                "SELECT c_query_id FROM t_centrality_score_dignet GROUP BY c_query_id ORDER BY COUNT(*) DESC LIMIT 1"
+            )
+            largest_row = cursor.fetchone()
+            largest_qid = largest_row["c_query_id"] if largest_row else None
+
+            # Build three views
+            # a) Largest network
+            centrality_largest = {}
+            for r in all_scores:
+                if r["c_query_id"] == largest_qid:
+                    centrality_largest[r["score_type"]] = float(r["score"]) if r["score"] else 0
+
+            # b) Average and c) Max across all networks
+            from collections import defaultdict
+            scores_by_type = defaultdict(list)
+            for r in all_scores:
+                if r["score"] is not None:
+                    scores_by_type[r["score_type"]].append(float(r["score"]))
+
+            centrality_avg = {k: sum(v) / len(v) for k, v in scores_by_type.items()} if scores_by_type else {}
+            centrality_max = {k: max(v) for k, v in scores_by_type.items()} if scores_by_type else {}
+
             centrality = {
-                row["score_type"]: float(row["score"]) if row["score"] else 0
-                for row in cursor.fetchall()
+                "largest": centrality_largest,
+                "average": centrality_avg,
+                "max": centrality_max,
             }
 
             # 2b. Raw interaction counts

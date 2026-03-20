@@ -77,6 +77,7 @@ function downloadCSV(neighbors, geneSymbol) {
 
 function GeneStatsCards({ centrality, rawCounts }) {
   const [mode, setMode] = useState('counts')
+  const [centralityView, setCentralityView] = useState('largest')
 
   const countEntries = [
     { label: 'Neighbors', value: rawCounts?.neighbors ?? 0, fmt: (v) => v.toLocaleString() },
@@ -84,20 +85,36 @@ function GeneStatsCards({ centrality, rawCounts }) {
     { label: 'Sentences', value: rawCounts?.sentences ?? 0, fmt: (v) => v.toLocaleString() },
   ]
 
+  // centrality now has {largest: {d,p,c,b}, average: {d,p,c,b}, max: {d,p,c,b}}
+  const cData = centrality?.[centralityView] || centrality?.largest || centrality || {}
   const centralityEntries = [
-    { label: 'Degree', value: centrality?.d ?? 0 },
-    { label: 'Eigenvector', value: centrality?.p ?? 0 },
-    { label: 'Closeness', value: centrality?.c ?? 0 },
-    { label: 'Betweenness', value: centrality?.b ?? 0 },
+    { label: 'Degree', value: cData.d ?? 0 },
+    { label: 'Eigenvector', value: cData.p ?? 0 },
+    { label: 'Closeness', value: cData.c ?? 0 },
+    { label: 'Betweenness', value: cData.b ?? 0 },
   ]
 
-  const hasCentrality = centralityEntries.some((e) => e.value > 0)
+  const hasCentrality = centrality && (centrality.largest || centrality.average || centrality.max)
+    ? centralityEntries.some((e) => e.value > 0)
+    : Object.values(centrality || {}).some((v) => typeof v === 'number' && v > 0)
+
   const entries = mode === 'counts' ? countEntries : centralityEntries
   const maxVal = Math.max(...entries.map((e) => e.value), 0.001)
 
+  const viewLabels = {
+    largest: 'Largest Network',
+    average: 'Average',
+    max: 'Peak',
+  }
+  const viewDescriptions = {
+    largest: 'Centrality in the broadest query network',
+    average: 'Mean centrality across all query networks',
+    max: 'Highest centrality achieved in any query network',
+  }
+
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 flex-wrap">
         <span className="text-xs text-gray-500">View:</span>
         <div className="inline-flex bg-gray-100 rounded-full p-0.5">
           <button
@@ -119,10 +136,26 @@ function GeneStatsCards({ centrality, rawCounts }) {
             </button>
           )}
         </div>
-        {mode === 'centrality' && (
-          <span className="text-[10px] text-gray-400">(normalized 0–1, from largest query network)</span>
+        {mode === 'centrality' && hasCentrality && (
+          <div className="inline-flex bg-gray-50 border border-gray-200 rounded-full p-0.5">
+            {['largest', 'average', 'max'].map((v) => (
+              <button
+                key={v}
+                onClick={() => setCentralityView(v)}
+                title={viewDescriptions[v]}
+                className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${
+                  centralityView === v ? 'bg-blue-600 text-white font-semibold' : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                {viewLabels[v]}
+              </button>
+            ))}
+          </div>
         )}
       </div>
+      {mode === 'centrality' && (
+        <p className="text-[10px] text-gray-400">{viewDescriptions[centralityView]} (normalized 0–1)</p>
+      )}
       <div className={`grid gap-3 ${mode === 'counts' ? 'grid-cols-3' : 'grid-cols-2 md:grid-cols-4'}`}>
         {entries.map((e) => (
           <div key={e.label} className="bg-white border border-gray-200 rounded-lg p-3">

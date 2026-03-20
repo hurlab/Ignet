@@ -185,15 +185,11 @@ export default function Dignet() {
       const data = raw?.data ?? raw
       setResult(data)
 
-      // Non-blocking entity enrichment fetch
-      const genes = [...new Set([
-        ...(data.gene_pairs || []).map(p => p.gene1),
-        ...(data.gene_pairs || []).map(p => p.gene2),
-      ].filter(Boolean))]
-
-      if (genes.length >= 2) {
+      // Non-blocking entity fetch using fast PMID-based endpoint
+      const queryId = data.query_id
+      if (queryId) {
         setEntitiesLoading(true)
-        api.enrichment(genes.slice(0, 200))
+        api.dignetEntities(queryId)
           .then(setEntities)
           .catch(() => setEntities(null))
           .finally(() => setEntitiesLoading(false))

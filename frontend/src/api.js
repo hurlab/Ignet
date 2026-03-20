@@ -75,6 +75,7 @@ export const api = {
   },
 
   dignetYearRange: () => request('/dignet/year-range'),
+  dignetEntities: (queryId) => request(`/dignet/${queryId}/entities`),
 
   dignetCompare: (queryA, queryB) =>
     request('/dignet/compare', {

@@ -558,6 +558,78 @@ def network_graph(query_id: int):
 
 
 # ---------------------------------------------------------------------------
+# GET /api/v1/dignet/<query_id>/entities  (fast, PMID-based)
+# ---------------------------------------------------------------------------
+
+
+@dignet_bp.route("/dignet/<int:query_id>/entities", methods=["GET"])
+def network_entities(query_id: int):
+    """
+    Fast entity lookup for a Dignet query's PMIDs.
+    Queries biosummary25_Host and ino_host25 directly using cached PMIDs.
+    Much faster than the full enrichment endpoint for sidebar use.
+    """
+    try:
+        with db_connection() as conn:
+            row = _load_query(conn, query_id)
+            if not row:
+                return jsonify({"error": "NotFound"}), 404
+
+            pmids = [int(p) for p in row["pmid_list"].split(",") if p.strip().isdigit()]
+            if not pmids:
+                return jsonify({"drugs": [], "diseases": [], "ino_distribution": []})
+
+            cursor = conn.cursor(dictionary=True)
+            placeholders = ",".join(["%s"] * min(len(pmids), 500))
+            pmid_subset = tuple(pmids[:500])
+
+            # Drugs from biosummary25_Host (direct PMID lookup, no gene JOIN)
+            cursor.execute(
+                f"""SELECT drug_term AS term, COUNT(*) AS cnt
+                    FROM biosummary25_Host
+                    WHERE pmid IN ({placeholders})
+                      AND drug_term IS NOT NULL AND drug_term != ''
+                    GROUP BY drug_term ORDER BY cnt DESC LIMIT 20""",
+                pmid_subset,
+            )
+            drugs = [dict(r) for r in cursor.fetchall()]
+
+            # Diseases
+            cursor.execute(
+                f"""SELECT hdo_term AS term, COUNT(*) AS cnt
+                    FROM biosummary25_Host
+                    WHERE pmid IN ({placeholders})
+                      AND hdo_term IS NOT NULL AND hdo_term != ''
+                    GROUP BY hdo_term ORDER BY cnt DESC LIMIT 20""",
+                pmid_subset,
+            )
+            diseases = [dict(r) for r in cursor.fetchall()]
+
+            # INO types (from the network's sentence IDs)
+            cursor.execute(
+                f"""SELECT ino.matching_phrase AS term, COUNT(*) AS cnt
+                    FROM t_sentence_hit_gene2gene_Host h
+                    JOIN ino_host25 ino ON ino.sentence_id = h.sentenceID
+                    WHERE h.PMID IN ({placeholders})
+                    GROUP BY ino.matching_phrase ORDER BY cnt DESC LIMIT 20""",
+                pmid_subset,
+            )
+            ino_distribution = [dict(r) for r in cursor.fetchall()]
+
+            cursor.close()
+
+    except Exception as exc:
+        logger.exception("Error in network_entities: %s", exc)
+        return jsonify({"error": "DatabaseError"}), 500
+
+    return jsonify({
+        "drugs": drugs,
+        "diseases": diseases,
+        "ino_distribution": ino_distribution,
+    })
+
+
+# ---------------------------------------------------------------------------
 # GET /api/v1/dignet/<query_id>/export/graphml
 # ---------------------------------------------------------------------------
 

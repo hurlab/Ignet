@@ -63,26 +63,68 @@ function GeneTag({ symbol, confirmed, onToggle, onRemove }) {
   )
 }
 
+function highlightGenes(sentence, gene1, gene2) {
+  if (!sentence) return '—'
+  // Build a regex that matches either gene (case-sensitive, whole word)
+  const genes = [gene1, gene2].filter(Boolean).flat()
+  if (genes.length === 0) return sentence
+  const escaped = genes.map(g => g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const regex = new RegExp(`\\b(${escaped.join('|')})\\b`, 'g')
+  const parts = []
+  let lastIndex = 0
+  let match
+  while ((match = regex.exec(sentence)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push({ text: sentence.slice(lastIndex, match.index), highlight: false })
+    }
+    const isGene1 = gene1 && (Array.isArray(gene1) ? gene1.includes(match[1]) : match[1] === gene1)
+    parts.push({ text: match[1], highlight: true, isFirst: isGene1 })
+    lastIndex = regex.lastIndex
+  }
+  if (lastIndex < sentence.length) {
+    parts.push({ text: sentence.slice(lastIndex), highlight: false })
+  }
+  return parts
+}
+
 function ResultRow({ result, index }) {
   const interacts = result.Labels === 1
   const confidence = typeof result.ConfidenceScore === 'number'
     ? (result.ConfidenceScore * 100).toFixed(1)
     : 'N/A'
-  const entity1 = Array.isArray(result.Entity_1) ? result.Entity_1.join(', ') : String(result.Entity_1 ?? '')
-  const entity2 = Array.isArray(result.Entity_2) ? result.Entity_2.join(', ') : String(result.Entity_2 ?? '')
+  const entity1 = Array.isArray(result.Entity_1) ? result.Entity_1 : [result.Entity_1].filter(Boolean)
+  const entity2 = Array.isArray(result.Entity_2) ? result.Entity_2 : [result.Entity_2].filter(Boolean)
+  const sentence = result.OrigSent ?? result.PreProcessedSent ?? ''
+  const highlighted = highlightGenes(sentence, entity1, entity2)
+  const interactionWords = result.Interaction_words ?? result.interaction_words ?? []
 
   return (
     <tr className={`border-t border-gray-100 text-xs ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
-      <td className="px-3 py-2 text-gray-700 max-w-xs">
-        <span className="line-clamp-2 block" title={result.OrigSent}>
-          {result.OrigSent ?? result.PreProcessedSent ?? '—'}
-        </span>
+      <td className="px-3 py-2 text-gray-700" style={{ maxWidth: '500px' }}>
+        <div className="leading-relaxed">
+          {Array.isArray(highlighted) ? highlighted.map((part, i) => (
+            part.highlight ? (
+              <mark key={i} className={`font-bold px-0.5 rounded ${part.isFirst ? 'bg-blue-200 text-blue-900' : 'bg-orange-200 text-orange-900'}`}>
+                {part.text}
+              </mark>
+            ) : (
+              <span key={i}>{part.text}</span>
+            )
+          )) : highlighted}
+        </div>
+        {interactionWords.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {interactionWords.map((w, i) => (
+              <span key={i} className="bg-purple-50 text-purple-700 text-[10px] px-1 py-0.5 rounded">{w}</span>
+            ))}
+          </div>
+        )}
       </td>
-      <td className="px-3 py-2 font-mono font-medium text-navy whitespace-nowrap">
-        {entity1}
+      <td className="px-3 py-2 whitespace-nowrap">
+        <span className="font-mono font-bold text-blue-800 bg-blue-100 px-1.5 py-0.5 rounded">{entity1.join(', ')}</span>
       </td>
-      <td className="px-3 py-2 font-mono font-medium text-navy whitespace-nowrap">
-        {entity2}
+      <td className="px-3 py-2 whitespace-nowrap">
+        <span className="font-mono font-bold text-orange-800 bg-orange-100 px-1.5 py-0.5 rounded">{entity2.join(', ')}</span>
       </td>
       <td className="px-3 py-2 text-center whitespace-nowrap">
         <span
@@ -95,8 +137,13 @@ function ResultRow({ result, index }) {
           {interacts ? 'Interacts' : 'No interaction'}
         </span>
       </td>
-      <td className="px-3 py-2 text-center text-gray-600 whitespace-nowrap">
-        {confidence}%
+      <td className="px-3 py-2 text-center whitespace-nowrap">
+        <span className={`font-semibold ${
+          confidence !== 'N/A' && parseFloat(confidence) > 80 ? 'text-green-700' :
+          confidence !== 'N/A' && parseFloat(confidence) > 50 ? 'text-yellow-700' : 'text-gray-500'
+        }`}>
+          {confidence}%
+        </span>
       </td>
     </tr>
   )

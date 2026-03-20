@@ -8,6 +8,11 @@ DirectorySlash Off
 <IfModule mod_rewrite.c>
   RewriteEngine On
 
+  # Restore trailing-slash redirect for the /ignet directory itself.
+  # DirectorySlash Off disables it globally; we re-enable just for root.
+  RewriteCond %{REQUEST_URI} ^/ignet$
+  RewriteRule ^ /ignet/ [R=301,L]
+
   # Skip /ignet_legacy/ requests entirely (served by Apache Alias)
   RewriteCond %{REQUEST_URI} ^/ignet_legacy
   RewriteRule ^ - [L]
@@ -19,7 +24,6 @@ DirectorySlash Off
   RewriteRule ^dist-react/ - [L]
 
   # SPA routes that conflict with PHP directory names
-  # These must be caught BEFORE mod_dir adds trailing slash
   RewriteRule ^(gene|genepair|biosummarai|dignet|login|analyze|explore|api-docs)$ dist-react/index.html [L]
 
   # Skip requests for files with extensions (PHP, static assets)

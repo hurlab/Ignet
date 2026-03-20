@@ -109,7 +109,7 @@ function buildLayout(elementCount) {
   }
 }
 
-export default function NetworkGraph({ elements, onNodeClick }) {
+export default function NetworkGraph({ elements, onNodeClick, onCyReady }) {
   const [tooltip, setTooltip] = useState(null)
   const cyRef = useRef(null)
 
@@ -133,6 +133,7 @@ export default function NetworkGraph({ elements, onNodeClick }) {
   const handleCy = useCallback(
     (cyInstance) => {
       cyRef.current = cyInstance
+      if (onCyReady) onCyReady(cyInstance)
 
       cyInstance.on('tap', 'node', (evt) => {
         const node = evt.target

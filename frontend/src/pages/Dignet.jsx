@@ -101,8 +101,57 @@ export default function Dignet() {
   const [entities, setEntities] = useState(null)
   const [entitiesLoading, setEntitiesLoading] = useState(false)
   const [activeHighlight, setActiveHighlight] = useState(null)
+  const [highlightType, setHighlightType] = useState(null)
+  const cyInstanceRef = useRef(null)
   const didAutoSearch = useRef(false)
   const abortRef = useRef(null)
+
+  // Apply highlight/fade to Cytoscape graph when entity is selected
+  useEffect(() => {
+    const cy = cyInstanceRef.current
+    if (!cy) return
+
+    // Reset all nodes/edges to default
+    cy.nodes().style({ opacity: 1 })
+    cy.edges().style({ opacity: '' })
+
+    if (!activeHighlight || !highlightType) return
+
+    if (highlightType === 'ino') {
+      // INO: highlight edges matching the term, fade non-matching
+      const matchEdges = cy.edges().filter(e => {
+        const cat = (e.data('ino_category') || '').replace(/_/g, ' ')
+        return cat === activeHighlight || e.data('ino_category') === activeHighlight
+      })
+      const matchNodes = matchEdges.connectedNodes()
+      cy.nodes().style({ opacity: 0.15 })
+      cy.edges().style({ opacity: 0.05 })
+      matchNodes.style({ opacity: 1 })
+      matchEdges.style({ opacity: 0.9 })
+    } else {
+      // Drug/Disease: highlight genes that appear in the enrichment interactions
+      // Since we don't have per-entity gene mapping, highlight all genes
+      // that co-occur with the entity in the enrichment data
+      // For now, flash all nodes briefly to indicate selection was registered
+      // Full implementation needs a backend endpoint for gene-entity mapping
+      cy.nodes().style({ opacity: 0.15 })
+      cy.edges().style({ opacity: 0.05 })
+      // Highlight nodes whose labels appear in interactions involving this entity
+      // Use the enrichment data to find associated genes
+      if (entities?.interactions) {
+        const assocGenes = new Set()
+        entities.interactions.forEach(p => { assocGenes.add(p.gene1); assocGenes.add(p.gene2) })
+        cy.nodes().forEach(n => {
+          if (assocGenes.has(n.id())) n.style({ opacity: 1 })
+        })
+        cy.edges().forEach(e => {
+          if (assocGenes.has(e.data('source')) && assocGenes.has(e.data('target'))) {
+            e.style({ opacity: 0.6 })
+          }
+        })
+      }
+    }
+  }, [activeHighlight, highlightType, entities])
 
   useEffect(() => {
     api.dignetYearRange().then((data) => {
@@ -321,7 +370,7 @@ export default function Dignet() {
           <div className="flex gap-4 flex-wrap lg:flex-nowrap">
             {/* Graph */}
             <div className="flex-1 min-w-0">
-              <NetworkGraph elements={elements} onNodeClick={setSelectedNode} />
+              <NetworkGraph elements={elements} onNodeClick={setSelectedNode} onCyReady={(cy) => { cyInstanceRef.current = cy }} />
               <p className="text-[11px] text-gray-400 mt-1">Click a node to view details. Hover an edge to see interaction type.</p>
               <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mt-2">
                 <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-[#38a169]"></span> Positive regulation</span>
@@ -374,8 +423,16 @@ export default function Dignet() {
                     entities={entities}
                     loading={entitiesLoading}
                     activeHighlight={activeHighlight}
-                    onHighlight={(type, term) => setActiveHighlight(activeHighlight === term ? null : term)}
-                    onClearHighlight={() => setActiveHighlight(null)}
+                    onHighlight={(type, term) => {
+                      if (activeHighlight === term) {
+                        setActiveHighlight(null)
+                        setHighlightType(null)
+                      } else {
+                        setActiveHighlight(term)
+                        setHighlightType(type)
+                      }
+                    }}
+                    onClearHighlight={() => { setActiveHighlight(null); setHighlightType(null) }}
                   />
                 )}
               </div>

@@ -12,19 +12,21 @@ export default function Footer() {
             </h4>
             <ul className="space-y-1">
               {[
-                { label: 'About', to: '/about' },
-                { label: 'FAQs', to: '/faqs' },
-                { label: 'Links', to: '/links' },
-                { label: 'Contact Us', to: '/contact' },
-                { label: 'API Docs', to: '/api-docs' },
+                { label: 'About', href: '/ignet/about' },
+                { label: 'FAQs', href: '/ignet/faqs' },
+                { label: 'Links', href: '/ignet/links' },
+                { label: 'Contact Us', href: '/ignet/contact' },
+                { label: 'API Docs', href: '/ignet/api-docs' },
               ].map((item) => (
                 <li key={item.label}>
-                  <Link
-                    to={item.to}
+                  <a
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-gray-500 hover:text-navy text-sm transition-colors"
                   >
                     {item.label}
-                  </Link>
+                  </a>
                 </li>
               ))}
             </ul>
@@ -37,16 +39,18 @@ export default function Footer() {
             </h4>
             <ul className="space-y-1">
               {[
-                { label: 'Disclaimer', to: '/disclaimer' },
-                { label: 'Acknowledgements', to: '/acknowledgements' },
+                { label: 'Disclaimer', href: '/ignet/disclaimer' },
+                { label: 'Acknowledgements', href: '/ignet/acknowledgements' },
               ].map((item) => (
                 <li key={item.label}>
-                  <Link
-                    to={item.to}
+                  <a
+                    href={item.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-gray-500 hover:text-navy text-sm transition-colors"
                   >
                     {item.label}
-                  </Link>
+                  </a>
                 </li>
               ))}
             </ul>

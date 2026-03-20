@@ -11,6 +11,7 @@ import re
 import requests as http_requests
 from flask import Blueprint, jsonify, request
 
+from config import BIOBERT_URL as _BIOBERT_BASE
 from db import db_connection
 from utils import sanitize_gene_symbol
 
@@ -33,7 +34,7 @@ def _parse_pagination(args) -> tuple[int, int]:
 
 _SORT_COLS = {"score", "hasVaccine", "PMID", "sentenceID", "geneSymbol1", "geneSymbol2"}
 # NOTE: "score" is a valid sort column for confidence-based ordering of evidence.
-BIOBERT_URL = "http://localhost:9635/biobert/"
+BIOBERT_URL = f"{_BIOBERT_BASE}/biobert/"
 _SORT_ORDERS = {"ASC", "DESC"}
 
 # ---------------------------------------------------------------------------

@@ -74,7 +74,7 @@ export default function BioSummarAI() {
       debounceRef.current = setTimeout(async () => {
         try {
           const res = await api.searchGenes(val.trim())
-          setSuggestions(Array.isArray(res) ? res.slice(0, 8) : (res?.genes ?? []))
+          setSuggestions(Array.isArray(res) ? res.slice(0, 8) : (res?.data ?? res?.genes ?? []))
         } catch {
           setSuggestions([])
         }

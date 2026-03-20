@@ -12,7 +12,10 @@ ino_bp = Blueprint("ino", __name__)
 @ino_bp.route("/ino/terms", methods=["GET"])
 def list_ino_terms():
     """List top INO terms with counts."""
-    limit = min(int(request.args.get("limit", 50)), 100)
+    try:
+        limit = min(int(request.args.get("limit", 50)), 100)
+    except (ValueError, TypeError):
+        return jsonify({"error": "BadRequest", "message": "Invalid limit parameter."}), 400
     try:
         with db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
@@ -39,8 +42,11 @@ def list_ino_terms():
 @ino_bp.route("/ino/terms/<term>/genes", methods=["GET"])
 def genes_by_ino_term(term: str):
     """Get gene pairs associated with a specific INO term."""
-    page = max(1, int(request.args.get("page", 1)))
-    per_page = min(int(request.args.get("per_page", 50)), 200)
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = min(int(request.args.get("per_page", 50)), 200)
+    except (ValueError, TypeError):
+        return jsonify({"error": "BadRequest", "message": "Invalid pagination parameters."}), 400
     offset = (page - 1) * per_page
 
     try:

@@ -542,16 +542,18 @@ def network_graph(query_id: int):
         })
 
     return jsonify({
-        "query_id": query_id,
-        "keywords": row["keywords"],
-        "elements": {
-            "nodes": nodes,
-            "edges": edges,
-        },
-        "stats": {
-            "node_count": len(nodes),
-            "edge_count": len(edges),
-        },
+        "data": {
+            "query_id": query_id,
+            "keywords": row["keywords"],
+            "elements": {
+                "nodes": nodes,
+                "edges": edges,
+            },
+            "stats": {
+                "node_count": len(nodes),
+                "edge_count": len(edges),
+            },
+        }
     })
 
 

@@ -162,6 +162,8 @@ def get_pair_interactions(sym1: str, sym2: str):
                         "high_confidence_count": int(summary_row["high_confidence_count"] or 0),
                     }
 
+            cursor.close()
+
     except Exception as exc:
         logger.exception("Error in get_pair_interactions: %s", exc)
         return jsonify({"error": "DatabaseError", "message": "Failed to query gene pair interactions."}), 500
@@ -220,6 +222,7 @@ def predict_pair(sym1: str, sym2: str):
             unscored = cursor.fetchall()
 
             if not unscored:
+                cursor.close()
                 return jsonify({
                     "scored_count": 0,
                     "avg_confidence": None,
@@ -273,6 +276,8 @@ def predict_pair(sym1: str, sym2: str):
                         logger.warning("Invalid score value for sentenceID %s: %s", sentence_id, exc)
 
             conn.commit()
+            cursor.close()
+            update_cursor.close()
 
             avg_confidence = (total_score / scored_count) if scored_count > 0 else None
 

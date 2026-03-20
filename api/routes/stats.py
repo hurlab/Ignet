@@ -101,6 +101,8 @@ def get_stats():
                     total_genes = int((cursor.fetchone() or {}).get("n", 0))
                     _set_cache(redis_client, _KEY_GENES, total_genes)
 
+                cursor.close()
+
         except Exception as exc:
             logger.exception("Error fetching stats from database: %s", exc)
             return jsonify({"error": "DatabaseError", "message": "Failed to fetch statistics."}), 500

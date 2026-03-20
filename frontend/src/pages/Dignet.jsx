@@ -9,6 +9,50 @@ import EntitySidebar from '../components/EntitySidebar.jsx'
 
 const LIMIT_OPTIONS = [50, 100, 200, 500]
 
+function YearRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChangeMax }) {
+  const range = max - min || 1
+  const leftPct = ((valueMin - min) / range) * 100
+  const widthPct = ((valueMax - valueMin) / range) * 100
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-gray-500 w-8">{valueMin}</span>
+      <div className="relative flex-1 h-6">
+        {/* Track background */}
+        <div className="absolute top-2.5 left-0 right-0 h-1 bg-gray-200 rounded-full" />
+        {/* Active range */}
+        <div className="absolute top-2.5 h-1 bg-navy rounded-full"
+          style={{ left: `${leftPct}%`, width: `${widthPct}%` }} />
+        {/* Min thumb */}
+        <input type="range" min={min} max={max} value={valueMin}
+          onChange={e => { const v = +e.target.value; if (v <= valueMax) onChangeMin(v) }}
+          className="absolute w-full top-0 h-6 appearance-none bg-transparent pointer-events-none
+            [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none
+            [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full
+            [&::-webkit-slider-thumb]:bg-navy [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white
+            [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer
+            [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:appearance-none
+            [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full
+            [&::-moz-range-thumb]:bg-navy [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white
+            [&::-moz-range-thumb]:cursor-pointer" />
+        {/* Max thumb */}
+        <input type="range" min={min} max={max} value={valueMax}
+          onChange={e => { const v = +e.target.value; if (v >= valueMin) onChangeMax(v) }}
+          className="absolute w-full top-0 h-6 appearance-none bg-transparent pointer-events-none
+            [&::-webkit-slider-thumb]:pointer-events-auto [&::-webkit-slider-thumb]:appearance-none
+            [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:rounded-full
+            [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-white
+            [&::-webkit-slider-thumb]:shadow [&::-webkit-slider-thumb]:cursor-pointer
+            [&::-moz-range-thumb]:pointer-events-auto [&::-moz-range-thumb]:appearance-none
+            [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:rounded-full
+            [&::-moz-range-thumb]:bg-accent [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-white
+            [&::-moz-range-thumb]:cursor-pointer" />
+      </div>
+      <span className="text-xs text-gray-500 w-8 text-right">{valueMax}</span>
+    </div>
+  )
+}
+
 function downloadCSV(pairs, query) {
   if (!pairs?.length) return
   const comment = `# Ignet Dignet Network for "${query}" - https://ignet.org/ignet/dignet\n`
@@ -102,9 +146,11 @@ export default function Dignet() {
   const [entitiesLoading, setEntitiesLoading] = useState(false)
   const [activeHighlight, setActiveHighlight] = useState(null)
   const [highlightType, setHighlightType] = useState(null)
+  const [visibleCategories, setVisibleCategories] = useState({ drugs: false, diseases: false, ino: false })
   const cyInstanceRef = useRef(null)
   const didAutoSearch = useRef(false)
   const abortRef = useRef(null)
+  const yearDebounceRef = useRef(null)
 
   // Apply highlight/fade to Cytoscape graph when entity is selected
   useEffect(() => {
@@ -207,6 +253,15 @@ export default function Dignet() {
     await runSearch()
   }
 
+  function handleYearChange(newMin, newMax) {
+    setYearMin(newMin)
+    setYearMax(newMax)
+    if (yearDebounceRef.current) clearTimeout(yearDebounceRef.current)
+    yearDebounceRef.current = setTimeout(() => {
+      if (result) runSearch(query, limit, { ino_type: inoFilter, has_vaccine: vaccineOnly, year_min: newMin, year_max: newMax })
+    }, 500)
+  }
+
   // Re-fetch when filters change (only if a result already exists)
   useEffect(() => {
     if (result) {
@@ -224,9 +279,80 @@ export default function Dignet() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const elements = result ? buildElements(result) : []
-  const nodeCount = elements.filter((e) => !e.data.source).length
-  const edgeCount = elements.filter((e) => e.data.source).length
+  const geneElements = result ? buildElements(result) : []
+
+  // Build entity nodes and edges based on visible categories
+  function buildEntityElements() {
+    if (!entities || !result) return []
+    const extra = []
+
+    if (visibleCategories.drugs && entities.drugs?.length) {
+      entities.drugs.slice(0, 10).forEach((drug, i) => {
+        const drugId = `drug_${i}`
+        extra.push({
+          data: { id: drugId, label: drug.term, nodeType: 'drug', degree: 1, centrality_d: 0 }
+        })
+        const topGenes = geneElements
+          .filter(e => !e.data.source)
+          .sort((a, b) => (b.data.degree || 0) - (a.data.degree || 0))
+          .slice(0, 3)
+        topGenes.forEach(g => {
+          extra.push({
+            data: { id: `de_${drugId}_${g.data.id}`, source: drugId, target: g.data.id, weight: 1, edgeType: 'entity', ino_color: '#cbd5e0' }
+          })
+        })
+      })
+    }
+
+    if (visibleCategories.diseases && entities.diseases?.length) {
+      entities.diseases.slice(0, 10).forEach((disease, i) => {
+        const diseaseId = `disease_${i}`
+        extra.push({
+          data: { id: diseaseId, label: disease.term, nodeType: 'disease', degree: 1, centrality_d: 0 }
+        })
+        const topGenes = geneElements
+          .filter(e => !e.data.source)
+          .sort((a, b) => (b.data.degree || 0) - (a.data.degree || 0))
+          .slice(0, 3)
+        topGenes.forEach(g => {
+          extra.push({
+            data: { id: `de_${diseaseId}_${g.data.id}`, source: diseaseId, target: g.data.id, weight: 1, edgeType: 'entity', ino_color: '#cbd5e0' }
+          })
+        })
+      })
+    }
+
+    if (visibleCategories.ino && entities.ino_distribution?.length) {
+      entities.ino_distribution.slice(0, 8).forEach((ino, i) => {
+        const inoId = `ino_${i}`
+        extra.push({
+          data: { id: inoId, label: ino.term, nodeType: 'ino', degree: 1, centrality_d: 0 }
+        })
+        const matchingGenes = new Set()
+        geneElements.filter(e => e.data.source).forEach(e => {
+          const cat = (e.data.ino_category || '').replace(/_/g, ' ')
+          if (cat === ino.term || e.data.ino_category === ino.term) {
+            matchingGenes.add(e.data.source)
+            matchingGenes.add(e.data.target)
+          }
+        })
+        ;[...matchingGenes].slice(0, 5).forEach(g => {
+          extra.push({
+            data: { id: `de_${inoId}_${g}`, source: inoId, target: g, weight: 1, edgeType: 'entity', ino_color: '#cbd5e0' }
+          })
+        })
+      })
+    }
+
+    return extra
+  }
+
+  const entityElements = buildEntityElements()
+  const elements = [...geneElements, ...entityElements]
+  const geneNodeCount = geneElements.filter(e => !e.data.source).length
+  const entityNodeCount = entityElements.filter(e => !e.data.source).length
+  const nodeCount = geneNodeCount + entityNodeCount
+  const edgeCount = elements.filter(e => e.data.source).length
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
@@ -297,10 +423,11 @@ export default function Dignet() {
           <div className="flex gap-4 flex-wrap">
             {[
               { label: 'PMIDs', value: result.pmid_count?.toLocaleString() },
-              { label: 'Nodes', value: nodeCount },
+              { label: 'Gene Nodes', value: geneNodeCount },
+              entityNodeCount > 0 ? { label: 'Entity Nodes', value: entityNodeCount } : null,
               { label: 'Edges', value: edgeCount },
               { label: 'Cached', value: result.cached ? 'Yes' : 'No' },
-            ].map(({ label, value }) => (
+            ].filter(Boolean).map(({ label, value }) => (
               <div key={label} className="bg-white border border-gray-200 rounded px-3 py-1.5">
                 <span className="text-xs text-gray-500 mr-1">{label}:</span>
                 <span className="text-xs font-semibold text-navy">{value}</span>
@@ -346,19 +473,14 @@ export default function Dignet() {
               Vaccine only
             </label>
             {yearRange && (
-              <div className="flex items-center gap-2">
-                <label className="text-xs text-gray-500">Years:</label>
-                <input type="number" value={yearMin} onChange={e => setYearMin(+e.target.value)}
+              <div className="w-full mt-2">
+                <label className="text-xs text-gray-500 mb-1 block">Year Range</label>
+                <YearRangeSlider
                   min={yearRange.min_year} max={yearRange.max_year}
-                  className="w-16 text-xs border border-gray-300 rounded px-1 py-1 text-center" />
-                <span className="text-xs text-gray-400">&mdash;</span>
-                <input type="number" value={yearMax} onChange={e => setYearMax(+e.target.value)}
-                  min={yearRange.min_year} max={yearRange.max_year}
-                  className="w-16 text-xs border border-gray-300 rounded px-1 py-1 text-center" />
-                <button onClick={() => runSearch(query, limit, { ino_type: inoFilter, has_vaccine: vaccineOnly, year_min: yearMin, year_max: yearMax })}
-                  className="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded">
-                  Apply
-                </button>
+                  valueMin={yearMin} valueMax={yearMax}
+                  onChangeMin={v => handleYearChange(v, yearMax)}
+                  onChangeMax={v => handleYearChange(yearMin, v)}
+                />
               </div>
             )}
           </div>
@@ -377,6 +499,15 @@ export default function Dignet() {
                 <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-full bg-[#1e3a5f]"></span> High centrality</span>
                 <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-full bg-[#93c5fd]"></span> Low centrality</span>
               </div>
+              {(visibleCategories.drugs || visibleCategories.diseases || visibleCategories.ino) && (
+                <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
+                  {visibleCategories.drugs && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-green-500 rotate-45"></span> Drug</span>}
+                  {visibleCategories.diseases && <span className="flex items-center gap-1"><span className="inline-block w-0 h-0 border-l-[6px] border-r-[6px] border-b-[10px] border-transparent border-b-red-500"></span> Disease</span>}
+                  {visibleCategories.ino && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-purple-500 rounded-sm"></span> INO Type</span>}
+                  <span className="text-gray-300">|</span>
+                  <span className="text-gray-400">Dashed edges = entity associations</span>
+                </div>
+              )}
             </div>
 
             {/* Right sidebar */}
@@ -429,6 +560,8 @@ export default function Dignet() {
                       }
                     }}
                     onClearHighlight={() => { setActiveHighlight(null); setHighlightType(null) }}
+                    visibleCategories={visibleCategories}
+                    onToggleCategory={(key) => setVisibleCategories(prev => ({ ...prev, [key]: !prev[key] }))}
                   />
                 )}
               </div>

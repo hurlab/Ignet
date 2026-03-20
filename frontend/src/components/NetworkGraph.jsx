@@ -91,6 +91,58 @@ function buildStylesheet(elements) {
         width: 3,
       },
     },
+    // Drug nodes — green diamonds
+    {
+      selector: 'node[nodeType="drug"]',
+      style: {
+        'background-color': '#38a169',
+        'shape': 'diamond',
+        width: 20,
+        height: 20,
+        'border-color': '#276749',
+        'border-width': 1.5,
+        'font-size': '8px',
+        color: '#276749',
+      },
+    },
+    // Disease nodes — red triangles
+    {
+      selector: 'node[nodeType="disease"]',
+      style: {
+        'background-color': '#e53e3e',
+        'shape': 'triangle',
+        width: 20,
+        height: 20,
+        'border-color': '#9b2c2c',
+        'border-width': 1.5,
+        'font-size': '8px',
+        color: '#9b2c2c',
+      },
+    },
+    // INO type nodes — purple hexagons
+    {
+      selector: 'node[nodeType="ino"]',
+      style: {
+        'background-color': '#9f7aea',
+        'shape': 'hexagon',
+        width: 18,
+        height: 18,
+        'border-color': '#6b46c1',
+        'border-width': 1.5,
+        'font-size': '7px',
+        color: '#6b46c1',
+      },
+    },
+    // Edges connecting to entity nodes — dashed, lighter
+    {
+      selector: 'edge[edgeType="entity"]',
+      style: {
+        'line-style': 'dashed',
+        'line-color': '#cbd5e0',
+        width: 1,
+        opacity: 0.4,
+      },
+    },
   ]
 }
 

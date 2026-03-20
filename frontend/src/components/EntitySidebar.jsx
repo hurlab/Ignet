@@ -43,7 +43,7 @@ function Section({ title, color, items, onItemClick, activeItem }) {
   )
 }
 
-export default function EntitySidebar({ entities, loading, onHighlight, activeHighlight, onClearHighlight }) {
+export default function EntitySidebar({ entities, loading, onHighlight, activeHighlight, onClearHighlight, visibleCategories, onToggleCategory }) {
   if (loading) {
     return (
       <div className="text-xs text-gray-400 py-4 text-center">
@@ -66,6 +66,34 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
             Clear filter
           </button>
         )}
+      </div>
+
+      {/* Category toggle switches */}
+      <div className="flex flex-col gap-1 mb-2">
+        {[
+          { key: 'drugs', label: 'Drugs', color: 'bg-green-500' },
+          { key: 'diseases', label: 'Diseases', color: 'bg-red-500' },
+          { key: 'ino', label: 'INO Types', color: 'bg-purple-500' },
+        ].map(({ key, label, color }) => (
+          <label key={key} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
+            <button
+              onClick={() => onToggleCategory?.(key)}
+              className={`relative w-8 h-4 rounded-full transition-colors ${
+                visibleCategories?.[key] ? color : 'bg-gray-300'
+              }`}
+            >
+              <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${
+                visibleCategories?.[key] ? 'translate-x-4' : 'translate-x-0.5'
+              }`} />
+            </button>
+            {label}
+            <span className="text-gray-400">({
+              key === 'drugs' ? entities?.drugs?.length || 0 :
+              key === 'diseases' ? entities?.diseases?.length || 0 :
+              entities?.ino_distribution?.length || 0
+            })</span>
+          </label>
+        ))}
       </div>
 
       {activeHighlight && (

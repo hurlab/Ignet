@@ -389,14 +389,36 @@ def gene_report(symbol: str):
             gene_info = cursor.fetchone()
 
             # 2. Centrality scores from t_centrality_score_dignet
+            # Use the largest query network (most genes) for the most representative scores
             cursor.execute(
-                "SELECT score_type, score FROM t_centrality_score_dignet WHERE genesymbol = %s",
+                """SELECT score_type, score FROM t_centrality_score_dignet
+                   WHERE genesymbol = %s
+                   AND c_query_id = (
+                       SELECT c_query_id FROM t_centrality_score_dignet
+                       GROUP BY c_query_id ORDER BY COUNT(*) DESC LIMIT 1
+                   )""",
                 (clean,),
             )
             centrality = {
                 row["score_type"]: float(row["score"]) if row["score"] else 0
                 for row in cursor.fetchall()
             }
+
+            # 2b. Raw interaction counts
+            cursor.execute(
+                """SELECT COUNT(DISTINCT neighbor) AS total_neighbors,
+                          COUNT(DISTINCT PMID) AS total_pmids,
+                          COUNT(*) AS total_sentences
+                   FROM (
+                       (SELECT geneSymbol2 AS neighbor, PMID
+                        FROM t_sentence_hit_gene2gene_Host WHERE geneSymbol1 = %s)
+                       UNION ALL
+                       (SELECT geneSymbol1 AS neighbor, PMID
+                        FROM t_sentence_hit_gene2gene_Host WHERE geneSymbol2 = %s)
+                   ) AS combined""",
+                (clean, clean),
+            )
+            raw_counts = cursor.fetchone() or {}
 
             # 3. Top 20 neighbors
             cursor.execute(
@@ -469,6 +491,11 @@ def gene_report(symbol: str):
     return jsonify({
         "gene_info": gene_info,
         "centrality": centrality,
+        "raw_counts": {
+            "neighbors": int(raw_counts.get("total_neighbors") or 0),
+            "pmids": int(raw_counts.get("total_pmids") or 0),
+            "sentences": int(raw_counts.get("total_sentences") or 0),
+        },
         "top_neighbors": top_neighbors,
         "ino_distribution": ino_distribution,
         "drugs": drugs,

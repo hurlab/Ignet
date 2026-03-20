@@ -75,33 +75,70 @@ function downloadCSV(neighbors, geneSymbol) {
 
 // --- Report Card Sub-components ---
 
-function CentralityCards({ centrality }) {
-  if (!centrality || Object.keys(centrality).length === 0) return null
+function GeneStatsCards({ centrality, rawCounts }) {
+  const [mode, setMode] = useState('counts')
 
-  // API returns single-letter keys: d, p (eigenvector), c, b
-  const entries = [
-    { key: 'd', label: 'Degree', value: centrality.d ?? centrality.degree ?? 0 },
-    { key: 'p', label: 'Eigenvector', value: centrality.p ?? centrality.eigenvector ?? 0 },
-    { key: 'c', label: 'Closeness', value: centrality.c ?? centrality.closeness ?? 0 },
-    { key: 'b', label: 'Betweenness', value: centrality.b ?? centrality.betweenness ?? 0 },
+  const countEntries = [
+    { label: 'Neighbors', value: rawCounts?.neighbors ?? 0, fmt: (v) => v.toLocaleString() },
+    { label: 'PMIDs', value: rawCounts?.pmids ?? 0, fmt: (v) => v.toLocaleString() },
+    { label: 'Sentences', value: rawCounts?.sentences ?? 0, fmt: (v) => v.toLocaleString() },
   ]
 
+  const centralityEntries = [
+    { label: 'Degree', value: centrality?.d ?? 0 },
+    { label: 'Eigenvector', value: centrality?.p ?? 0 },
+    { label: 'Closeness', value: centrality?.c ?? 0 },
+    { label: 'Betweenness', value: centrality?.b ?? 0 },
+  ]
+
+  const hasCentrality = centralityEntries.some((e) => e.value > 0)
+  const entries = mode === 'counts' ? countEntries : centralityEntries
   const maxVal = Math.max(...entries.map((e) => e.value), 0.001)
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      {entries.map((e) => (
-        <div key={e.key} className="bg-white border border-gray-200 rounded-lg p-3">
-          <div className="text-[11px] text-gray-500 font-medium uppercase tracking-wide mb-1">{e.label}</div>
-          <div className="text-lg font-bold text-navy">{e.value.toFixed(4)}</div>
-          <div className="mt-1.5 bg-gray-100 rounded-full h-1.5">
-            <div
-              className="bg-navy rounded-full h-1.5 transition-all"
-              style={{ width: `${Math.min((e.value / maxVal) * 100, 100)}%` }}
-            />
-          </div>
+    <div className="space-y-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-gray-500">View:</span>
+        <div className="inline-flex bg-gray-100 rounded-full p-0.5">
+          <button
+            onClick={() => setMode('counts')}
+            className={`text-xs px-3 py-1 rounded-full transition-colors ${
+              mode === 'counts' ? 'bg-navy text-white font-semibold' : 'text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            Raw Counts
+          </button>
+          {hasCentrality && (
+            <button
+              onClick={() => setMode('centrality')}
+              className={`text-xs px-3 py-1 rounded-full transition-colors ${
+                mode === 'centrality' ? 'bg-navy text-white font-semibold' : 'text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              Network Centrality
+            </button>
+          )}
         </div>
-      ))}
+        {mode === 'centrality' && (
+          <span className="text-[10px] text-gray-400">(normalized 0–1, from largest query network)</span>
+        )}
+      </div>
+      <div className={`grid gap-3 ${mode === 'counts' ? 'grid-cols-3' : 'grid-cols-2 md:grid-cols-4'}`}>
+        {entries.map((e) => (
+          <div key={e.label} className="bg-white border border-gray-200 rounded-lg p-3">
+            <div className="text-[11px] text-gray-500 font-medium uppercase tracking-wide mb-1">{e.label}</div>
+            <div className="text-lg font-bold text-navy">
+              {e.fmt ? e.fmt(e.value) : e.value.toFixed(4)}
+            </div>
+            <div className="mt-1.5 bg-gray-100 rounded-full h-1.5">
+              <div
+                className="bg-navy rounded-full h-1.5 transition-all"
+                style={{ width: `${Math.min((e.value / maxVal) * 100, 100)}%` }}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -224,8 +261,8 @@ function ReportCard({ reportData, gene }) {
         </div>
       )}
 
-      {/* Centrality Scores */}
-      <CentralityCards centrality={reportData.centrality} />
+      {/* Gene Stats: Raw Counts / Network Centrality toggle */}
+      <GeneStatsCards centrality={reportData.centrality} rawCounts={reportData.raw_counts} />
 
       {/* INO Breakdown */}
       <InoBreakdown distribution={reportData.ino_distribution} />

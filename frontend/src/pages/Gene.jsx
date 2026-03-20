@@ -78,18 +78,13 @@ function downloadCSV(neighbors, geneSymbol) {
 function CentralityCards({ centrality }) {
   if (!centrality || Object.keys(centrality).length === 0) return null
 
-  const labels = {
-    degree: 'Degree',
-    eigenvector: 'Eigenvector',
-    closeness: 'Closeness',
-    betweenness: 'Betweenness',
-  }
-
-  const entries = Object.entries(labels).map(([key, label]) => ({
-    key,
-    label,
-    value: centrality[key] ?? centrality[key.charAt(0).toUpperCase() + key.slice(1)] ?? 0,
-  }))
+  // API returns single-letter keys: d, p (eigenvector), c, b
+  const entries = [
+    { key: 'd', label: 'Degree', value: centrality.d ?? centrality.degree ?? 0 },
+    { key: 'p', label: 'Eigenvector', value: centrality.p ?? centrality.eigenvector ?? 0 },
+    { key: 'c', label: 'Closeness', value: centrality.c ?? centrality.closeness ?? 0 },
+    { key: 'b', label: 'Betweenness', value: centrality.b ?? centrality.betweenness ?? 0 },
+  ]
 
   const maxVal = Math.max(...entries.map((e) => e.value), 0.001)
 

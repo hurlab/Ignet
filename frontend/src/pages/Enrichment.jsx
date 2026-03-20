@@ -280,7 +280,7 @@ export default function Enrichment() {
               <NetworkGraph
                 elements={cyElements}
                 onNodeClick={(node) => {
-                  window.open(`/gene?q=${encodeURIComponent(node.label)}`, '_blank')
+                  window.open(`/ignet/gene?q=${encodeURIComponent(node.label)}`, '_blank')
                 }}
               />
             </div>

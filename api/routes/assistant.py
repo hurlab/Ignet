@@ -125,7 +125,12 @@ Please answer the question based on the evidence above. Cite specific PMIDs for 
         )
         upstream.raise_for_status()
         llm_response = upstream.json()
-        answer = llm_response.get("reply") or llm_response.get("response") or str(llm_response)
+        # BioSummarAI returns {"Summary": {"reply": "..."}} or {"reply": "..."}
+        summary_obj = llm_response.get("Summary") or llm_response
+        if isinstance(summary_obj, dict):
+            answer = summary_obj.get("reply") or summary_obj.get("response") or summary_obj.get("text") or str(summary_obj)
+        else:
+            answer = str(summary_obj)
     except http_requests.Timeout:
         return jsonify({"error": "Timeout", "message": "AI service timed out."}), 504
     except Exception as exc:

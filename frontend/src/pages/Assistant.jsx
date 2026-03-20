@@ -102,9 +102,9 @@ export default function Assistant() {
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl font-bold text-navy">Smart Literature Assistant</h1>
+          <h1 className="text-xl font-bold text-navy">Literature Assistant</h1>
           <p className="text-gray-500 text-xs">
-            RAG-powered Q&amp;A over Ignet gene interaction literature. Ask questions and get cited answers.
+            Ask questions about gene interactions. Answers are grounded in Ignet's PubMed evidence database and cited with PMIDs.
           </p>
         </div>
         {messages.length > 0 && (

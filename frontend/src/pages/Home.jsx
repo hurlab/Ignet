@@ -58,8 +58,8 @@ const coreTools = [
     icon: '🔖',
   },
   {
-    title: 'AI Assistant',
-    description: 'Ask questions about gene interactions and get answers grounded in PubMed evidence.',
+    title: 'Literature Assistant',
+    description: 'Ask questions about gene interactions and get answers grounded in Ignet\'s PubMed evidence database.',
     to: '/assistant',
     icon: '💬',
   },

@@ -146,7 +146,7 @@ export default function Dignet() {
   const [entitiesLoading, setEntitiesLoading] = useState(false)
   const [activeHighlight, setActiveHighlight] = useState(null)
   const [highlightType, setHighlightType] = useState(null)
-  const [visibleCategories, setVisibleCategories] = useState({ drugs: false, diseases: false, ino: false })
+  const [visibleCategories, setVisibleCategories] = useState({ drugs: true, diseases: true, ino: true })
   const cyInstanceRef = useRef(null)
   const didAutoSearch = useRef(false)
   const abortRef = useRef(null)
@@ -218,12 +218,16 @@ export default function Dignet() {
     const controller = new AbortController()
     abortRef.current = controller
 
+    const isNewQuery = q !== (result?.keywords ?? '')
     setLoading(true)
     setError(null)
     setResult(null)
     setSelectedNode(null)
-    setEntities(null)
-    setActiveHighlight(null)
+    if (isNewQuery) {
+      setEntities(null)
+      setActiveHighlight(null)
+      setHighlightType(null)
+    }
     try {
       const activeFilters = filters ?? { ino_type: inoFilter, has_vaccine: vaccineOnly }
       const raw = await api.dignetSearch(q, searchLimit ?? limit, activeFilters)
@@ -231,9 +235,9 @@ export default function Dignet() {
       const data = raw?.data ?? raw
       setResult(data)
 
-      // Non-blocking entity fetch using fast PMID-based endpoint
+      // Fetch entities only for new queries (not filter changes)
       const queryId = data.query_id
-      if (queryId) {
+      if (queryId && isNewQuery) {
         setEntitiesLoading(true)
         api.dignetEntities(queryId)
           .then(setEntities)

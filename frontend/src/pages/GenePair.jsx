@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
@@ -34,6 +35,35 @@ export default function GenePair() {
   const [sortBy, setSortBy] = useState('score') // 'score' or 'pmid'
   const debounceRef1 = useRef(null)
   const debounceRef2 = useRef(null)
+  const [searchParams] = useSearchParams()
+
+  // Auto-fill and auto-search from URL parameters on mount
+  useEffect(() => {
+    const g1 = searchParams.get('gene1')
+    const g2 = searchParams.get('gene2')
+    if (g1) setGene1(g1.toUpperCase())
+    if (g2) setGene2(g2.toUpperCase())
+    if (g1 && g2) {
+      // Auto-submit using param values directly to avoid stale state closure
+      const upper1 = g1.toUpperCase()
+      const upper2 = g2.toUpperCase()
+      setLoading(true)
+      setError(null)
+      setPairData(null)
+      setPredictResult(null)
+      api.genePair(upper1, upper2).then((raw) => {
+        const interactions = raw?.interactions ?? []
+        const total = raw?.total ?? 0
+        const prediction_summary = raw?.prediction_summary ?? null
+        const meta = raw?.data ?? {}
+        setPairData({ ...meta, interactions, total, prediction_summary })
+      }).catch((err) => {
+        setError(err.message)
+      }).finally(() => {
+        setLoading(false)
+      })
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     function handleClickOutside() { setShowDropdown1(false); setShowDropdown2(false) }
@@ -78,7 +108,7 @@ export default function GenePair() {
   }
 
   async function handleSubmit(e) {
-    e.preventDefault()
+    if (e) e.preventDefault()
     const g1 = gene1.trim().toUpperCase()
     const g2 = gene2.trim().toUpperCase()
     if (!g1 || !g2) return

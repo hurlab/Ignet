@@ -10,6 +10,7 @@ export default function Explore() {
   const [error, setError] = useState(null)
   const [stats, setStats] = useState(null)
   const [inoTerms, setInoTerms] = useState([])
+  const [geneFilter, setGeneFilter] = useState('')
 
   useEffect(() => {
     Promise.all([
@@ -147,8 +148,18 @@ export default function Explore() {
 
           {/* Gene cloud */}
           <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="mb-3">
+              <input
+                type="text"
+                value={geneFilter}
+                onChange={e => setGeneFilter(e.target.value)}
+                placeholder="Search genes..."
+                className="border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500 w-48"
+              />
+            </div>
             <div className="flex flex-wrap gap-1.5">
               {topGenes.map(({ gene, pair_count }) => {
+                const isMatch = !geneFilter || gene.toLowerCase().includes(geneFilter.toLowerCase())
                 const ratio = pair_count / maxCount
                 const size = ratio > 0.5 ? 'text-base font-bold' : ratio > 0.2 ? 'text-sm font-semibold' : 'text-xs font-medium'
                 const bg = ratio > 0.5 ? 'bg-navy text-white' : ratio > 0.2 ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-700'
@@ -156,7 +167,7 @@ export default function Explore() {
                   <Link
                     key={gene}
                     to={`/gene?q=${encodeURIComponent(gene)}`}
-                    className={`${size} ${bg} px-2 py-0.5 rounded hover:opacity-80 transition-opacity`}
+                    className={`${size} ${bg} px-2 py-0.5 rounded hover:opacity-80 transition-opacity ${isMatch ? 'opacity-100' : 'opacity-20'}`}
                     title={`${gene}: ${pair_count.toLocaleString()} co-occurrences`}
                   >
                     {gene}
@@ -179,10 +190,18 @@ export default function Explore() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {topGenes.slice(0, 50).map(({ gene, pair_count }, i) => (
-                  <tr key={gene} className="hover:bg-blue-50 transition-colors">
+                {[...topGenes.slice(0, 50)].sort((a, b) => {
+                  const aMatch = !geneFilter || a.gene.toLowerCase().includes(geneFilter.toLowerCase())
+                  const bMatch = !geneFilter || b.gene.toLowerCase().includes(geneFilter.toLowerCase())
+                  if (aMatch && !bMatch) return -1
+                  if (!aMatch && bMatch) return 1
+                  return 0
+                }).map(({ gene, pair_count }, i) => {
+                  const isRowMatch = !geneFilter || gene.toLowerCase().includes(geneFilter.toLowerCase())
+                  return (
+                  <tr key={gene} className={`hover:bg-blue-50 transition-colors ${!isRowMatch && geneFilter ? 'opacity-30' : ''}`}>
                     <td className="px-3 py-1.5 text-gray-400">{i + 1}</td>
-                    <td className="px-3 py-1.5 font-medium text-navy">{gene}</td>
+                    <td className={`px-3 py-1.5 font-medium ${isRowMatch && geneFilter ? 'text-blue-700' : 'text-navy'}`}>{gene}</td>
                     <td className="px-3 py-1.5 text-right text-gray-600">{pair_count.toLocaleString()}</td>
                     <td className="px-3 py-1.5 w-32">
                       <div className="bg-gray-200 rounded-full h-1.5">
@@ -201,7 +220,8 @@ export default function Explore() {
                       </Link>
                     </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>

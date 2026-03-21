@@ -294,6 +294,24 @@ function ReportCard({ reportData, gene }) {
         </div>
       )}
 
+      {/* Quick-action links to related pages */}
+      {gene && (
+        <div className="flex flex-wrap gap-2 mt-2">
+          <a href={`/ignet/genepair?gene1=${encodeURIComponent(gene)}`} target="_blank" rel="noopener noreferrer"
+            className="text-xs bg-blue-50 text-blue-700 px-3 py-1 rounded-full hover:bg-blue-100 transition-colors">
+            Compare with another gene
+          </a>
+          <a href={`/ignet/enrichment?genes=${encodeURIComponent(gene)}`} target="_blank" rel="noopener noreferrer"
+            className="text-xs bg-green-50 text-green-700 px-3 py-1 rounded-full hover:bg-green-100 transition-colors">
+            Analyze gene set
+          </a>
+          <a href={`/ignet/dignet?q=${encodeURIComponent(gene)}`} target="_blank" rel="noopener noreferrer"
+            className="text-xs bg-purple-50 text-purple-700 px-3 py-1 rounded-full hover:bg-purple-100 transition-colors">
+            Search network
+          </a>
+        </div>
+      )}
+
       {/* Gene Stats: Raw Counts / Network Centrality toggle */}
       <GeneStatsCards centrality={reportData.centrality} rawCounts={reportData.raw_counts} />
 

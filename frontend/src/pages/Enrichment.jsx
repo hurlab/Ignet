@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
@@ -154,6 +154,7 @@ function TagList({ items, color }) {
 
 export default function Enrichment() {
   const [searchParams] = useSearchParams()
+  const navigate = useNavigate()
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -254,12 +255,20 @@ export default function Enrichment() {
             Example: TNF, IL6, IFNG, IL1B, IL10
           </button>
           {data && (
-            <button
-              onClick={() => downloadCSV(data)}
-              className="ml-auto text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded transition-colors"
-            >
-              Export CSV
-            </button>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                onClick={() => downloadCSV(data)}
+                className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded transition-colors"
+              >
+                Export CSV
+              </button>
+              <button
+                onClick={() => navigate('/compare')}
+                className="text-xs bg-purple-50 text-purple-700 px-3 py-1.5 rounded-full hover:bg-purple-100 transition-colors"
+              >
+                Compare with another gene set
+              </button>
+            </div>
           )}
         </div>
       </div>

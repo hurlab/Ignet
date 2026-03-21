@@ -18,6 +18,7 @@ export default function InoExplorer() {
   const [searchParams] = useSearchParams()
 
   const [terms, setTerms] = useState([])
+  const [termFilter, setTermFilter] = useState('')
   const [termsLoading, setTermsLoading] = useState(true)
   const [termsError, setTermsError] = useState(null)
 
@@ -97,8 +98,23 @@ export default function InoExplorer() {
       {termsError && <p className="text-red-600 text-sm">Error: {termsError}</p>}
 
       {!termsLoading && !termsError && terms.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {terms.map((t) => {
+        <>
+          <div className="mb-3">
+            <input
+              type="text"
+              value={termFilter}
+              onChange={e => setTermFilter(e.target.value)}
+              placeholder="Filter interaction types..."
+              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+            />
+            {termFilter && (
+              <p className="text-xs text-gray-400 mt-1">
+                Showing {terms.filter(t => t.term.toLowerCase().includes(termFilter.toLowerCase())).length} of {terms.length} terms
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-2">
+          {terms.filter(t => !termFilter || t.term.toLowerCase().includes(termFilter.toLowerCase())).map((t) => {
             const size = Math.max(12, Math.min(24, 12 + Math.log2(t.count) * 2))
             return (
               <button
@@ -115,7 +131,8 @@ export default function InoExplorer() {
               </button>
             )
           })}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Detail panel */}

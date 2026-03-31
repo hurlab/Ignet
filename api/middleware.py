@@ -139,10 +139,10 @@ def check_daily_llm_limit() -> tuple[bool, str]:
         finally:
             conn.close()
 
-        if count >= 10:
+        if count >= 20:
             return (
                 False,
-                "Daily limit reached (10 AI requests per day). Sign in for unlimited access.",
+                "Daily limit reached (20 AI requests per day). Sign in for unlimited access.",
             )
         return True, ""
 

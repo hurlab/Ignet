@@ -296,10 +296,10 @@ def biobert():
                     sanitized_genes_tuple = tuple(g for g in genes if isinstance(g, str) and g.isalnum())
                     if sanitized_genes_tuple:
                         placeholders = ', '.join(['%s'] * len(sanitized_genes_tuple))
-                        query_pmid = f"SELECT DISTINCT t.PMID FROM t_sentence_hit_gene2gene_Host AS t WHERE t.geneSymbol1 IN ({placeholders}) OR t.geneSymbol2 IN ({placeholders}) LIMIT 1000"
+                        query_pmid = f"SELECT DISTINCT t.pmid FROM t_gene_pairs AS t WHERE t.gene_symbol1 IN ({placeholders}) OR t.gene_symbol2 IN ({placeholders}) LIMIT 1000"
                         cursor.execute(query_pmid, sanitized_genes_tuple * 2)
                         results_pmids = cursor.fetchall()
-                        pmid_list = [row["PMID"] for row in results_pmids]
+                        pmid_list = [row["pmid"] for row in results_pmids]
 
                         if pmid_list:
                             pmid_placeholders = ', '.join(['%s'] * len(pmid_list))

@@ -230,3 +230,10 @@ biosummarAI/test_debug.php
 PROJECT_HANDOFF.md
 PROJECT_LOG.md
 SECURITY_NOTES.md
+IGNET_IMPROVEMENT_PLAN.md
+docs/IGNET_2.0_ARCHITECTURE.md
+docs/INVESTIGATION_Host2024_Pipeline.md
+docs/ENTITY_COOCCURRENCE_SPEC.md
+frontend/SETUP_STATUS.md
+frontend/.claude/
+api/.claude/

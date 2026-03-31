@@ -60,21 +60,12 @@ def vaccine_stats():
         with db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
 
-            cursor.execute("""
-                SELECT COUNT(*) AS total_vaccines FROM (
-                    SELECT vo_id AS vo_id FROM t_vo GROUP BY vo_id
-                    UNION
-                    SELECT voID AS vo_id FROM vo_sciminer_187_terms GROUP BY voID
-                ) combined
-            """)
+            cursor.execute("SELECT COUNT(DISTINCT vo_id) AS total_vaccines FROM t_vo")
             total_vaccines = cursor.fetchone()["total_vaccines"]
 
             cursor.execute(
-                """
-                SELECT COUNT(DISTINCT h.gene_symbol1) AS total_genes
-                FROM t_vo v
-                INNER JOIN t_gene_pairs h ON v.pmid = h.pmid
-                """
+                "SELECT COUNT(DISTINCT gene_symbol) AS total_genes"
+                " FROM t_cooccurrence_vo_gene"
             )
             total_genes = cursor.fetchone()["total_genes"]
 
@@ -176,12 +167,11 @@ def vaccine_top_genes():
             cursor.execute(
                 """
                 SELECT
-                    h.gene_symbol1 AS gene,
-                    COUNT(*) AS total_sentences,
-                    COUNT(DISTINCT v.vo_id) AS unique_vaccines
-                FROM t_vo v
-                INNER JOIN t_gene_pairs h ON v.pmid = h.pmid
-                GROUP BY h.gene_symbol1
+                    gene_symbol AS gene,
+                    SUM(shared_pmids) AS total_sentences,
+                    COUNT(DISTINCT vo_id) AS unique_vaccines
+                FROM t_cooccurrence_vo_gene
+                GROUP BY gene_symbol
                 ORDER BY total_sentences DESC
                 LIMIT 20
                 """
@@ -276,26 +266,48 @@ def vaccine_hierarchy():
         for child in node["children"]:
             _sort_children(child)
 
+    # data_only mode: prune nodes that have no data and no descendants with data
+    data_only = request.args.get("data_only", "").lower() in ("true", "1", "yes")
+
+    def _prune_no_data(node: dict) -> bool:
+        """Remove children without data. Return True if this node should be kept."""
+        node["children"] = [c for c in node["children"] if _prune_no_data(c)]
+        return node["has_data"] or len(node["children"]) > 0
+
     # Root at VO_0000001 only
     root = node_map.get("VO_0000001")
     if root:
-        # Remove _parent if still present
         root.pop("_parent", None)
         _sort_children(root)
+        if data_only:
+            _prune_no_data(root)
         tree = [root]
     else:
         tree = []
 
-    return jsonify({"tree": tree, "total_nodes": total_nodes})
+    pruned_count = total_nodes
+    if data_only:
+        def _count_nodes(nodes):
+            return sum(1 + _count_nodes(n["children"]) for n in nodes)
+        pruned_count = _count_nodes(tree)
+
+    return jsonify({"tree": tree, "total_nodes": pruned_count})
 
 
 # ---------------------------------------------------------------------------
 # Shared network builder (used by both network routes below)
 # ---------------------------------------------------------------------------
 
-def _build_vaccine_network(vo_ids: list[str], gene_gene: bool):
+def _build_vaccine_network(vo_ids: list[str], gene_gene: bool,
+                           cross_entity: bool = False, implicit: bool = False):
     """
     Build Cytoscape-compatible node/edge data for one or more vaccine VO IDs.
+
+    Args:
+        vo_ids: list of VO IDs to include
+        gene_gene: if True, include gene-gene co-occurrence edges
+        cross_entity: if True, include drug-gene, drug-disease, disease-gene edges
+        implicit: if True, include child VO associations for parent VO terms
 
     Returns a (response_dict, status_code) tuple.
     """
@@ -332,6 +344,13 @@ def _build_vaccine_network(vo_ids: list[str], gene_gene: bool):
                     )
                     name_row = cursor.fetchone()
                 if not name_row:
+                    # Fallback: resolve from VO hierarchy (for ancestor-only nodes)
+                    cursor.execute(
+                        "SELECT name AS matching_phrase FROM t_vo_hierarchy WHERE vo_id = %s LIMIT 1",
+                        (vo_id,),
+                    )
+                    name_row = cursor.fetchone()
+                if not name_row:
                     cursor.close()
                     return (
                         {"error": "NotFound", "message": f"Vaccine '{vo_id}' not found."},
@@ -339,40 +358,54 @@ def _build_vaccine_network(vo_ids: list[str], gene_gene: bool):
                     )
                 vaccine_labels[vo_id] = name_row["matching_phrase"]
 
+            # Implicit mode: expand each VO to include its descendant VOs
+            effective_vo_ids = list(vo_ids)
+            if implicit:
+                for vo_id in vo_ids:
+                    cursor.execute(
+                        """
+                        WITH RECURSIVE descendants AS (
+                            SELECT vo_id FROM t_vo_hierarchy WHERE vo_id = %s
+                            UNION ALL
+                            SELECT h.vo_id FROM t_vo_hierarchy h
+                            INNER JOIN descendants d ON h.parent_vo_id = d.vo_id
+                        )
+                        SELECT DISTINCT d.vo_id
+                        FROM descendants d
+                        INNER JOIN t_vo_has_gene_data g ON d.vo_id = g.vo_id
+                        WHERE d.vo_id != %s
+                        """,
+                        (vo_id, vo_id),
+                    )
+                    for row in cursor.fetchall():
+                        child_id = row["vo_id"]
+                        if child_id not in effective_vo_ids:
+                            effective_vo_ids.append(child_id)
+
             # Collect gene associations per vaccine; track max pmid_count per gene
             # gene_pmid_counts: gene -> max pmid_count across all vaccines
             gene_pmid_counts: dict[str, int] = {}
             # vaccine_gene_edges: list of (vo_id, gene, pmid_count)
             vaccine_gene_edges: list[tuple[str, str, int]] = []
 
-            for vo_id in vo_ids:
+            for evo_id in effective_vo_ids:
                 cursor.execute(
                     """
-                    SELECT gene, SUM(pmid_count) AS pmid_count FROM (
-                        SELECT h.gene_symbol1 AS gene, COUNT(DISTINCT v.pmid) AS pmid_count
-                        FROM t_vo v
-                        INNER JOIN t_gene_pairs h ON v.pmid = h.pmid
-                        WHERE v.vo_id = %s
-                        GROUP BY h.gene_symbol1
-                        UNION ALL
-                        SELECT h.gene_symbol1 AS gene, COUNT(DISTINCT v.pmid) AS pmid_count
-                        FROM vo_sciminer_187_terms v
-                        INNER JOIN t_gene_pairs h ON v.pmid = h.pmid
-                        WHERE v.voID = %s
-                          AND v.pmid NOT IN (SELECT pmid FROM t_vo WHERE vo_id = %s)
-                        GROUP BY h.gene_symbol1
-                    ) combined
-                    GROUP BY gene
-                    ORDER BY pmid_count DESC
+                    SELECT gene_symbol AS gene, shared_pmids AS pmid_count
+                    FROM t_cooccurrence_vo_gene
+                    WHERE vo_id = %s
+                    ORDER BY shared_pmids DESC
                     LIMIT 50
                     """,
-                    (vo_id, vo_id, vo_id),
+                    (evo_id,),
                 )
                 gene_rows = cursor.fetchall()
+                # Attribute edges to the original requested VO, not the child
+                edge_vo = evo_id if evo_id in vo_ids else vo_ids[0]
                 for row in gene_rows:
                     gene = row["gene"]
                     cnt = int(row["pmid_count"])
-                    vaccine_gene_edges.append((vo_id, gene, cnt))
+                    vaccine_gene_edges.append((edge_vo, gene, cnt))
                     if gene not in gene_pmid_counts or gene_pmid_counts[gene] < cnt:
                         gene_pmid_counts[gene] = cnt
 
@@ -407,6 +440,40 @@ def _build_vaccine_network(vo_ids: list[str], gene_gene: bool):
                             "type": "gene-gene",
                         })
 
+            # Collect drug associations per vaccine
+            vaccine_drug_edges: list[tuple[str, str, str, int]] = []
+            for evo_id in effective_vo_ids:
+                cursor.execute(
+                    """
+                    SELECT drugbank_id, drug_term, shared_pmids
+                    FROM t_cooccurrence_vo_drug
+                    WHERE vo_id = %s
+                    ORDER BY shared_pmids DESC
+                    LIMIT 20
+                    """,
+                    (evo_id,),
+                )
+                edge_vo = evo_id if evo_id in vo_ids else vo_ids[0]
+                for row in cursor.fetchall():
+                    vaccine_drug_edges.append((edge_vo, row["drugbank_id"], row["drug_term"], int(row["shared_pmids"])))
+
+            # Collect disease associations per vaccine
+            vaccine_disease_edges: list[tuple[str, str, str, int]] = []
+            for evo_id in effective_vo_ids:
+                cursor.execute(
+                    """
+                    SELECT hdo_id, hdo_term, shared_pmids
+                    FROM t_cooccurrence_vo_hdo
+                    WHERE vo_id = %s
+                    ORDER BY shared_pmids DESC
+                    LIMIT 20
+                    """,
+                    (evo_id,),
+                )
+                edge_vo = evo_id if evo_id in vo_ids else vo_ids[0]
+                for row in cursor.fetchall():
+                    vaccine_disease_edges.append((edge_vo, row["hdo_id"], row["hdo_term"], int(row["shared_pmids"])))
+
             cursor.close()
     except Exception as exc:
         logger.exception("Error building vaccine network for %s: %s", vo_ids, exc)
@@ -435,6 +502,83 @@ def _build_vaccine_network(vo_ids: list[str], gene_gene: bool):
                     gene_nodes_seen.add(g)
                     nodes.append({"id": g, "label": g, "type": "gene"})
         edges.extend(gene_gene_edges)
+
+    # Add drug nodes and edges
+    drug_nodes_seen: set[str] = set()
+    for (vo_id, drug_id, drug_term, pmid_count) in vaccine_drug_edges:
+        if drug_id not in drug_nodes_seen:
+            drug_nodes_seen.add(drug_id)
+            nodes.append({"id": drug_id, "label": drug_term, "type": "drug"})
+        edges.append({"source": vo_id, "target": drug_id, "weight": pmid_count, "type": "vaccine-drug"})
+
+    # Add disease nodes and edges
+    disease_nodes_seen: set[str] = set()
+    for (vo_id, hdo_id, hdo_term, pmid_count) in vaccine_disease_edges:
+        if hdo_id not in disease_nodes_seen:
+            disease_nodes_seen.add(hdo_id)
+            nodes.append({"id": hdo_id, "label": hdo_term, "type": "disease"})
+        edges.append({"source": vo_id, "target": hdo_id, "weight": pmid_count, "type": "vaccine-disease"})
+
+    # Cross-entity edges (drug-gene, drug-disease, disease-gene)
+    if cross_entity:
+        # Drug-gene edges for drugs and genes already in the network
+        if drug_nodes_seen and gene_nodes_seen:
+            drug_list = list(drug_nodes_seen)[:20]
+            gene_list = list(gene_nodes_seen)[:30]
+            d_ph = ",".join(["%s"] * len(drug_list))
+            g_ph = ",".join(["%s"] * len(gene_list))
+            cursor2 = None
+            try:
+                with db_connection() as conn2:
+                    cursor2 = conn2.cursor(dictionary=True)
+                    cursor2.execute(
+                        f"""
+                        SELECT drugbank_id, gene_symbol, shared_pmids
+                        FROM t_cooccurrence_drug_gene
+                        WHERE drugbank_id IN ({d_ph}) AND gene_symbol IN ({g_ph})
+                        ORDER BY shared_pmids DESC LIMIT 100
+                        """,
+                        drug_list + gene_list,
+                    )
+                    for row in cursor2.fetchall():
+                        edges.append({"source": row["drugbank_id"], "target": row["gene_symbol"],
+                                      "weight": int(row["shared_pmids"]), "type": "drug-gene"})
+
+                    # Drug-disease edges
+                    if disease_nodes_seen:
+                        dis_list = list(disease_nodes_seen)[:20]
+                        dis_ph = ",".join(["%s"] * len(dis_list))
+                        cursor2.execute(
+                            f"""
+                            SELECT drugbank_id, hdo_id, shared_pmids
+                            FROM t_cooccurrence_drug_hdo
+                            WHERE drugbank_id IN ({d_ph}) AND hdo_id IN ({dis_ph})
+                            ORDER BY shared_pmids DESC LIMIT 100
+                            """,
+                            drug_list + dis_list,
+                        )
+                        for row in cursor2.fetchall():
+                            edges.append({"source": row["drugbank_id"], "target": row["hdo_id"],
+                                          "weight": int(row["shared_pmids"]), "type": "drug-disease"})
+
+                    # Disease-gene edges
+                    if disease_nodes_seen:
+                        cursor2.execute(
+                            f"""
+                            SELECT hdo_id, gene_symbol, shared_pmids
+                            FROM t_cooccurrence_hdo_gene
+                            WHERE hdo_id IN ({dis_ph}) AND gene_symbol IN ({g_ph})
+                            ORDER BY shared_pmids DESC LIMIT 100
+                            """,
+                            dis_list + gene_list,
+                        )
+                        for row in cursor2.fetchall():
+                            edges.append({"source": row["hdo_id"], "target": row["gene_symbol"],
+                                          "weight": int(row["shared_pmids"]), "type": "disease-gene"})
+
+                    cursor2.close()
+            except Exception as exc:
+                logger.warning("Cross-entity edge query failed: %s", exc)
 
     return {"nodes": nodes, "edges": edges}, 200
 
@@ -466,9 +610,12 @@ def vaccine_network_multi():
     if not vo_ids:
         return jsonify({"error": "BadRequest", "message": "No valid VO IDs provided."}), 400
 
-    gene_gene = request.args.get("gene_gene", "").lower() in ("true", "1", "yes")
+    _yes = ("true", "1", "yes")
+    gene_gene = request.args.get("gene_gene", "").lower() in _yes
+    cross_entity = request.args.get("cross_entity", "").lower() in _yes
+    implicit = request.args.get("implicit", "").lower() in _yes
 
-    result, status_code = _build_vaccine_network(vo_ids, gene_gene)
+    result, status_code = _build_vaccine_network(vo_ids, gene_gene, cross_entity, implicit)
     return jsonify(result), status_code
 
 
@@ -500,9 +647,12 @@ def vaccine_network(vo_id: str):
     else:
         vo_ids = [vo_id]
 
-    gene_gene = request.args.get("gene_gene", "").lower() in ("true", "1", "yes")
+    _yes = ("true", "1", "yes")
+    gene_gene = request.args.get("gene_gene", "").lower() in _yes
+    cross_entity = request.args.get("cross_entity", "").lower() in _yes
+    implicit = request.args.get("implicit", "").lower() in _yes
 
-    result, status_code = _build_vaccine_network(vo_ids, gene_gene)
+    result, status_code = _build_vaccine_network(vo_ids, gene_gene, cross_entity, implicit)
     return jsonify(result), status_code
 
 
@@ -560,8 +710,17 @@ def vaccine_profile(vo_id: str):
                 basic = cursor.fetchone()
 
             if not basic:
-                cursor.close()
-                return jsonify({"error": "NotFound", "message": f"Vaccine '{vo_id}' not found."}), 404
+                # Fallback: hierarchy-only node (ancestor with no direct mentions)
+                cursor.execute(
+                    "SELECT vo_id, name FROM t_vo_hierarchy WHERE vo_id = %s LIMIT 1",
+                    (vo_id,),
+                )
+                hier_row = cursor.fetchone()
+                if hier_row:
+                    basic = {"vo_id": hier_row["vo_id"], "total_mentions": 0, "pmid_count": 0}
+                else:
+                    cursor.close()
+                    return jsonify({"error": "NotFound", "message": f"Vaccine '{vo_id}' not found."}), 404
 
             # Most common name: try t_vo first, fall back to vo_sciminer_187_terms
             cursor.execute(
@@ -589,32 +748,52 @@ def vaccine_profile(vo_id: str):
                     (vo_id,),
                 )
                 name_row = cursor.fetchone()
+            if not name_row:
+                cursor.execute(
+                    "SELECT name AS matching_phrase FROM t_vo_hierarchy WHERE vo_id = %s LIMIT 1",
+                    (vo_id,),
+                )
+                name_row = cursor.fetchone()
             vaccine_name = name_row["matching_phrase"] if name_row else vo_id
 
-            # Top associated genes: combine t_vo (primary) + vo_sciminer_187_terms (fallback)
+            # Top associated genes from pre-computed co-occurrence table
             cursor.execute(
                 """
-                SELECT gene, SUM(pmid_count) AS pmid_count FROM (
-                    SELECT h.gene_symbol1 AS gene, COUNT(DISTINCT v.pmid) AS pmid_count
-                    FROM t_vo v
-                    INNER JOIN t_gene_pairs h ON v.pmid = h.pmid
-                    WHERE v.vo_id = %s
-                    GROUP BY h.gene_symbol1
-                    UNION ALL
-                    SELECT h.gene_symbol1 AS gene, COUNT(DISTINCT v.pmid) AS pmid_count
-                    FROM vo_sciminer_187_terms v
-                    INNER JOIN t_gene_pairs h ON v.pmid = h.pmid
-                    WHERE v.voID = %s
-                      AND v.pmid NOT IN (SELECT pmid FROM t_vo WHERE vo_id = %s)
-                    GROUP BY h.gene_symbol1
-                ) combined
-                GROUP BY gene
-                ORDER BY pmid_count DESC
+                SELECT gene_symbol AS gene, shared_pmids AS pmid_count
+                FROM t_cooccurrence_vo_gene
+                WHERE vo_id = %s
+                ORDER BY shared_pmids DESC
                 LIMIT 20
                 """,
-                (vo_id, vo_id, vo_id),
+                (vo_id,),
             )
             top_genes = cursor.fetchall()
+
+            # Associated drugs from co-occurrence table
+            cursor.execute(
+                """
+                SELECT drugbank_id, drug_term, shared_pmids
+                FROM t_cooccurrence_vo_drug
+                WHERE vo_id = %s
+                ORDER BY shared_pmids DESC
+                LIMIT 20
+                """,
+                (vo_id,),
+            )
+            top_drugs = cursor.fetchall()
+
+            # Associated diseases from co-occurrence table
+            cursor.execute(
+                """
+                SELECT hdo_id, hdo_term, shared_pmids
+                FROM t_cooccurrence_vo_hdo
+                WHERE vo_id = %s
+                ORDER BY shared_pmids DESC
+                LIMIT 20
+                """,
+                (vo_id,),
+            )
+            top_diseases = cursor.fetchall()
 
             cursor.close()
     except Exception as exc:
@@ -627,6 +806,8 @@ def vaccine_profile(vo_id: str):
         "total_mentions": int(basic["total_mentions"]),
         "pmid_count": int(basic["pmid_count"]),
         "top_genes": top_genes,
+        "top_drugs": top_drugs,
+        "top_diseases": top_diseases,
     })
 
 

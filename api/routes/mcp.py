@@ -674,28 +674,16 @@ def _tool_vignet_get_vaccine_genes(params: dict) -> str:
                 name_row = cursor.fetchone()
             vaccine_name = name_row["matching_phrase"] if name_row else vo_id
 
-            # PMID-level join: t_vo (primary) + vo_sciminer_187_terms (fallback)
+            # Pre-computed co-occurrence lookup
             cursor.execute(
                 """
-                SELECT gene, SUM(pmid_count) AS pmid_count FROM (
-                    SELECT h.gene_symbol1 AS gene, COUNT(DISTINCT v.pmid) AS pmid_count
-                    FROM t_vo v
-                    INNER JOIN t_gene_pairs h ON v.pmid = h.pmid
-                    WHERE v.vo_id = %s
-                    GROUP BY h.gene_symbol1
-                    UNION ALL
-                    SELECT h.gene_symbol1 AS gene, COUNT(DISTINCT v.pmid) AS pmid_count
-                    FROM vo_sciminer_187_terms v
-                    INNER JOIN t_gene_pairs h ON v.pmid = h.pmid
-                    WHERE v.voID = %s
-                      AND v.pmid NOT IN (SELECT pmid FROM t_vo WHERE vo_id = %s)
-                    GROUP BY h.gene_symbol1
-                ) combined
-                GROUP BY gene
-                ORDER BY pmid_count DESC
+                SELECT gene_symbol AS gene, shared_pmids AS pmid_count
+                FROM t_cooccurrence_vo_gene
+                WHERE vo_id = %s
+                ORDER BY shared_pmids DESC
                 LIMIT %s
                 """,
-                (vo_id, vo_id, vo_id, limit),
+                (vo_id, limit),
             )
             gene_rows = cursor.fetchall()
     except Exception as exc:
@@ -725,20 +713,15 @@ def _tool_vignet_get_vaccine_stats(_params: dict) -> str:
             cursor.execute(
                 """
                 SELECT COUNT(*) AS total_vaccines FROM (
-                    SELECT vo_id FROM t_vo GROUP BY vo_id
-                    UNION
-                    SELECT voID AS vo_id FROM vo_sciminer_187_terms GROUP BY voID
+                    SELECT DISTINCT vo_id FROM t_vo
                 ) combined
                 """
             )
             total_vaccines = int(cursor.fetchone()["total_vaccines"])
 
             cursor.execute(
-                """
-                SELECT COUNT(DISTINCT h.gene_symbol1) AS total_genes
-                FROM t_vo v
-                INNER JOIN t_gene_pairs h ON v.pmid = h.pmid
-                """
+                "SELECT COUNT(DISTINCT gene_symbol) AS total_genes"
+                " FROM t_cooccurrence_vo_gene"
             )
             total_genes = int(cursor.fetchone()["total_genes"])
 

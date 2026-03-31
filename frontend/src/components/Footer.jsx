@@ -10,13 +10,15 @@ export default function Footer() {
             <h4 className="font-semibold text-gray-700 mb-3 text-sm uppercase tracking-wide">
               Resources
             </h4>
-            <ul className="space-y-1">
+            <ul className="grid grid-cols-2 gap-x-4 gap-y-1">
               {[
                 { label: 'About', href: '/ignet/about' },
-                { label: 'FAQs', href: '/ignet/faqs' },
-                { label: 'Links', href: '/ignet/links' },
-                { label: 'Contact Us', href: '/ignet/contact' },
                 { label: 'API Docs', href: '/ignet/api-docs' },
+                { label: 'Links', href: '/ignet/links' },
+                { label: 'MCP for AI', href: '/ignet/api-docs#mcp' },
+                { label: 'FAQs', href: '/ignet/faqs' },
+                { label: 'Contact Us', href: '/ignet/contact' },
+                { label: 'Report an Issue', href: 'https://github.com/hurlab/Ignet/issues' },
               ].map((item) => (
                 <li key={item.label}>
                   <a
@@ -75,7 +77,12 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="border-t border-gray-200 pt-4">
+        <div className="border-t border-gray-200 pt-4 space-y-2">
+          <p className="text-center text-gray-400 text-xs leading-relaxed">
+            Supported by NIH/NIAID{' '}
+            <a href="https://reporter.nih.gov/search/OGGoe17zsEypH0sHLem22g/project-details/11109428" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-600">U24AI171008</a>{' '}
+            VIOLIN 2.0: Vaccine Information and Ontology LInked kNowledgebase.
+          </p>
           <p className="text-center text-gray-400 text-sm">
             Copyright &copy; 2016&ndash;2026 Ignet. All rights reserved.
           </p>

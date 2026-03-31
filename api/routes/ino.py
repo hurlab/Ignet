@@ -22,7 +22,7 @@ def list_ino_terms():
             cursor.execute(
                 """
                 SELECT matching_phrase AS term, COUNT(*) AS count
-                FROM ino_host25
+                FROM t_ino
                 WHERE matching_phrase IS NOT NULL AND matching_phrase != ''
                 GROUP BY matching_phrase
                 ORDER BY count DESC
@@ -56,9 +56,9 @@ def genes_by_ino_term(term: str):
             # Count distinct gene pairs
             cursor.execute(
                 """
-                SELECT COUNT(DISTINCT CONCAT(h.geneSymbol1, ':', h.geneSymbol2)) AS total
-                FROM ino_host25 ino
-                JOIN t_sentence_hit_gene2gene_Host h ON ino.sentence_id = h.sentenceID
+                SELECT COUNT(DISTINCT CONCAT(h.gene_symbol1, ':', h.gene_symbol2)) AS total
+                FROM t_ino ino
+                JOIN t_gene_pairs h ON ino.sentence_id = h.sentence_id
                 WHERE ino.matching_phrase = %s
                 """,
                 (term,),
@@ -68,13 +68,13 @@ def genes_by_ino_term(term: str):
             # Aggregated gene pairs
             cursor.execute(
                 """
-                SELECT h.geneSymbol1 AS gene1, h.geneSymbol2 AS gene2,
+                SELECT h.gene_symbol1 AS gene1, h.gene_symbol2 AS gene2,
                        COUNT(*) AS evidence_count,
-                       COUNT(DISTINCT h.PMID) AS unique_pmids
-                FROM ino_host25 ino
-                JOIN t_sentence_hit_gene2gene_Host h ON ino.sentence_id = h.sentenceID
+                       COUNT(DISTINCT h.pmid) AS unique_pmids
+                FROM t_ino ino
+                JOIN t_gene_pairs h ON ino.sentence_id = h.sentence_id
                 WHERE ino.matching_phrase = %s
-                GROUP BY h.geneSymbol1, h.geneSymbol2
+                GROUP BY h.gene_symbol1, h.gene_symbol2
                 ORDER BY evidence_count DESC
                 LIMIT %s OFFSET %s
                 """,
@@ -85,10 +85,11 @@ def genes_by_ino_term(term: str):
             # Example sentences
             cursor.execute(
                 """
-                SELECT h.geneSymbol1 AS gene1, h.geneSymbol2 AS gene2,
-                       h.sentence, h.PMID
-                FROM ino_host25 ino
-                JOIN t_sentence_hit_gene2gene_Host h ON ino.sentence_id = h.sentenceID
+                SELECT h.gene_symbol1 AS gene1, h.gene_symbol2 AS gene2,
+                       s.sentence, h.pmid
+                FROM t_ino ino
+                JOIN t_gene_pairs h ON ino.sentence_id = h.sentence_id
+                LEFT JOIN t_sentences s ON h.sentence_id = s.sentence_id
                 WHERE ino.matching_phrase = %s
                 LIMIT 5
                 """,

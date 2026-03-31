@@ -61,7 +61,7 @@ def _ncbi_search_pmids(keywords: str) -> list[int]:
     Raises requests.RequestException on network failure.
 
     Fetches up to 5000 PMIDs from NCBI, then filters to only those present
-    in t_sentence_hit_gene2gene_Host (our processed data). This ensures
+    in t_gene_pairs (our processed data). This ensures
     results are actionable even for broad queries where PubMed returns
     mostly recent papers not yet in the Ignet pipeline.
     """
@@ -87,8 +87,8 @@ def _ncbi_search_pmids(keywords: str) -> list[int]:
             cursor = conn.cursor()
             placeholders = ",".join(["%s"] * len(ncbi_pmids))
             cursor.execute(
-                f"SELECT DISTINCT PMID FROM t_sentence_hit_gene2gene_Host "
-                f"WHERE PMID IN ({placeholders})",
+                f"SELECT DISTINCT pmid FROM t_gene_pairs "
+                f"WHERE pmid IN ({placeholders})",
                 tuple(ncbi_pmids),
             )
             db_pmids = {row[0] for row in cursor.fetchall()}
@@ -184,14 +184,14 @@ def _fetch_gene_pairs(
     year_max: int | None = None,
 ) -> list[dict]:
     """
-    Query t_sentence_hit_gene2gene_Host for gene pairs matching the given PMIDs.
+    Query t_gene_pairs for gene pairs matching the given PMIDs.
     Processes in chunks of _PMID_CHUNK to avoid oversized IN clauses.
 
     Args:
         conn: Active database connection.
         pmids: List of PubMed IDs to filter on.
-        has_vaccine: When True, restrict to rows where hasVaccine = 1.
-                     When False, restrict to rows where hasVaccine = 0.
+        has_vaccine: When True, restrict to rows where has_vaccine = 1.
+                     When False, restrict to rows where has_vaccine = 0.
                      When None (default), no filter is applied.
         year_min: When set, restrict to PMIDs with pub_year >= year_min.
         year_max: When set, restrict to PMIDs with pub_year <= year_max.
@@ -201,9 +201,9 @@ def _fetch_gene_pairs(
 
     vaccine_clause = ""
     if has_vaccine is True:
-        vaccine_clause = " AND hasVaccine = 1"
+        vaccine_clause = " AND has_vaccine = 1"
     elif has_vaccine is False:
-        vaccine_clause = " AND hasVaccine = 0"
+        vaccine_clause = " AND has_vaccine = 0"
 
     use_year_filter = year_min is not None or year_max is not None
 
@@ -222,25 +222,25 @@ def _fetch_gene_pairs(
                 year_clause += " AND py.pub_year <= %s"
                 params.append(year_max)
             sql = f"""
-                SELECT h.geneSymbol1  AS gene1,
-                       h.geneSymbol2  AS gene2,
+                SELECT h.gene_symbol1  AS gene1,
+                       h.gene_symbol2  AS gene2,
                        h.score,
-                       h.PMID         AS pmid,
-                       h.sentenceID   AS sentenceID,
+                       h.pmid         AS pmid,
+                       h.sentence_id   AS sentence_id,
                        py.pub_year
-                FROM t_sentence_hit_gene2gene_Host h
-                JOIN t_pmid_year py ON py.PMID = h.PMID
-                WHERE h.PMID IN ({placeholders}){vaccine_clause}{year_clause}
+                FROM t_gene_pairs h
+                JOIN t_pmid_year py ON py.pmid = h.pmid
+                WHERE h.pmid IN ({placeholders}){vaccine_clause}{year_clause}
             """
         else:
             sql = f"""
-                SELECT geneSymbol1  AS gene1,
-                       geneSymbol2  AS gene2,
+                SELECT gene_symbol1  AS gene1,
+                       gene_symbol2  AS gene2,
                        score,
                        PMID         AS pmid,
-                       sentenceID   AS sentenceID
-                FROM t_sentence_hit_gene2gene_Host
-                WHERE PMID IN ({placeholders}){vaccine_clause}
+                       sentence_id   AS sentence_id
+                FROM t_gene_pairs
+                WHERE pmid IN ({placeholders}){vaccine_clause}
             """
 
         cursor = conn.cursor(dictionary=True)
@@ -257,7 +257,7 @@ def _fetch_gene_pairs(
 
 def _build_ino_map(conn, sentence_ids: list[int]) -> dict[int, str]:
     """
-    Batch-query ino_host25 for the given sentence IDs and return a map of
+    Batch-query t_ino for the given sentence IDs and return a map of
     sentence_id -> dominant INO category (most frequent for that sentence).
     """
     if not sentence_ids:
@@ -266,7 +266,7 @@ def _build_ino_map(conn, sentence_ids: list[int]) -> dict[int, str]:
     placeholders = ",".join(["%s"] * len(sentence_ids))
     cursor = conn.cursor(dictionary=True)
     cursor.execute(
-        f"SELECT sentence_id, matching_phrase FROM ino_host25 WHERE sentence_id IN ({placeholders})",
+        f"SELECT sentence_id, matching_phrase FROM t_ino WHERE sentence_id IN ({placeholders})",
         tuple(sentence_ids),
     )
     rows = cursor.fetchall()
@@ -434,7 +434,7 @@ def network_graph(query_id: int):
     Return a Cytoscape.js-compatible graph for the given query_id.
 
     Query Parameters:
-        has_vaccine  - "true"/"false": filter edges by hasVaccine flag
+        has_vaccine  - "true"/"false": filter edges by has_vaccine flag
         ino_type     - one of positive_regulation, negative_regulation,
                        binding, phosphorylation, other, unknown:
                        filter edges to only include the specified INO category
@@ -468,9 +468,9 @@ def network_graph(query_id: int):
 
             # Batch-fetch INO categories for all sentence IDs
             sentence_ids = [
-                int(p["sentenceID"])
+                int(p["sentence_id"])
                 for p in pairs
-                if p.get("sentenceID") is not None
+                if p.get("sentence_id") is not None
             ]
             ino_map = _build_ino_map(conn, sentence_ids)
 
@@ -498,8 +498,8 @@ def network_graph(query_id: int):
         if not g1 or not g2:
             continue
 
-        # Resolve INO category for this edge via sentenceID
-        sid = pair.get("sentenceID")
+        # Resolve INO category for this edge via sentence_id
+        sid = pair.get("sentence_id")
         if sid is not None:
             ino_category = ino_map.get(int(sid), "unknown")
         else:
@@ -566,7 +566,7 @@ def network_graph(query_id: int):
 def network_entities(query_id: int):
     """
     Fast entity lookup for a Dignet query's PMIDs.
-    Queries biosummary25_Host and ino_host25 directly using cached PMIDs.
+    Queries biosummary25_Host and t_ino directly using cached PMIDs.
     Much faster than the full enrichment endpoint for sidebar use.
     """
     try:
@@ -608,9 +608,9 @@ def network_entities(query_id: int):
             # INO types (from the network's sentence IDs)
             cursor.execute(
                 f"""SELECT ino.matching_phrase AS term, COUNT(*) AS cnt
-                    FROM t_sentence_hit_gene2gene_Host h
-                    JOIN ino_host25 ino ON ino.sentence_id = h.sentenceID
-                    WHERE h.PMID IN ({placeholders})
+                    FROM t_gene_pairs h
+                    JOIN t_ino ino ON ino.sentence_id = h.sentence_id
+                    WHERE h.pmid IN ({placeholders})
                     GROUP BY ino.matching_phrase ORDER BY cnt DESC LIMIT 20""",
                 pmid_subset,
             )

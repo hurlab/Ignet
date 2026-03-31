@@ -221,12 +221,12 @@ export default function InoExplorer() {
                     <div key={i} className="text-xs text-gray-600 border-l-2 border-purple-300 pl-3 py-1">
                       <strong>{ex.gene1} &mdash; {ex.gene2}</strong>: {ex.sentence}
                       <a
-                        href={`https://pubmed.ncbi.nlm.nih.gov/${ex.PMID}`}
+                        href={`https://pubmed.ncbi.nlm.nih.gov/${ex.pmid}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-blue-500 ml-1 hover:underline"
                       >
-                        PMID:{ex.PMID}
+                        PMID:{ex.pmid}
                       </a>
                     </div>
                   ))}

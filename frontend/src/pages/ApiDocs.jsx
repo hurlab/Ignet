@@ -410,6 +410,62 @@ export default function ApiDocs() {
         </p>
       </div>
 
+      {/* MCP for AI Assistants */}
+      <div id="mcp" className="mb-8 bg-purple-50 border border-purple-200 rounded-lg p-5">
+        <h3 className="text-base font-semibold text-purple-900 mb-2">MCP for AI Assistants</h3>
+        <p className="text-sm text-purple-800 mb-3">
+          Connect Claude Desktop, Claude.ai, or any MCP-compatible AI assistant directly to Ignet and Vignet data
+          using the <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener noreferrer" className="underline hover:text-purple-600">Model Context Protocol</a>.
+        </p>
+
+        <div className="bg-white border border-purple-100 rounded p-3 mb-3">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-xs text-gray-500 font-medium">MCP Endpoint</span>
+            <code className="text-sm font-mono text-purple-800 bg-purple-50 px-2 py-0.5 rounded">https://ignet.org/api/v1/mcp</code>
+            <CopyButton text="https://ignet.org/api/v1/mcp" />
+          </div>
+          <p className="text-xs text-gray-500">Streamable HTTP transport &mdash; no installation required</p>
+        </div>
+
+        <div className="mb-3">
+          <h4 className="text-xs font-semibold text-purple-800 uppercase tracking-wide mb-2">Setup (Claude Desktop)</h4>
+          <div className="bg-gray-800 rounded p-3 relative">
+            <pre className="text-xs font-mono text-gray-200 overflow-auto whitespace-pre">{`{
+  "mcpServers": {
+    "ignet": {
+      "url": "https://ignet.org/api/v1/mcp"
+    }
+  }
+}`}</pre>
+            <div className="absolute top-2 right-2">
+              <CopyButton text={'{\n  "mcpServers": {\n    "ignet": {\n      "url": "https://ignet.org/api/v1/mcp"\n    }\n  }\n}'} />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h4 className="text-xs font-semibold text-purple-800 uppercase tracking-wide mb-2">Available Tools (8)</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+            {[
+              { name: 'ignet_search_genes', desc: 'Search genes by symbol or name' },
+              { name: 'ignet_get_gene_neighbors', desc: 'Top interacting genes for a symbol' },
+              { name: 'ignet_get_gene_pair_evidence', desc: 'Co-occurrence sentences + scores' },
+              { name: 'ignet_get_stats', desc: 'Database statistics' },
+              { name: 'ignet_get_enrichment', desc: 'Gene list enrichment analysis' },
+              { name: 'vignet_search_vaccines', desc: 'Search vaccines by name or VO ID' },
+              { name: 'vignet_get_vaccine_genes', desc: 'Genes associated with a vaccine' },
+              { name: 'vignet_get_vaccine_stats', desc: 'Vaccine database statistics' },
+            ].map(t => (
+              <div key={t.name} className="flex items-center gap-2 bg-white border border-gray-100 rounded px-2.5 py-1.5">
+                <code className="text-[11px] font-mono text-purple-700 flex-shrink-0">{t.name}</code>
+                <span className="text-[11px] text-gray-400">&mdash;</span>
+                <span className="text-[11px] text-gray-500 truncate">{t.desc}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
       {/* Endpoint sections */}
       {API_CATEGORIES.map((cat) => (
         <CategorySection key={cat.id} category={cat} />

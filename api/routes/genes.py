@@ -87,8 +87,8 @@ def search_genes():
             if species:
                 data_sql += " AND tax_id = %s"
                 data_params.append(species)
-            data_sql += " ORDER BY Symbol ASC LIMIT %s OFFSET %s"
-            data_params += [per_page, offset]
+            data_sql += " ORDER BY (Symbol = %s) DESC, (Symbol LIKE %s) DESC, Symbol ASC LIMIT %s OFFSET %s"
+            data_params += [q.upper(), f"{q}%", per_page, offset]
             cursor.execute(data_sql, data_params)
             genes = cursor.fetchall()
 
@@ -142,9 +142,9 @@ def top_genes():
             cursor.execute(
                 """
                 SELECT gene, COUNT(*) AS pair_count FROM (
-                    SELECT geneSymbol1 AS gene FROM t_sentence_hit_gene2gene_Host
+                    SELECT gene_symbol1 AS gene FROM t_gene_pairs
                     UNION ALL
-                    SELECT geneSymbol2 AS gene FROM t_sentence_hit_gene2gene_Host
+                    SELECT gene_symbol2 AS gene FROM t_gene_pairs
                 ) AS g
                 WHERE gene IS NOT NULL
                 GROUP BY gene
@@ -241,11 +241,11 @@ _SORT_ORDERS = {"ASC", "DESC"}
 @genes_bp.route("/genes/<symbol>/neighbors", methods=["GET"])
 def gene_neighbors(symbol: str):
     """
-    Return genes paired with <symbol> in t_sentence_hit_gene2gene_Host.
+    Return genes paired with <symbol> in t_gene_pairs.
 
     Query params:
       score     - minimum score threshold (float)
-      has_vaccine - Y or N filter on hasVaccine column
+      has_vaccine - Y or N filter on has_vaccine column
       keywords  - full-text keyword filter on sentence
       page      - page number (default 1)
       per_page  - results per page (default 50, max 200)
@@ -284,7 +284,7 @@ def gene_neighbors(symbol: str):
     vaccine_params: list = []
     if has_vaccine_raw in ("Y", "N"):
         vaccine_val = 1 if has_vaccine_raw == "Y" else 0
-        vaccine_filter_sql = "AND hasVaccine = %s "
+        vaccine_filter_sql = "AND has_vaccine = %s "
         vaccine_params = [vaccine_val]
 
     # Build keyword filter
@@ -307,13 +307,13 @@ def gene_neighbors(symbol: str):
             # COUNT distinct neighbors using UNION
             count_sql = f"""
                 SELECT COUNT(DISTINCT neighbor) AS total FROM (
-                    (SELECT geneSymbol2 AS neighbor
-                     FROM t_sentence_hit_gene2gene_Host
-                     WHERE geneSymbol1 = %s {filters})
+                    (SELECT gene_symbol2 AS neighbor
+                     FROM t_gene_pairs
+                     WHERE gene_symbol1 = %s {filters})
                     UNION ALL
-                    (SELECT geneSymbol1 AS neighbor
-                     FROM t_sentence_hit_gene2gene_Host
-                     WHERE geneSymbol2 = %s {filters})
+                    (SELECT gene_symbol1 AS neighbor
+                     FROM t_gene_pairs
+                     WHERE gene_symbol2 = %s {filters})
                 ) AS combined
             """
             cursor.execute(count_sql, [clean_symbol] + filter_params + [clean_symbol] + filter_params)
@@ -324,16 +324,16 @@ def gene_neighbors(symbol: str):
             data_sql = f"""
                 SELECT neighbor,
                        COUNT(*) AS count,
-                       COUNT(DISTINCT PMID) AS unique_pmids,
+                       COUNT(DISTINCT pmid) AS unique_pmids,
                        MAX(score) AS score
                 FROM (
-                    (SELECT geneSymbol2 AS neighbor, score, hasVaccine, PMID, sentenceID
-                     FROM t_sentence_hit_gene2gene_Host
-                     WHERE geneSymbol1 = %s {filters})
+                    (SELECT gene_symbol2 AS neighbor, score, has_vaccine, pmid, sentence_id
+                     FROM t_gene_pairs
+                     WHERE gene_symbol1 = %s {filters})
                     UNION ALL
-                    (SELECT geneSymbol1 AS neighbor, score, hasVaccine, PMID, sentenceID
-                     FROM t_sentence_hit_gene2gene_Host
-                     WHERE geneSymbol2 = %s {filters})
+                    (SELECT gene_symbol1 AS neighbor, score, has_vaccine, pmid, sentence_id
+                     FROM t_gene_pairs
+                     WHERE gene_symbol2 = %s {filters})
                 ) AS combined
                 GROUP BY neighbor
                 ORDER BY {sort_col} {sort_order}
@@ -429,14 +429,14 @@ def gene_report(symbol: str):
             # 2b. Raw interaction counts
             cursor.execute(
                 """SELECT COUNT(DISTINCT neighbor) AS total_neighbors,
-                          COUNT(DISTINCT PMID) AS total_pmids,
+                          COUNT(DISTINCT pmid) AS total_pmids,
                           COUNT(*) AS total_sentences
                    FROM (
-                       (SELECT geneSymbol2 AS neighbor, PMID
-                        FROM t_sentence_hit_gene2gene_Host WHERE geneSymbol1 = %s)
+                       (SELECT gene_symbol2 AS neighbor, PMID
+                        FROM t_gene_pairs WHERE gene_symbol1 = %s)
                        UNION ALL
-                       (SELECT geneSymbol1 AS neighbor, PMID
-                        FROM t_sentence_hit_gene2gene_Host WHERE geneSymbol2 = %s)
+                       (SELECT gene_symbol1 AS neighbor, PMID
+                        FROM t_gene_pairs WHERE gene_symbol2 = %s)
                    ) AS combined""",
                 (clean, clean),
             )
@@ -445,13 +445,13 @@ def gene_report(symbol: str):
             # 3. Top 20 neighbors
             cursor.execute(
                 """
-                SELECT neighbor, COUNT(*) AS count, COUNT(DISTINCT PMID) AS unique_pmids
+                SELECT neighbor, COUNT(*) AS count, COUNT(DISTINCT pmid) AS unique_pmids
                 FROM (
-                    (SELECT geneSymbol2 AS neighbor, PMID
-                     FROM t_sentence_hit_gene2gene_Host WHERE geneSymbol1 = %s)
+                    (SELECT gene_symbol2 AS neighbor, PMID
+                     FROM t_gene_pairs WHERE gene_symbol1 = %s)
                     UNION ALL
-                    (SELECT geneSymbol1 AS neighbor, PMID
-                     FROM t_sentence_hit_gene2gene_Host WHERE geneSymbol2 = %s)
+                    (SELECT gene_symbol1 AS neighbor, PMID
+                     FROM t_gene_pairs WHERE gene_symbol2 = %s)
                 ) AS combined
                 GROUP BY neighbor ORDER BY count DESC LIMIT 20
                 """,
@@ -463,9 +463,9 @@ def gene_report(symbol: str):
             cursor.execute(
                 """
                 SELECT ino.matching_phrase, COUNT(*) AS cnt
-                FROM t_sentence_hit_gene2gene_Host h
-                JOIN ino_host25 ino ON ino.sentence_id = h.sentenceID
-                WHERE h.geneSymbol1 = %s OR h.geneSymbol2 = %s
+                FROM t_gene_pairs h
+                JOIN t_ino ino ON ino.sentence_id = h.sentence_id
+                WHERE h.gene_symbol1 = %s OR h.gene_symbol2 = %s
                 GROUP BY ino.matching_phrase
                 ORDER BY cnt DESC LIMIT 20
                 """,
@@ -480,9 +480,9 @@ def gene_report(symbol: str):
             cursor.execute(
                 """
                 SELECT b.drug_term, COUNT(*) AS cnt
-                FROM t_sentence_hit_gene2gene_Host h
-                JOIN biosummary25_Host b ON b.pmid = h.PMID
-                WHERE (h.geneSymbol1 = %s OR h.geneSymbol2 = %s)
+                FROM t_gene_pairs h
+                JOIN biosummary25_Host b ON b.pmid = h.pmid
+                WHERE (h.gene_symbol1 = %s OR h.gene_symbol2 = %s)
                   AND b.drug_term IS NOT NULL AND b.drug_term != ''
                 GROUP BY b.drug_term ORDER BY cnt DESC LIMIT 15
                 """,
@@ -494,9 +494,9 @@ def gene_report(symbol: str):
             cursor.execute(
                 """
                 SELECT b.hdo_term, COUNT(*) AS cnt
-                FROM t_sentence_hit_gene2gene_Host h
-                JOIN biosummary25_Host b ON b.pmid = h.PMID
-                WHERE (h.geneSymbol1 = %s OR h.geneSymbol2 = %s)
+                FROM t_gene_pairs h
+                JOIN biosummary25_Host b ON b.pmid = h.pmid
+                WHERE (h.gene_symbol1 = %s OR h.gene_symbol2 = %s)
                   AND b.hdo_term IS NOT NULL AND b.hdo_term != ''
                 GROUP BY b.hdo_term ORDER BY cnt DESC LIMIT 15
                 """,

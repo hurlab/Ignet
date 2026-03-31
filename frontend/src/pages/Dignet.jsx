@@ -58,7 +58,7 @@ function downloadCSV(pairs, query) {
   const comment = `# Ignet Dignet Network for "${query}" - https://ignet.org/ignet/dignet\n`
   const header = 'Gene1,Gene2,Score,PMID,Sentence,INO_Category\n'
   const rows = pairs.map(p =>
-    [p.geneSymbol1 || p.gene1, p.geneSymbol2 || p.gene2, p.score || '', p.PMID || p.pmid || '',
+    [p.geneSymbol1 || p.gene1, p.geneSymbol2 || p.gene2, p.score || '', p.pmid || p.pmid || '',
      `"${(p.sentence || '').replace(/"/g, '""')}"`, p.ino_category || ''].join(',')
   ).join('\n')
   const blob = new Blob([comment + header + rows], { type: 'text/csv' })

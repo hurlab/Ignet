@@ -4,6 +4,7 @@ import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
+import { useGeneSet } from '../GeneSetContext.jsx'
 
 const EXAMPLE_GENES = 'TNF, IL6, IFNG, IL1B, IL10'
 
@@ -160,6 +161,16 @@ export default function Enrichment() {
   const [error, setError] = useState(null)
   const [data, setData] = useState(null)
   const didAutoAnalyze = useRef(false)
+  const geneSet = useGeneSet()
+
+  // Load genes transferred from the Gene Set page
+  useEffect(() => {
+    const transferred = localStorage.getItem('ignet_geneset_transfer')
+    if (searchParams.get('from') === 'geneset' && transferred) {
+      setInput(transferred.replace(/,/g, '\n'))
+      localStorage.removeItem('ignet_geneset_transfer')
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-analyze if ?genes= URL param is provided (from Compare page)
   useEffect(() => {
@@ -254,6 +265,15 @@ export default function Enrichment() {
           >
             Example: TNF, IL6, IFNG, IL1B, IL10
           </button>
+          {geneSet?.genes?.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setInput(geneSet.genes.join('\n'))}
+              className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+            >
+              Load from Gene Set ({geneSet.genes.length})
+            </button>
+          )}
           {data && (
             <div className="ml-auto flex items-center gap-2">
               <button

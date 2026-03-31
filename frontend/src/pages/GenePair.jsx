@@ -8,7 +8,7 @@ function downloadCSV(interactions, gene1, gene2) {
   if (!interactions?.length) return
   const header = 'Gene1,Gene2,PMID,Sentence,BioBERT_Score,INO_Term\n'
   const rows = interactions.map(row =>
-    [gene1, gene2, row.PMID || '', `"${(row.sentence_text || '').replace(/"/g, '""')}"`,
+    [gene1, gene2, row.pmid || '', `"${(row.sentence_text || '').replace(/"/g, '""')}"`,
      row.score ?? '', row.ino_term || row.matching_phrase || ''].join(',')
   ).join('\n')
   const blob = new Blob([header + rows], { type: 'text/csv' })
@@ -33,6 +33,7 @@ export default function GenePair() {
   const [predicting, setPredicting] = useState(false)
   const [predictResult, setPredictResult] = useState(null)
   const [sortBy, setSortBy] = useState('score') // 'score' or 'pmid'
+  const [showCount, setShowCount] = useState(20)
   const debounceRef1 = useRef(null)
   const debounceRef2 = useRef(null)
   const [searchParams] = useSearchParams()
@@ -240,7 +241,7 @@ export default function GenePair() {
       )}
 
       {pairData && (() => {
-        const pmids = [...new Set((pairData.interactions ?? []).map((r) => r.PMID).filter(Boolean))]
+        const pmids = [...new Set((pairData.interactions ?? []).map((r) => r.pmid).filter(Boolean))]
         return (
           <div className="space-y-4">
             {/* Summary stats */}
@@ -317,7 +318,7 @@ export default function GenePair() {
             {pairData.interactions?.length > 0 && (() => {
               const sorted = [...(pairData?.interactions || [])].sort((a, b) => {
                 if (sortBy === 'score') return (b.score ?? -1) - (a.score ?? -1)
-                return (b.PMID ?? 0) - (a.PMID ?? 0)
+                return (b.pmid ?? 0) - (a.pmid ?? 0)
               })
               return (
               <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
@@ -359,7 +360,7 @@ export default function GenePair() {
                     </tr>
                   </thead>
                   <tbody>
-                    {sorted.slice(0, 20).map((row, i) => (
+                    {sorted.slice(0, showCount).map((row, i) => (
                       <tr key={i} className="border-b border-gray-50">
                         <td className="py-1 pr-2 font-mono whitespace-nowrap">
                           {typeof row.score === 'number' ? (
@@ -376,12 +377,12 @@ export default function GenePair() {
                         </td>
                         <td className="py-1 pr-2">
                           <a
-                            href={`https://pubmed.ncbi.nlm.nih.gov/${row.PMID}`}
+                            href={`https://pubmed.ncbi.nlm.nih.gov/${row.pmid}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-blue-600 hover:underline"
                           >
-                            {row.PMID}
+                            {row.pmid}
                           </a>
                         </td>
                         <td className="py-1 pr-2 max-w-md">
@@ -397,8 +398,16 @@ export default function GenePair() {
                     ))}
                   </tbody>
                 </table>
-                {pairData.total > 20 && (
-                  <div className="text-xs text-gray-400 mt-2">Showing 20 of {pairData.total} results</div>
+                {pairData.total > showCount && (
+                  <div className="flex items-center gap-3 mt-2">
+                    <span className="text-xs text-gray-400">Showing {Math.min(showCount, sorted.length)} of {pairData.total} results</span>
+                    <button
+                      onClick={() => setShowCount(prev => prev + 20)}
+                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                      Load more
+                    </button>
+                  </div>
                 )}
               </div>
               )

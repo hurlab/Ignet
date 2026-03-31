@@ -32,7 +32,7 @@ def _parse_pagination(args) -> tuple[int, int]:
     return page, per_page
 
 
-_SORT_COLS = {"score", "hasVaccine", "PMID", "sentenceID", "geneSymbol1", "geneSymbol2"}
+_SORT_COLS = {"score", "has_vaccine", "pmid", "sentence_id", "gene_symbol1", "gene_symbol2"}
 # NOTE: "score" is a valid sort column for confidence-based ordering of evidence.
 BIOBERT_URL = f"{_BIOBERT_BASE}/biobert/"
 _SORT_ORDERS = {"ASC", "DESC"}
@@ -87,19 +87,17 @@ def get_pair_interactions(sym1: str, sym2: str):
             pass
 
     if has_vaccine_raw in ("Y", "N"):
-        extra_sql += "AND h.hasVaccine = %s "
+        extra_sql += "AND h.has_vaccine = %s "
         extra_params.append(1 if has_vaccine_raw == "Y" else 0)
 
-    if keywords_raw:
-        ft_kw = re.sub(r"[+\-><()~*\"@]", " ", keywords_raw).strip()
-        if ft_kw:
-            extra_sql += "AND MATCH(h.sentence) AGAINST (%s IN BOOLEAN MODE) "
-            extra_params.append(ft_kw)
+    # Keyword filter disabled: t_gene_pairs has no sentence column.
+    # Sentence text is in t_sentences, would require a JOIN + LIKE which is too slow for 5M rows.
+    # TODO: re-enable with FULLTEXT index on t_sentences if keyword filtering is needed.
 
     # Pair match: bidirectional
     pair_sql = (
-        "((h.geneSymbol1 = %s AND h.geneSymbol2 = %s) "
-        " OR (h.geneSymbol1 = %s AND h.geneSymbol2 = %s))"
+        "((h.gene_symbol1 = %s AND h.gene_symbol2 = %s) "
+        " OR (h.gene_symbol1 = %s AND h.gene_symbol2 = %s))"
     )
     pair_params = [clean1, clean2, clean2, clean1]
 
@@ -110,7 +108,7 @@ def get_pair_interactions(sym1: str, sym2: str):
             # COUNT
             count_sql = f"""
                 SELECT COUNT(*) AS total
-                FROM t_sentence_hit_gene2gene_Host h
+                FROM t_gene_pairs h
                 WHERE {pair_sql} {extra_sql}
             """
             cursor.execute(count_sql, pair_params + extra_params)
@@ -118,18 +116,18 @@ def get_pair_interactions(sym1: str, sym2: str):
             total = int(row["total"]) if row else 0
 
             # Data with LEFT JOIN for sentence text and INO terms
-            # ino_host25 uses sentence_id (int) and columns: id, matching_phrase
+            # t_ino uses sentence_id (int) and columns: id, matching_phrase
             data_sql = f"""
                 SELECT
                     h.*,
                     sp.sentence AS sentence_text,
-                    ino.id AS ino_id,
+                    ino.ino_id AS ino_id,
                     ino.matching_phrase AS matching_phrase
-                FROM t_sentence_hit_gene2gene_Host h
-                LEFT JOIN sentences25_genepair sp
-                       ON h.sentenceID = sp.sentenceID
-                LEFT JOIN ino_host25 ino
-                       ON h.sentenceID = ino.sentence_id
+                FROM t_gene_pairs h
+                LEFT JOIN t_sentences sp
+                       ON h.sentence_id = sp.sentence_id
+                LEFT JOIN t_ino ino
+                       ON h.sentence_id = ino.sentence_id
                 WHERE {pair_sql} {extra_sql}
                 ORDER BY h.{sort_col} {sort_order}
                 LIMIT %s OFFSET %s
@@ -148,9 +146,9 @@ def get_pair_interactions(sym1: str, sym2: str):
                         COUNT(score) AS scored_sentences,
                         AVG(score) AS avg_confidence,
                         SUM(CASE WHEN score > 0.8 THEN 1 ELSE 0 END) AS high_confidence_count
-                    FROM t_sentence_hit_gene2gene_Host
-                    WHERE (geneSymbol1 = %s AND geneSymbol2 = %s)
-                       OR (geneSymbol1 = %s AND geneSymbol2 = %s)
+                    FROM t_gene_pairs
+                    WHERE (gene_symbol1 = %s AND gene_symbol2 = %s)
+                       OR (gene_symbol1 = %s AND gene_symbol2 = %s)
                 """
                 cursor.execute(summary_sql, summary_pair_params)
                 summary_row = cursor.fetchone()
@@ -209,11 +207,11 @@ def predict_pair(sym1: str, sym2: str):
 
             # Fetch unscored sentences for this pair (bidirectional), limit 100
             fetch_sql = """
-                SELECT h.sentenceID, sp.sentence
-                FROM t_sentence_hit_gene2gene_Host h
-                LEFT JOIN sentences25_genepair sp ON h.sentenceID = sp.sentenceID
-                WHERE ((h.geneSymbol1 = %s AND h.geneSymbol2 = %s)
-                    OR (h.geneSymbol1 = %s AND h.geneSymbol2 = %s))
+                SELECT h.sentence_id, sp.sentence
+                FROM t_gene_pairs h
+                LEFT JOIN t_sentences sp ON h.sentence_id = sp.sentence_id
+                WHERE ((h.gene_symbol1 = %s AND h.gene_symbol2 = %s)
+                    OR (h.gene_symbol1 = %s AND h.gene_symbol2 = %s))
                   AND h.score IS NULL
                   AND sp.sentence IS NOT NULL
                 LIMIT 100
@@ -233,7 +231,7 @@ def predict_pair(sym1: str, sym2: str):
             biobert_payload = [
                 {
                     "Sentence": row["sentence"],
-                    "ID": row["sentenceID"],
+                    "ID": row["sentence_id"],
                     "MatchTerm": clean1,
                 }
                 for row in unscored
@@ -261,19 +259,19 @@ def predict_pair(sym1: str, sym2: str):
             total_score = 0.0
 
             for result in scored_results:
-                sentence_id = result.get("ID") or result.get("sentenceID")
+                sentence_id = result.get("ID") or result.get("sentence_id")
                 score_val = result.get("score") or result.get("Score")
                 if sentence_id is not None and score_val is not None:
                     try:
                         score_float = float(score_val)
                         update_cursor.execute(
-                            "UPDATE t_sentence_hit_gene2gene_Host SET score = %s WHERE sentenceID = %s",
+                            "UPDATE t_gene_pairs SET score = %s WHERE sentence_id = %s",
                             [score_float, sentence_id],
                         )
                         scored_count += 1
                         total_score += score_float
                     except (ValueError, TypeError) as exc:
-                        logger.warning("Invalid score value for sentenceID %s: %s", sentence_id, exc)
+                        logger.warning("Invalid score value for sentence_id %s: %s", sentence_id, exc)
 
             conn.commit()
             cursor.close()

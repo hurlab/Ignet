@@ -225,6 +225,7 @@ export default function BioSummarAI() {
         >
           {summarizing ? 'Summarizing...' : 'Summarize'}
         </button>
+        <p className="text-[10px] text-gray-400 mt-1">AI summary generation may take 10-30 seconds</p>
       </div>
 
       <ErrorMessage message={error} />

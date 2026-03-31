@@ -137,11 +137,11 @@ def summarize():
 
                     # Get PMIDs for these genes
                     cursor.execute(
-                        f"SELECT DISTINCT PMID FROM t_sentence_hit_gene2gene_Host "
-                        f"WHERE geneSymbol1 IN ({placeholders}) OR geneSymbol2 IN ({placeholders}) LIMIT 1000",
+                        f"SELECT DISTINCT pmid FROM t_gene_pairs "
+                        f"WHERE gene_symbol1 IN ({placeholders}) OR gene_symbol2 IN ({placeholders}) LIMIT 1000",
                         genes_input * 2
                     )
-                    pmids = [r["PMID"] for r in cursor.fetchall()]
+                    pmids = [r["pmid"] for r in cursor.fetchall()]
 
                     if pmids:
                         pmid_ph = ", ".join(["%s"] * len(pmids))

@@ -252,7 +252,7 @@ export default function NetworkGraph({ elements, onNodeClick, onCyReady }) {
           {tooltip.label}
         </div>
       )}
-      <div className="flex gap-2 p-2 border-t border-gray-100">
+      <div className="flex gap-2 p-2 border-t border-gray-100 flex-wrap items-center">
         <button
           onClick={fitGraph}
           className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors"
@@ -265,6 +265,7 @@ export default function NetworkGraph({ elements, onNodeClick, onCyReady }) {
         >
           Export PNG
         </button>
+        <div className="text-[10px] text-gray-400 mt-1 ml-auto">Scroll to zoom · Drag to pan · Click a node for details</div>
       </div>
     </div>
   )

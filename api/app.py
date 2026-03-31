@@ -41,6 +41,8 @@ def create_app() -> Flask:
     from routes.enrichment import enrichment_bp
     from routes.ino import ino_bp
     from routes.assistant import assistant_bp
+    from routes.vaccine import vaccine_bp
+    from routes.mcp import mcp_bp
 
     app.register_blueprint(genes_bp, url_prefix="/api/v1")
     app.register_blueprint(pairs_bp, url_prefix="/api/v1")
@@ -52,6 +54,8 @@ def create_app() -> Flask:
     app.register_blueprint(enrichment_bp, url_prefix="/api/v1")
     app.register_blueprint(ino_bp, url_prefix="/api/v1")
     app.register_blueprint(assistant_bp, url_prefix="/api/v1")
+    app.register_blueprint(vaccine_bp, url_prefix="/api/v1")
+    app.register_blueprint(mcp_bp, url_prefix="/api/v1")
 
     # Stricter rate limits on auth endpoints
     limiter.limit("5 per minute")(app.view_functions["auth.register"])

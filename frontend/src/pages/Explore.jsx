@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
+import AddToSetButton from '../components/AddToSetButton.jsx'
 
 export default function Explore() {
   const [topGenes, setTopGenes] = useState([])
@@ -138,9 +139,12 @@ export default function Explore() {
       {/* Top genes */}
       {topGenes.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-base font-semibold text-gray-700">
-            Top {topGenes.length} Most Connected Genes
-          </h2>
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-base font-semibold text-gray-700">
+              Top {topGenes.length} Most Connected Genes
+            </h2>
+            <AddToSetButton genes={topGenes.map(g => g.gene)} label="Add all to set" />
+          </div>
           <p className="text-gray-500 text-sm mb-4">
             Browse the most connected genes in the Ignet database, ranked by interaction partner count.
             Click a gene to explore its network.
@@ -186,6 +190,7 @@ export default function Explore() {
                   <th className="text-left px-3 py-2 font-medium text-gray-600">Gene</th>
                   <th className="text-right px-3 py-2 font-medium text-gray-600">Co-occurrences</th>
                   <th className="text-right px-3 py-2 font-medium text-gray-600">Bar</th>
+                  <th className="px-2 py-2 w-8"></th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -211,6 +216,9 @@ export default function Explore() {
                         />
                       </div>
                     </td>
+                    <td className="px-2 py-1.5 text-center">
+                      <AddToSetButton gene={gene} />
+                    </td>
                     <td className="px-3 py-1.5">
                       <Link
                         to={`/gene?q=${encodeURIComponent(gene)}`}
@@ -227,23 +235,6 @@ export default function Explore() {
           </div>
         </div>
       )}
-
-      {/* Future features */}
-      <div className="space-y-2">
-        <h2 className="text-sm font-semibold text-gray-500">Coming Soon</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {[
-            { title: 'Pathway Explorer', desc: 'Navigate networks by biological pathways.' },
-            { title: 'Disease Networks', desc: 'Gene networks for specific diseases.' },
-            { title: 'Network Comparison', desc: 'Compare networks across conditions.' },
-          ].map(({ title, desc }) => (
-            <div key={title} className="bg-white border border-dashed border-gray-300 rounded-lg p-3 opacity-60">
-              <h3 className="font-semibold text-gray-600 text-xs mb-0.5">{title}</h3>
-              <p className="text-gray-400 text-[11px]">{desc}</p>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }

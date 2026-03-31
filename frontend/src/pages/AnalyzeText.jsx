@@ -66,7 +66,7 @@ function GeneTag({ symbol, confirmed, onToggle, onRemove }) {
 function highlightGenes(sentence, gene1, gene2) {
   if (!sentence) return '—'
   // Build a regex that matches either gene (case-sensitive, whole word)
-  const genes = [gene1, gene2].filter(Boolean).flat()
+  const genes = [gene1, gene2].filter(Boolean).flat().map(String)
   if (genes.length === 0) return sentence
   const escaped = genes.map(g => g.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   const regex = new RegExp(`\\b(${escaped.join('|')})\\b`, 'g')
@@ -92,8 +92,10 @@ function ResultRow({ result, index }) {
   const confidence = typeof result.ConfidenceScore === 'number'
     ? (result.ConfidenceScore * 100).toFixed(1)
     : 'N/A'
-  const entity1 = Array.isArray(result.Entity_1) ? result.Entity_1 : [result.Entity_1].filter(Boolean)
-  const entity2 = Array.isArray(result.Entity_2) ? result.Entity_2 : [result.Entity_2].filter(Boolean)
+  // Entity_1 and Entity_2 are integer IDs; AllEntities maps IDs to gene name arrays
+  const allEntities = result.AllEntities ?? {}
+  const entity1 = allEntities[result.Entity_1] ?? (Array.isArray(result.Entity_1) ? result.Entity_1 : [String(result.Entity_1)].filter(Boolean))
+  const entity2 = allEntities[result.Entity_2] ?? (Array.isArray(result.Entity_2) ? result.Entity_2 : [String(result.Entity_2)].filter(Boolean))
   const sentence = result.OrigSent ?? result.PreProcessedSent ?? ''
   const highlighted = highlightGenes(sentence, entity1, entity2)
   const interactionWords = result.Interaction_words ?? result.interaction_words ?? []
@@ -302,10 +304,10 @@ export default function AnalyzeText() {
           </h2>
           <button
             onClick={handleLoadSample}
-            className="text-xs text-blue-600 hover:underline"
+            className="text-xs bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200 px-2 py-1 rounded transition-colors"
             type="button"
           >
-            Load sample text
+            Try Sample Text
           </button>
         </div>
 

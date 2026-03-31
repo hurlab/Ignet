@@ -66,28 +66,62 @@ export default function About() {
         </ul>
       </div>
 
-      {/* Development */}
-      <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-3">
-        <h2 className="text-lg font-bold text-navy">Development Teams</h2>
+      {/* Team */}
+      <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
+        <h2 className="text-lg font-bold text-navy">Team</h2>
         <p className="text-gray-600 text-sm leading-relaxed">
           Ignet is co-developed by three research groups with complementary expertise in
-          biomedical informatics, ontology engineering, and natural language processing:
+          biomedical informatics, ontology engineering, and natural language processing.
         </p>
-        <ul className="space-y-2 text-sm text-gray-600">
-          <li>
-            <strong className="text-gray-800">University of North Dakota (UND)</strong> — Hur Lab, led by
-            Dr. Junguk Hur, specializing in systems biology, network medicine, and bioinformatics.
-          </li>
-          <li>
-            <strong className="text-gray-800">University of Michigan (UM)</strong> — He Lab, led by
-            Dr. Yongqun "Oliver" He, with expertise in biomedical ontology engineering and
-            vaccine informatics.
-          </li>
-          <li>
-            <strong className="text-gray-800">Bogazici University</strong> — Led by Dr. Arzucan Ozgur,
-            specializing in NLP, biomedical text mining, and machine learning.
-          </li>
-        </ul>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {[
+            {
+              name: 'Junguk Hur, Ph.D.',
+              role: 'Principal Investigator',
+              lab: 'Hur Lab',
+              institution: 'University of North Dakota',
+              focus: 'Systems biology, network medicine, bioinformatics, and vaccine informatics.',
+              photo: '/ignet/images/hur.jpg',
+              url: 'https://hurlab.med.und.edu',
+            },
+            {
+              name: 'Yongqun "Oliver" He, DVM, Ph.D.',
+              role: 'Co-Investigator',
+              lab: 'He Lab',
+              institution: 'University of Michigan',
+              focus: 'Biomedical ontology engineering, vaccine informatics (VIOLIN, VO), and knowledge representation.',
+              photo: '/ignet/images/he.png',
+              url: 'https://he-group.github.io',
+            },
+            {
+              name: 'Arzucan Ozgur, Ph.D.',
+              role: 'Co-Investigator',
+              lab: 'Ozgur Lab',
+              institution: 'Bogazici University',
+              focus: 'Natural language processing, biomedical text mining, and machine learning.',
+              photo: '/ignet/images/ozgur.jpg',
+              url: 'https://cogsci.bogazici.edu.tr/content/arzucan-%C3%B6zg%C3%BCr',
+            },
+          ].map((pi) => (
+            <a
+              key={pi.name}
+              href={pi.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex flex-col items-center text-center p-3 rounded-lg hover:bg-gray-50 transition-colors group"
+            >
+              <img
+                src={pi.photo}
+                alt={pi.name}
+                className="w-24 h-24 rounded-full object-cover border-2 border-gray-200 group-hover:border-blue-400 transition-colors mb-3"
+              />
+              <h3 className="font-semibold text-navy text-sm group-hover:text-blue-700">{pi.name}</h3>
+              <p className="text-xs text-gray-500 font-medium">{pi.role}</p>
+              <p className="text-xs text-blue-600 mt-0.5">{pi.lab} &mdash; {pi.institution}</p>
+              <p className="text-xs text-gray-500 mt-1 leading-relaxed">{pi.focus}</p>
+            </a>
+          ))}
+        </div>
       </div>
 
       {/* Ignet 2.0 Features */}

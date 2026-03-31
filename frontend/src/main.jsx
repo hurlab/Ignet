@@ -4,12 +4,15 @@ import { BrowserRouter } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './AuthContext.jsx'
+import { GeneSetProvider } from './GeneSetContext.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter basename="/ignet">
       <AuthProvider>
-        <App />
+        <GeneSetProvider>
+          <App />
+        </GeneSetProvider>
       </AuthProvider>
     </BrowserRouter>
   </StrictMode>,

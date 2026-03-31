@@ -4,6 +4,7 @@ import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
+import AddToSetButton from '../components/AddToSetButton.jsx'
 
 function buildMiniNetwork(gene, neighbors, reportData) {
   if (!gene || !neighbors?.length) return []
@@ -309,6 +310,7 @@ function ReportCard({ reportData, gene }) {
             className="text-xs bg-purple-50 text-purple-700 px-3 py-1 rounded-full hover:bg-purple-100 transition-colors">
             Search network
           </a>
+          <AddToSetButton gene={gene} />
         </div>
       )}
 
@@ -533,6 +535,7 @@ export default function Gene() {
             >
               Download CSV
             </button>
+            <AddToSetButton genes={neighbors.map(n => n.neighbor ?? n.symbol ?? n.gene)} label="Add all to set" />
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -546,6 +549,7 @@ export default function Gene() {
                     <th className="text-right px-3 py-2 font-medium text-gray-600">PMIDs</th>
                   )}
                   <th className="text-right px-3 py-2 font-medium text-gray-600">Score</th>
+                  <th className="px-2 py-2 w-8"></th>
                   <th className="px-3 py-2" />
                 </tr>
               </thead>
@@ -563,13 +567,24 @@ export default function Gene() {
                         <td className="px-3 py-1.5 text-right text-gray-600">{n.unique_pmids ?? '\u2014'}</td>
                       )}
                       <td className="px-3 py-1.5 text-right text-gray-600">{score}</td>
-                      <td className="px-3 py-1.5">
+                      <td className="px-2 py-1.5 text-center">
+                        <AddToSetButton gene={sym} />
+                      </td>
+                      <td className="px-3 py-1.5 flex gap-2">
                         <button
                           onClick={() => searchGene(sym)}
                           className="text-blue-600 hover:underline text-[11px]"
                         >
-                          Search
+                          View
                         </button>
+                        <a
+                          href={`/ignet/genepair?gene1=${encodeURIComponent(gene)}&gene2=${encodeURIComponent(sym)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-purple-600 hover:underline text-[11px]"
+                        >
+                          Pair
+                        </a>
                       </td>
                     </tr>
                   )

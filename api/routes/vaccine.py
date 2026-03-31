@@ -7,8 +7,10 @@ GET /api/v1/vaccine/top-genes         - top genes associated with vaccines
 GET /api/v1/vaccine/hierarchy         - nested VO hierarchy tree
 GET /api/v1/vaccine/network           - network graph (multi-VO, gene-gene via ?vo_ids=)
 GET /api/v1/vaccine/network/<vo_id>   - network graph data for Cytoscape (single VO)
+GET /api/v1/vaccine/pair              - co-occurrence evidence for a vaccine+gene pair (?vo_id=&gene=)
 GET /api/v1/vaccine/<vo_id>           - vaccine profile (info + top genes)
 GET /api/v1/vaccine/<vo_id>/sentences - sentences for a given VO ID
+POST /api/v1/vaccine/enrichment       - rank vaccines by overlap with a gene list
 """
 
 import logging
@@ -856,5 +858,305 @@ def vaccine_sentences(vo_id: str):
         return jsonify({"error": "DatabaseError", "message": "Failed to retrieve sentences."}), 500
 
     return jsonify({"sentences": sentences, "total": total})
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/vaccine/pair?vo_id=VO_0004908&gene=ACE2
+# ---------------------------------------------------------------------------
+
+_SAFE_GENE_RE = __import__("re").compile(r"[^A-Z0-9\-]")
+
+
+@vaccine_bp.route("/vaccine/pair", methods=["GET"])
+def vaccine_gene_pair():
+    """
+    Co-occurrence evidence between a specific vaccine and gene.
+
+    Query params:
+      vo_id  - VO identifier (required)
+      gene   - gene symbol (required, case-insensitive)
+      limit  - sentences to return (default 20, max 200)
+      offset - default 0
+
+    Response:
+      {
+        "vo_id": str,
+        "vaccine_name": str,
+        "gene_symbol": str,
+        "shared_pmids": int,
+        "cooccurrence_count": int,
+        "sentences": [{ "sentence_id", "pmid", "sentence", "gene_symbol1", "gene_symbol2", "score" }],
+        "total_sentences": int
+      }
+    """
+    vo_id = request.args.get("vo_id", "").strip()
+    raw_gene = request.args.get("gene", "").strip().upper()
+
+    if not vo_id:
+        return jsonify({"error": "BadRequest", "message": "vo_id query parameter is required."}), 400
+    if not raw_gene:
+        return jsonify({"error": "BadRequest", "message": "gene query parameter is required."}), 400
+
+    # Sanitize: keep only alphanumeric and hyphens
+    gene_symbol = _SAFE_GENE_RE.sub("", raw_gene)
+    if not gene_symbol:
+        return jsonify({"error": "BadRequest", "message": "gene parameter contains no valid characters."}), 400
+
+    limit, offset = _parse_limit_offset(request.args, default_limit=20)
+
+    try:
+        with db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+
+            # Resolve vaccine name using same pattern as vaccine_profile
+            cursor.execute(
+                """
+                SELECT matching_phrase
+                FROM t_vo
+                WHERE vo_id = %s
+                GROUP BY matching_phrase
+                ORDER BY COUNT(*) DESC
+                LIMIT 1
+                """,
+                (vo_id,),
+            )
+            name_row = cursor.fetchone()
+            if not name_row:
+                cursor.execute(
+                    """
+                    SELECT mentionedTerm AS matching_phrase
+                    FROM vo_sciminer_187_terms
+                    WHERE voID = %s
+                    GROUP BY mentionedTerm
+                    ORDER BY COUNT(*) DESC
+                    LIMIT 1
+                    """,
+                    (vo_id,),
+                )
+                name_row = cursor.fetchone()
+            if not name_row:
+                cursor.execute(
+                    "SELECT name AS matching_phrase FROM t_vo_hierarchy WHERE vo_id = %s LIMIT 1",
+                    (vo_id,),
+                )
+                name_row = cursor.fetchone()
+            vaccine_name = name_row["matching_phrase"] if name_row else vo_id
+
+            # Co-occurrence count from pre-computed table
+            cursor.execute(
+                """
+                SELECT shared_pmids AS cooccurrence_count
+                FROM t_cooccurrence_vo_gene
+                WHERE vo_id = %s AND gene_symbol = %s
+                LIMIT 1
+                """,
+                (vo_id, gene_symbol),
+            )
+            coo_row = cursor.fetchone()
+            cooccurrence_count = int(coo_row["cooccurrence_count"]) if coo_row else 0
+
+            # Total sentence count (shared PMIDs between t_vo and t_gene_pairs)
+            cursor.execute(
+                """
+                SELECT COUNT(DISTINCT gp.sentence_id) AS total_sentences
+                FROM t_gene_pairs gp
+                INNER JOIN t_vo v ON gp.pmid = v.pmid
+                WHERE v.vo_id = %s
+                  AND (gp.gene_symbol1 = %s OR gp.gene_symbol2 = %s)
+                """,
+                (vo_id, gene_symbol, gene_symbol),
+            )
+            total_row = cursor.fetchone()
+            total_sentences = int(total_row["total_sentences"]) if total_row else 0
+
+            # Count distinct shared PMIDs
+            cursor.execute(
+                """
+                SELECT COUNT(DISTINCT gp.pmid) AS shared_pmids
+                FROM t_gene_pairs gp
+                INNER JOIN t_vo v ON gp.pmid = v.pmid
+                WHERE v.vo_id = %s
+                  AND (gp.gene_symbol1 = %s OR gp.gene_symbol2 = %s)
+                """,
+                (vo_id, gene_symbol, gene_symbol),
+            )
+            pmid_row = cursor.fetchone()
+            shared_pmids = int(pmid_row["shared_pmids"]) if pmid_row else 0
+
+            # Paginated sentences ordered by score descending
+            cursor.execute(
+                """
+                SELECT DISTINCT gp.sentence_id, gp.pmid, s.sentence,
+                       gp.gene_symbol1, gp.gene_symbol2, gp.score
+                FROM t_gene_pairs gp
+                INNER JOIN t_vo v ON gp.pmid = v.pmid
+                INNER JOIN t_sentences s ON gp.sentence_id = s.sentence_id
+                WHERE v.vo_id = %s
+                  AND (gp.gene_symbol1 = %s OR gp.gene_symbol2 = %s)
+                ORDER BY gp.score DESC
+                LIMIT %s OFFSET %s
+                """,
+                (vo_id, gene_symbol, gene_symbol, limit, offset),
+            )
+            sentences = cursor.fetchall()
+            cursor.close()
+    except Exception as exc:
+        logger.exception("Error fetching vaccine-gene pair for %s / %s: %s", vo_id, gene_symbol, exc)
+        return jsonify({"error": "DatabaseError", "message": "Failed to retrieve pair evidence."}), 500
+
+    return jsonify({
+        "vo_id": vo_id,
+        "vaccine_name": vaccine_name,
+        "gene_symbol": gene_symbol,
+        "shared_pmids": shared_pmids,
+        "cooccurrence_count": cooccurrence_count,
+        "sentences": sentences,
+        "total_sentences": total_sentences,
+    })
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/vaccine/enrichment
+# ---------------------------------------------------------------------------
+
+@vaccine_bp.route("/vaccine/enrichment", methods=["POST"])
+def vaccine_enrichment():
+    """
+    Given a list of gene symbols, rank vaccines by association overlap.
+
+    Request body:
+      { "genes": ["ACE2", "TMPRSS2", ...] }
+
+    Validation:
+      genes must be an array with 1-500 elements.
+
+    Response:
+      {
+        "results": [
+          {
+            "vo_id": str,
+            "vaccine_name": str,
+            "gene_overlap": int,
+            "total_evidence": int,
+            "matched_genes": [str, ...]
+          }
+        ],
+        "input_genes": int,
+        "total_vaccines": int
+      }
+    """
+    body = request.get_json(silent=True)
+    if not body or not isinstance(body.get("genes"), list):
+        return jsonify({"error": "BadRequest", "message": "Request body must be JSON with a 'genes' array."}), 400
+
+    # Sanitize gene symbols: uppercase, strip whitespace, alphanumeric + hyphens only
+    raw_genes: list = body["genes"]
+    genes: list[str] = []
+    for g in raw_genes:
+        if not isinstance(g, str):
+            continue
+        cleaned = _SAFE_GENE_RE.sub("", g.strip().upper())
+        if cleaned:
+            genes.append(cleaned)
+
+    # Deduplicate while preserving order
+    seen: set[str] = set()
+    unique_genes: list[str] = []
+    for g in genes:
+        if g not in seen:
+            seen.add(g)
+            unique_genes.append(g)
+    genes = unique_genes
+
+    if not genes:
+        return jsonify({"error": "BadRequest", "message": "No valid gene symbols provided."}), 400
+    if len(genes) > 500:
+        return jsonify({"error": "BadRequest", "message": "genes array must not exceed 500 elements."}), 400
+
+    placeholders = ",".join(["%s"] * len(genes))
+
+    try:
+        with db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+
+            # Rank vaccines by gene overlap from pre-computed co-occurrence table
+            cursor.execute(
+                f"""
+                SELECT
+                    c.vo_id,
+                    COUNT(DISTINCT c.gene_symbol) AS gene_overlap,
+                    SUM(c.shared_pmids) AS total_evidence,
+                    GROUP_CONCAT(DISTINCT c.gene_symbol ORDER BY c.shared_pmids DESC) AS matched_genes
+                FROM t_cooccurrence_vo_gene c
+                WHERE c.gene_symbol IN ({placeholders})
+                GROUP BY c.vo_id
+                HAVING gene_overlap >= 1
+                ORDER BY gene_overlap DESC, total_evidence DESC
+                LIMIT 50
+                """,
+                genes,
+            )
+            rows = cursor.fetchall()
+            total_vaccines = len(rows)
+
+            # Resolve vaccine names for top results
+            results = []
+            for row in rows:
+                vid = row["vo_id"]
+                cursor.execute(
+                    """
+                    SELECT matching_phrase
+                    FROM t_vo
+                    WHERE vo_id = %s
+                    GROUP BY matching_phrase
+                    ORDER BY COUNT(*) DESC
+                    LIMIT 1
+                    """,
+                    (vid,),
+                )
+                name_row = cursor.fetchone()
+                if not name_row:
+                    cursor.execute(
+                        """
+                        SELECT mentionedTerm AS matching_phrase
+                        FROM vo_sciminer_187_terms
+                        WHERE voID = %s
+                        GROUP BY mentionedTerm
+                        ORDER BY COUNT(*) DESC
+                        LIMIT 1
+                        """,
+                        (vid,),
+                    )
+                    name_row = cursor.fetchone()
+                if not name_row:
+                    cursor.execute(
+                        "SELECT name AS matching_phrase FROM t_vo_hierarchy WHERE vo_id = %s LIMIT 1",
+                        (vid,),
+                    )
+                    name_row = cursor.fetchone()
+                vaccine_name = name_row["matching_phrase"] if name_row else vid
+
+                # Convert GROUP_CONCAT string back to a list
+                matched_str = row["matched_genes"] or ""
+                matched_list = [g for g in matched_str.split(",") if g]
+
+                results.append({
+                    "vo_id": vid,
+                    "vaccine_name": vaccine_name,
+                    "gene_overlap": int(row["gene_overlap"]),
+                    "total_evidence": int(row["total_evidence"]),
+                    "matched_genes": matched_list,
+                })
+
+            cursor.close()
+    except Exception as exc:
+        logger.exception("Error in vaccine enrichment for genes %s: %s", genes, exc)
+        return jsonify({"error": "DatabaseError", "message": "Failed to perform enrichment."}), 500
+
+    return jsonify({
+        "results": results,
+        "input_genes": len(genes),
+        "total_vaccines": total_vaccines,
+    })
 
 

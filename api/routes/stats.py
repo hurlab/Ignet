@@ -68,20 +68,20 @@ def get_stats():
                 cursor = conn.cursor(dictionary=True)
 
                 if total_interactions is None:
-                    cursor.execute("SELECT COUNT(*) AS n FROM t_sentence_hit_gene2gene_Host")
+                    cursor.execute("SELECT COUNT(*) AS n FROM t_gene_pairs")
                     total_interactions = int((cursor.fetchone() or {}).get("n", 0))
                     _set_cache(redis_client, _KEY_INTERACTIONS, total_interactions)
 
                 if total_sentences is None:
                     cursor.execute(
-                        "SELECT COUNT(DISTINCT sentenceID) AS n FROM t_sentence_hit_gene2gene_Host"
+                        "SELECT COUNT(DISTINCT sentence_id) AS n FROM t_gene_pairs"
                     )
                     total_sentences = int((cursor.fetchone() or {}).get("n", 0))
                     _set_cache(redis_client, _KEY_SENTENCES, total_sentences)
 
                 if total_pmids is None:
                     cursor.execute(
-                        "SELECT COUNT(DISTINCT PMID) AS n FROM t_sentence_hit_gene2gene_Host"
+                        "SELECT COUNT(DISTINCT pmid) AS n FROM t_gene_pairs"
                     )
                     total_pmids = int((cursor.fetchone() or {}).get("n", 0))
                     _set_cache(redis_client, _KEY_PMIDS, total_pmids)
@@ -91,9 +91,9 @@ def get_stats():
                         """
                         SELECT COUNT(DISTINCT gene) AS n
                         FROM (
-                            SELECT geneSymbol1 AS gene FROM t_sentence_hit_gene2gene_Host
+                            SELECT gene_symbol1 AS gene FROM t_gene_pairs
                             UNION
-                            SELECT geneSymbol2 AS gene FROM t_sentence_hit_gene2gene_Host
+                            SELECT gene_symbol2 AS gene FROM t_gene_pairs
                         ) AS g
                         WHERE gene IS NOT NULL
                         """

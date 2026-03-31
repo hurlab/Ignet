@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../AuthContext.jsx'
+import { useGeneSet } from '../GeneSetContext.jsx'
 
 const navLinks = [
   { label: 'Dignet', to: '/dignet' },
@@ -21,6 +22,8 @@ export default function Header() {
   const navigate = useNavigate()
   const location = useLocation()
   const auth = useAuth()
+  const geneSet = useGeneSet()
+  const geneCount = geneSet?.genes?.length ?? 0
 
   // Close menu on navigation
   useEffect(() => {
@@ -36,13 +39,14 @@ export default function Header() {
   }
 
   return (
-    <header className="bg-navy text-white flex-shrink-0">
+    <header className="bg-navy text-white flex-shrink-0 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 h-14 flex items-center gap-4">
         {/* Brand */}
         <Link
           to="/"
-          className="text-white font-bold text-lg tracking-tight hover:text-orange-200 transition-colors flex-shrink-0"
+          className="flex items-center gap-2 text-white font-bold text-lg tracking-tight hover:text-orange-200 transition-colors flex-shrink-0"
         >
+          <img src="/ignet/favicon.svg" alt="" className="w-6 h-6" />
           Ignet
         </Link>
 
@@ -101,6 +105,14 @@ export default function Header() {
 
         {/* Right side */}
         <div className="hidden md:flex items-center gap-2 flex-shrink-0 md:ml-0">
+          {geneCount > 0 && (
+            <Link
+              to="/geneset"
+              className="bg-blue-700 text-white text-[11px] font-medium px-2 py-0.5 rounded-full hover:bg-blue-600 transition-colors"
+            >
+              Set ({geneCount})
+            </Link>
+          )}
           <a
             href="/ignet_legacy/"
             className="text-blue-300 text-[11px] hover:text-white transition-colors"
@@ -172,6 +184,20 @@ export default function Header() {
               Go
             </button>
           </form>
+
+          {/* Gene Set badge */}
+          {geneCount > 0 && (
+            <Link
+              to="/geneset"
+              onClick={() => setMenuOpen(false)}
+              className="flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors text-blue-100 hover:bg-blue-800 hover:text-white"
+            >
+              <span className="bg-blue-700 text-white text-[11px] font-medium px-2 py-0.5 rounded-full">
+                Set ({geneCount})
+              </span>
+              Gene Set
+            </Link>
+          )}
 
           {/* Auth */}
           <div className="flex items-center gap-2 mt-2 pt-2 border-t border-blue-800">

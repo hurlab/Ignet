@@ -68,20 +68,21 @@ def ask():
                 kw_clause = ""
                 kw_params = []
                 if keywords:
-                    kw_conditions = " OR ".join(["h.sentence LIKE %s"] * len(keywords))
+                    kw_conditions = " OR ".join(["s.sentence LIKE %s"] * len(keywords))
                     kw_clause = f"AND ({kw_conditions})"
                     kw_params = [f"%{kw}%" for kw in keywords]
 
                 cursor.execute(f"""
-                    SELECT DISTINCT h.sentence, h.PMID, h.geneSymbol1, h.geneSymbol2, h.score
-                    FROM t_sentence_hit_gene2gene_Host h
-                    WHERE (h.geneSymbol1 IN ({placeholders}) OR h.geneSymbol2 IN ({placeholders}))
+                    SELECT DISTINCT s.sentence, h.pmid, h.gene_symbol1, h.gene_symbol2, h.score
+                    FROM t_gene_pairs h
+                    LEFT JOIN t_sentences s ON h.sentence_id = s.sentence_id
+                    WHERE (h.gene_symbol1 IN ({placeholders}) OR h.gene_symbol2 IN ({placeholders}))
                     {kw_clause}
-                    ORDER BY h.score DESC, h.PMID DESC
+                    ORDER BY h.score DESC, h.pmid DESC
                     LIMIT 50
                 """, tuple(genes) * 2 + tuple(kw_params))
                 evidence_sentences = cursor.fetchall()
-                cited_pmids = {str(s["PMID"]) for s in evidence_sentences if s.get("PMID")}
+                cited_pmids = {str(s["pmid"]) for s in evidence_sentences if s.get("pmid")}
 
             cursor.close()
     except Exception as exc:
@@ -89,7 +90,7 @@ def ask():
 
     # Step 3: Build GPT-4o prompt with evidence context
     evidence_text = "\n".join([
-        f"[PMID:{s['PMID']}] {s['geneSymbol1']}-{s['geneSymbol2']}: {s['sentence']}"
+        f"[PMID:{s['pmid']}] {s['gene_symbol1']}-{s['gene_symbol2']}: {s['sentence']}"
         for s in evidence_sentences[:30]
     ]) if evidence_sentences else "No specific evidence found in the database for this query."
 
@@ -148,7 +149,7 @@ Please answer the question based on the evidence above. Cite specific PMIDs for 
         "genes_detected": genes,
         "keywords_detected": keywords,
         "evidence": [
-            {"pmid": str(s["PMID"]), "gene1": s["geneSymbol1"], "gene2": s["geneSymbol2"],
+            {"pmid": str(s["pmid"]), "gene1": s["gene_symbol1"], "gene2": s["gene_symbol2"],
              "sentence": s["sentence"], "score": s.get("score")}
             for s in evidence_sentences[:20]
         ],

@@ -39,21 +39,21 @@ def analyze_gene_set():
 
             # 1. Find all pairwise interactions among the input genes
             cursor.execute(f"""
-                SELECT geneSymbol1 AS gene1, geneSymbol2 AS gene2,
-                       COUNT(*) AS evidence_count, COUNT(DISTINCT PMID) AS unique_pmids,
+                SELECT gene_symbol1 AS gene1, gene_symbol2 AS gene2,
+                       COUNT(*) AS evidence_count, COUNT(DISTINCT pmid) AS unique_pmids,
                        MAX(score) AS max_score
-                FROM t_sentence_hit_gene2gene_Host
-                WHERE geneSymbol1 IN ({placeholders}) AND geneSymbol2 IN ({placeholders})
-                GROUP BY geneSymbol1, geneSymbol2
+                FROM t_gene_pairs
+                WHERE gene_symbol1 IN ({placeholders}) AND gene_symbol2 IN ({placeholders})
+                GROUP BY gene_symbol1, gene_symbol2
             """, tuple(genes) + tuple(genes))
             interactions = cursor.fetchall()
 
             # 2. INO distribution for these interactions
             cursor.execute(f"""
                 SELECT ino.matching_phrase AS term, COUNT(*) AS cnt
-                FROM t_sentence_hit_gene2gene_Host h
-                JOIN ino_host25 ino ON ino.sentence_id = h.sentenceID
-                WHERE h.geneSymbol1 IN ({placeholders}) AND h.geneSymbol2 IN ({placeholders})
+                FROM t_gene_pairs h
+                JOIN t_ino ino ON ino.sentence_id = h.sentence_id
+                WHERE h.gene_symbol1 IN ({placeholders}) AND h.gene_symbol2 IN ({placeholders})
                 GROUP BY ino.matching_phrase ORDER BY cnt DESC LIMIT 20
             """, tuple(genes) + tuple(genes))
             ino_distribution = [dict(r) for r in cursor.fetchall()]
@@ -61,9 +61,9 @@ def analyze_gene_set():
             # 3. Drug associations
             cursor.execute(f"""
                 SELECT b.drug_term AS term, COUNT(*) AS cnt
-                FROM t_sentence_hit_gene2gene_Host h
-                JOIN biosummary25_Host b ON b.pmid = h.PMID
-                WHERE h.geneSymbol1 IN ({placeholders}) AND h.geneSymbol2 IN ({placeholders})
+                FROM t_gene_pairs h
+                JOIN biosummary25_Host b ON b.pmid = h.pmid
+                WHERE h.gene_symbol1 IN ({placeholders}) AND h.gene_symbol2 IN ({placeholders})
                   AND b.drug_term IS NOT NULL AND b.drug_term != ''
                 GROUP BY b.drug_term ORDER BY cnt DESC LIMIT 20
             """, tuple(genes) + tuple(genes))
@@ -72,9 +72,9 @@ def analyze_gene_set():
             # 4. Disease associations
             cursor.execute(f"""
                 SELECT b.hdo_term AS term, COUNT(*) AS cnt
-                FROM t_sentence_hit_gene2gene_Host h
-                JOIN biosummary25_Host b ON b.pmid = h.PMID
-                WHERE h.geneSymbol1 IN ({placeholders}) AND h.geneSymbol2 IN ({placeholders})
+                FROM t_gene_pairs h
+                JOIN biosummary25_Host b ON b.pmid = h.pmid
+                WHERE h.gene_symbol1 IN ({placeholders}) AND h.gene_symbol2 IN ({placeholders})
                   AND b.hdo_term IS NOT NULL AND b.hdo_term != ''
                 GROUP BY b.hdo_term ORDER BY cnt DESC LIMIT 20
             """, tuple(genes) + tuple(genes))

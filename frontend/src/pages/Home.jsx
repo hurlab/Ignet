@@ -5,7 +5,7 @@ import { api } from '../api.js'
 const coreTools = [
   {
     title: 'Dignet',
-    description: 'Search PubMed abstracts for gene co-occurrence networks and visualize interactions.',
+    description: 'Search PubMed for gene co-occurrence networks with interactive graph visualization.',
     to: '/dignet',
     icon: '🔬',
   },
@@ -63,12 +63,18 @@ const coreTools = [
     to: '/assistant',
     icon: '💬',
   },
+  {
+    title: 'Analysis Report',
+    description: 'Generate a downloadable report summarizing gene set interactions, enrichment, and literature context.',
+    to: '/report',
+    icon: '📄',
+  },
 ]
 
 const apiInfo = {
   title: 'REST API',
   description: 'Programmatic access to all Ignet data and analyses via a JSON REST API with 19 endpoints.',
-  href: '/api/v1/health',
+  to: '/api-docs',
 }
 
 function StatCard({ label, value, loading }) {
@@ -98,30 +104,12 @@ export default function Home() {
   }, [])
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8 space-y-10">
-      {/* Under Construction Banner */}
-      <section className="bg-amber-50 border-2 border-dashed border-amber-400 rounded-xl p-6 text-center space-y-3">
-        <div className="text-6xl">🚧</div>
-        <h2 className="text-lg font-bold text-amber-800">
-          Ignet 2.0 is Under Active Development
-        </h2>
-        <p className="text-amber-700 text-sm max-w-xl mx-auto">
-          We are rebuilding Ignet with a modern interface, new AI-powered tools, and a REST API.
-          Some features may be incomplete or behave unexpectedly during this transition.
-        </p>
-        <a
-          href="/ignet_legacy/"
-          className="inline-flex items-center gap-2 bg-amber-500 hover:bg-amber-600 text-white font-semibold px-6 py-2.5 rounded-lg transition-colors text-sm shadow-sm"
-        >
-          <span className="text-lg">📦</span>
-          Go to Previous Version (Ignet 1.0)
-        </a>
-      </section>
-
+    <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
       {/* Hero */}
-      <section className="text-center py-10 space-y-4">
+      <section className="text-center py-4 space-y-3">
         <h1 className="text-3xl md:text-4xl font-bold text-navy leading-tight">
           Integrative Gene Network
+          <span className="ml-2 text-base font-semibold text-blue-500 align-super">2.0</span>
         </h1>
         <p className="text-gray-500 max-w-2xl mx-auto text-sm">
           Discover gene co-occurrence and interaction networks from PubMed biomedical literature
@@ -145,7 +133,8 @@ export default function Home() {
 
       {/* Live stats */}
       <section>
-        <h2 className="text-base font-semibold text-gray-700 mb-3">Database Statistics</h2>
+        <h2 className="text-base font-semibold text-gray-700 mb-0">Database Statistics</h2>
+        <p className="text-xs text-gray-400 mt-0.5 mb-3">Based on PubMed literature through 2025</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Genes" value={stats?.total_genes} loading={statsLoading} />
           <StatCard label="Gene Pairs" value={stats?.total_interactions} loading={statsLoading} />
@@ -157,21 +146,18 @@ export default function Home() {
       {/* Core tools */}
       <section>
         <h2 className="text-base font-semibold text-gray-700 mb-3">Tools</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {coreTools.map(({ title, description, to, icon, badge }) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {coreTools.map(({ title, description, to, icon }) => (
             <Link
               key={to}
               to={to}
-              className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-md transition-all group relative"
+              className="bg-white border border-gray-200 rounded-lg px-4 py-3 hover:border-blue-400 hover:shadow-md transition-all group flex items-start gap-3"
             >
-              {badge && (
-                <span className="absolute top-3 right-3 bg-accent text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
-                  {badge}
-                </span>
-              )}
-              <div className="text-2xl mb-2">{icon}</div>
-              <h3 className="font-semibold text-navy group-hover:text-blue-700 text-sm mb-1">{title}</h3>
-              <p className="text-gray-500 text-xs leading-relaxed">{description}</p>
+              <div className="text-xl flex-shrink-0 mt-0.5">{icon}</div>
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-navy group-hover:text-blue-700 text-sm">{title}</h3>
+                <p className="text-gray-500 text-xs leading-relaxed mt-0.5">{description}</p>
+              </div>
             </Link>
           ))}
         </div>
@@ -180,15 +166,40 @@ export default function Home() {
       {/* REST API */}
       <section>
         <h2 className="text-base font-semibold text-gray-700 mb-3">Developer Access</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <Link
+            to={apiInfo.to}
+            className="bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-md transition-all group"
+          >
+            <h3 className="font-semibold text-navy group-hover:text-blue-700 text-sm mb-1">{apiInfo.title}</h3>
+            <p className="text-gray-500 text-xs leading-relaxed">{apiInfo.description}</p>
+            <code className="text-[11px] text-blue-600 mt-2 block">/api/v1/genes/search?q=BRCA1</code>
+          </Link>
+          <Link
+            to="/api-docs#mcp"
+            className="bg-white border border-gray-200 rounded-lg p-4 hover:border-purple-400 hover:shadow-md transition-all group"
+          >
+            <h3 className="font-semibold text-navy group-hover:text-purple-700 text-sm mb-1">MCP for AI Assistants</h3>
+            <p className="text-gray-500 text-xs leading-relaxed">
+              Connect Claude, ChatGPT, or other AI assistants directly to Ignet and Vignet data using the Model Context Protocol.
+            </p>
+            <code className="text-[11px] text-purple-600 mt-2 block">https://ignet.org/api/v1/mcp</code>
+          </Link>
+        </div>
+      </section>
+
+      {/* Sister project */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-700 mb-3">Sister Project</h2>
         <a
-          href={apiInfo.href}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block bg-white border border-gray-200 rounded-lg p-4 hover:border-blue-400 hover:shadow-md transition-all group"
+          href="/vignet/"
+          className="flex items-center gap-4 bg-white border border-gray-200 rounded-lg p-4 hover:border-teal-400 hover:shadow-md transition-all group"
         >
-          <h3 className="font-semibold text-navy group-hover:text-blue-700 text-sm mb-1">{apiInfo.title}</h3>
-          <p className="text-gray-500 text-xs leading-relaxed">{apiInfo.description}</p>
-          <code className="text-[11px] text-blue-600 mt-2 block">/api/v1/genes/search?q=BRCA1</code>
+          <img src="/vignet/favicon.svg" alt="Vignet" className="w-10 h-10 flex-shrink-0" />
+          <div>
+            <h3 className="font-semibold text-teal-700 group-hover:text-teal-600 text-sm mb-0.5">Vignet &mdash; Vaccine-focused Integrative Gene Network</h3>
+            <p className="text-gray-500 text-xs leading-relaxed">Explore vaccine-gene interaction networks from PubMed literature using the Vaccine Ontology.</p>
+          </div>
         </a>
       </section>
 
@@ -209,8 +220,8 @@ export default function Home() {
         <blockquote className="border-l-4 border-navy pl-4 py-2 bg-blue-50 rounded-r-md">
           <p className="text-xs text-gray-600 italic leading-relaxed">
             If you use Ignet in your research, please cite: <strong>Ignet: An integrative gene interaction
-            network database from PubMed literature mining.</strong> University of Michigan / UND / Bogazici
-            University, 2016&ndash;2026.
+            network database from PubMed literature mining.</strong> University of North Dakota /
+            University of Michigan / Bogazici University, 2016&ndash;2026.
           </p>
         </blockquote>
       </section>

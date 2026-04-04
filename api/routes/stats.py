@@ -5,6 +5,8 @@ GET /api/v1/stats - overall database statistics with Redis cache
 """
 
 import logging
+import os
+from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify
 
@@ -20,6 +22,18 @@ _KEY_PMIDS = "ignet:stats:total_pmids"
 _KEY_SENTENCES = "ignet:stats:total_sentences"
 _KEY_INTERACTIONS = "ignet:stats:total_interactions"
 _CACHE_TTL = 86400  # 24 hours
+
+_PIPELINE_TRACKER = "/home/juhur/IgnetDailyUpdate/automation_scripts/last_processed_number.txt"
+
+
+def _get_data_last_updated() -> str | None:
+    """Return ISO-8601 date string of the pipeline's last run, or None on failure."""
+    try:
+        mtime = os.path.getmtime(_PIPELINE_TRACKER)
+        dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
+        return dt.strftime("%Y-%m-%d")
+    except Exception:
+        return None
 
 
 def _get_from_cache(redis_client, key: str) -> int | None:
@@ -112,4 +126,5 @@ def get_stats():
         "total_pmids": total_pmids,
         "total_sentences": total_sentences,
         "total_interactions": total_interactions,
+        "data_last_updated": _get_data_last_updated(),
     })

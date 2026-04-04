@@ -1,6 +1,27 @@
-import { Link } from 'react-router-dom'
+import { useEffect, useState } from 'react'
+
+function useDataLastUpdated() {
+  const [lastUpdated, setLastUpdated] = useState(null)
+
+  useEffect(() => {
+    fetch('/ignet/api/v1/stats')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.data_last_updated) {
+          // Format "2026-03-26" -> "March 26, 2026"
+          const d = new Date(data.data_last_updated + 'T00:00:00Z')
+          setLastUpdated(d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }))
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  return lastUpdated
+}
 
 export default function Footer() {
+  const lastUpdated = useDataLastUpdated()
+
   return (
     <footer className="bg-gray-100 border-t border-gray-200 mt-auto">
       <div className="max-w-7xl mx-auto px-4 py-8">
@@ -82,6 +103,12 @@ export default function Footer() {
             Supported by NIH/NIAID{' '}
             <a href="https://reporter.nih.gov/search/OGGoe17zsEypH0sHLem22g/project-details/11109428" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-600">U24AI171008</a>{' '}
             VIOLIN 2.0: Vaccine Information and Ontology LInked kNowledgebase.
+          </p>
+          <p className="text-center text-gray-400 text-xs">
+            {lastUpdated
+              ? <>Database updated daily from PubMed &middot; Last updated {lastUpdated}</>
+              : 'Database updated daily from PubMed'
+            }
           </p>
           <p className="text-center text-gray-400 text-sm">
             Copyright &copy; 2016&ndash;2026 Ignet. All rights reserved.

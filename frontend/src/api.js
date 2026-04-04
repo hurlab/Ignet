@@ -21,7 +21,8 @@ async function request(path, options = {}) {
   }
 
   const controller = new AbortController()
-  const timeoutId = setTimeout(() => controller.abort(), 30000)
+  const timeoutMs = options.timeout ?? 30000
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const res = await fetch(`${BASE_URL}${path}`, {
@@ -56,7 +57,7 @@ export const api = {
   searchGenes: (q) => request(`/genes/search?q=${encodeURIComponent(q)}`),
   autocompleteGenes: (q, limit = 10) => request(`/genes/autocomplete?q=${encodeURIComponent(q)}&limit=${limit}`),
   geneNeighbors: (sym) => request(`/genes/${encodeURIComponent(sym)}/neighbors`),
-  geneReport: (sym) => request(`/genes/${encodeURIComponent(sym)}/report`),
+  geneReport: (sym) => request(`/genes/${encodeURIComponent(sym)}/report`, { timeout: 60000 }),
   genePair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}?include_summary=true`),
   predictPair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}/predict`, { method: 'POST' }),
 
@@ -83,11 +84,12 @@ export const api = {
       body: JSON.stringify({ query_a: queryA, query_b: queryB }),
     }),
 
-  enrichment: (genes) => request('/enrichment/analyze', { method: 'POST', body: JSON.stringify({ genes }) }),
+  enrichment: (genes) => request('/enrichment/analyze', { method: 'POST', body: JSON.stringify({ genes }), timeout: 60000 }),
 
   summarize: (genes) => request('/summarize', {
     method: 'POST',
     body: JSON.stringify({ genes }),
+    timeout: 90000,
   }),
 
   chat: (conversation_history, prompt) => request('/chat', {

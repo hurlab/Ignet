@@ -506,18 +506,16 @@ export default function Gene() {
           <p className="text-xs text-gray-400 mb-2">
             Click a node to search that gene. The center node is {gene}.
           </p>
-          <div style={{ height: '350px' }}>
-            <NetworkGraph
-              elements={buildMiniNetwork(gene, neighbors, reportData)}
-              onNodeClick={(nodeData) => {
-                const nodeId = typeof nodeData === 'string' ? nodeData : nodeData?.id
-                if (nodeId && nodeId !== gene) {
-                  setQuery(nodeId)
-                  fetchGeneData(nodeId)
-                }
-              }}
-            />
-          </div>
+          <NetworkGraph
+            elements={buildMiniNetwork(gene, neighbors, reportData)}
+            onNodeClick={(nodeData) => {
+              const nodeId = typeof nodeData === 'string' ? nodeData : nodeData?.id
+              if (nodeId && nodeId !== gene) {
+                setQuery(nodeId)
+                fetchGeneData(nodeId)
+              }
+            }}
+          />
         </section>
       )}
 

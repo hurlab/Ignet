@@ -1,20 +1,94 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../AuthContext.jsx'
 import { useGeneSet } from '../GeneSetContext.jsx'
 
-const navLinks = [
-  { label: 'Dignet', to: '/dignet' },
-  { label: 'Gene', to: '/gene' },
-  { label: 'GenePair', to: '/genepair' },
-  { label: 'Enrichment', to: '/enrichment' },
-  { label: 'Compare', to: '/compare' },
-  { label: 'BioSummarAI', to: '/biosummarai' },
-  { label: 'Analyze Text', to: '/analyze' },
-  { label: 'Explore', to: '/explore' },
-  { label: 'INO', to: '/ino' },
-  { label: 'Assistant', to: '/assistant' },
+const navGroups = [
+  {
+    label: 'Explore',
+    items: [
+      { label: 'Dignet', to: '/dignet', desc: 'Full-text literature search' },
+      { label: 'Gene', to: '/gene', desc: 'Gene profile and network' },
+      { label: 'GenePair', to: '/genepair', desc: 'Pairwise gene evidence' },
+      { label: 'Explore', to: '/explore', desc: 'Browse top genes' },
+    ],
+  },
+  {
+    label: 'Analyze',
+    items: [
+      { label: 'Enrichment', to: '/enrichment', desc: 'Gene set enrichment' },
+      { label: 'Compare', to: '/compare', desc: 'Compare two gene sets' },
+      { label: 'INO', to: '/ino', desc: 'Interaction Network Ontology' },
+      { label: 'Report', to: '/report', desc: 'Generate analysis report' },
+    ],
+  },
+  {
+    label: 'AI Tools',
+    items: [
+      { label: 'BioSummarAI', to: '/biosummarai', desc: 'AI literature summary' },
+      { label: 'Analyze Text', to: '/analyze', desc: 'Extract genes from text' },
+      { label: 'Assistant', to: '/assistant', desc: 'AI research assistant' },
+    ],
+  },
 ]
+
+const allLinks = navGroups.flatMap(g => g.items)
+
+function Dropdown({ group }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+  const location = useLocation()
+  const isGroupActive = group.items.some(item => location.pathname.startsWith(item.to))
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
+
+  // Close on navigation
+  useEffect(() => { setOpen(false) }, [location.pathname])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen(prev => !prev)}
+        className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-sm font-medium transition-colors whitespace-nowrap ${
+          isGroupActive
+            ? 'bg-blue-700 text-white'
+            : 'text-blue-100 hover:bg-blue-800 hover:text-white'
+        }`}
+      >
+        {group.label}
+        <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+      {open && (
+        <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px] z-50">
+          {group.items.map(item => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                `block px-4 py-2 text-sm transition-colors ${
+                  isActive
+                    ? 'bg-blue-50 text-navy font-semibold'
+                    : 'text-gray-700 hover:bg-gray-50 hover:text-navy'
+                }`
+              }
+            >
+              <div className="font-medium">{item.label}</div>
+              {item.desc && <div className="text-xs text-gray-400 mt-0.5">{item.desc}</div>}
+            </NavLink>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function Header() {
   const [pubmedQuery, setPubmedQuery] = useState('')
@@ -50,27 +124,10 @@ export default function Header() {
           Ignet
         </Link>
 
-        {/* Nav links */}
-        <nav className="hidden md:flex items-center gap-1 flex-1 overflow-hidden">
-          {navLinks.map(({ label, to, badge }) => (
-            <NavLink
-              key={to}
-              to={to}
-              className={({ isActive }) =>
-                `flex items-center gap-1 px-2 py-1 rounded text-sm font-medium transition-colors whitespace-nowrap ${
-                  isActive
-                    ? 'bg-blue-700 text-white'
-                    : 'text-blue-100 hover:bg-blue-800 hover:text-white'
-                }`
-              }
-            >
-              {label}
-              {badge && (
-                <span className="bg-accent text-white text-[10px] px-1 py-0.5 rounded font-semibold leading-none">
-                  {badge}
-                </span>
-              )}
-            </NavLink>
+        {/* Nav dropdown groups */}
+        <nav className="hidden md:flex items-center gap-1 flex-1">
+          {navGroups.map(group => (
+            <Dropdown key={group.label} group={group} />
           ))}
         </nav>
 
@@ -145,27 +202,29 @@ export default function Header() {
       {/* Mobile dropdown panel */}
       {menuOpen && (
         <div className="md:hidden bg-navy border-t border-blue-800 px-4 py-3 flex flex-col gap-1">
-          {/* Nav links */}
-          {navLinks.map(({ label, to, badge }) => (
-            <NavLink
-              key={to}
-              to={to}
-              onClick={() => setMenuOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-blue-700 text-white'
-                    : 'text-blue-100 hover:bg-blue-800 hover:text-white'
-                }`
-              }
-            >
-              {label}
-              {badge && (
-                <span className="bg-accent text-white text-[10px] px-1 py-0.5 rounded font-semibold leading-none">
-                  {badge}
-                </span>
-              )}
-            </NavLink>
+          {/* Nav groups */}
+          {navGroups.map(group => (
+            <div key={group.label}>
+              <div className="text-blue-400 text-xs font-semibold uppercase tracking-wider px-3 py-1 mt-2 first:mt-0">
+                {group.label}
+              </div>
+              {group.items.map(({ label, to }) => (
+                <NavLink
+                  key={to}
+                  to={to}
+                  onClick={() => setMenuOpen(false)}
+                  className={({ isActive }) =>
+                    `flex items-center gap-2 px-3 py-2 rounded text-sm font-medium transition-colors ${
+                      isActive
+                        ? 'bg-blue-700 text-white'
+                        : 'text-blue-100 hover:bg-blue-800 hover:text-white'
+                    }`
+                  }
+                >
+                  {label}
+                </NavLink>
+              ))}
+            </div>
           ))}
 
           {/* PubMed search */}

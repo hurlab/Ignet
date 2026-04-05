@@ -7,7 +7,7 @@ import NetworkGraph from '../components/NetworkGraph.jsx'
 import ExportDropdown from '../components/ExportDropdown.jsx'
 import EntitySidebar from '../components/EntitySidebar.jsx'
 
-const LIMIT_OPTIONS = [50, 100, 200, 500]
+const LIMIT_OPTIONS = [50, 100, 200, 500, 1000, 2000, 5000]
 
 function YearRangeSlider({ min, max, valueMin, valueMax, onChangeMin, onChangeMax }) {
   const range = max - min || 1
@@ -70,7 +70,7 @@ function downloadCSV(pairs, query) {
   URL.revokeObjectURL(url)
 }
 
-const MAX_GRAPH_EDGES = 500
+const MAX_GRAPH_EDGES = 2000
 
 // INO category fallback color for edges that have no ino_color from the backend
 const INO_FALLBACK_COLOR = '#a0aec0'

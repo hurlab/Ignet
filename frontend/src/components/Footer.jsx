@@ -4,7 +4,7 @@ function useDataLastUpdated() {
   const [lastUpdated, setLastUpdated] = useState(null)
 
   useEffect(() => {
-    fetch('/ignet/api/v1/stats')
+    fetch('/api/v1/stats')
       .then((r) => r.ok ? r.json() : null)
       .then((data) => {
         if (data?.data_last_updated) {

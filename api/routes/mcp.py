@@ -510,7 +510,7 @@ def _tool_ignet_get_enrichment(params: dict) -> str:
                 f"""
                 SELECT b.drug_term AS term, COUNT(*) AS cnt
                 FROM t_gene_pairs h
-                JOIN biosummary25_Host b ON b.pmid = h.pmid
+                JOIN t_biosummary b ON b.pmid = h.pmid
                 WHERE h.gene_symbol1 IN ({placeholders})
                   AND h.gene_symbol2 IN ({placeholders})
                   AND b.drug_term IS NOT NULL AND b.drug_term != ''
@@ -526,7 +526,7 @@ def _tool_ignet_get_enrichment(params: dict) -> str:
                 f"""
                 SELECT b.hdo_term AS term, COUNT(*) AS cnt
                 FROM t_gene_pairs h
-                JOIN biosummary25_Host b ON b.pmid = h.pmid
+                JOIN t_biosummary b ON b.pmid = h.pmid
                 WHERE h.gene_symbol1 IN ({placeholders})
                   AND h.gene_symbol2 IN ({placeholders})
                   AND b.hdo_term IS NOT NULL AND b.hdo_term != ''

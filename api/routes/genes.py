@@ -476,12 +476,12 @@ def gene_report(symbol: str):
                 for r in cursor.fetchall()
             ]
 
-            # 5. Drug associations from biosummary25_Host
+            # 5. Drug associations from t_biosummary
             cursor.execute(
                 """
                 SELECT b.drug_term, COUNT(*) AS cnt
                 FROM t_gene_pairs h
-                JOIN biosummary25_Host b ON b.pmid = h.pmid
+                JOIN t_biosummary b ON b.pmid = h.pmid
                 WHERE (h.gene_symbol1 = %s OR h.gene_symbol2 = %s)
                   AND b.drug_term IS NOT NULL AND b.drug_term != ''
                 GROUP BY b.drug_term ORDER BY cnt DESC LIMIT 15
@@ -490,12 +490,12 @@ def gene_report(symbol: str):
             )
             drugs = [{"term": r["drug_term"], "count": r["cnt"]} for r in cursor.fetchall()]
 
-            # 6. Disease associations from biosummary25_Host
+            # 6. Disease associations from t_biosummary
             cursor.execute(
                 """
                 SELECT b.hdo_term, COUNT(*) AS cnt
                 FROM t_gene_pairs h
-                JOIN biosummary25_Host b ON b.pmid = h.pmid
+                JOIN t_biosummary b ON b.pmid = h.pmid
                 WHERE (h.gene_symbol1 = %s OR h.gene_symbol2 = %s)
                   AND b.hdo_term IS NOT NULL AND b.hdo_term != ''
                 GROUP BY b.hdo_term ORDER BY cnt DESC LIMIT 15

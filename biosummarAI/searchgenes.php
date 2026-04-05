@@ -107,7 +107,7 @@ if (!empty($genes_array_input)) {
             
             try {
                 $sql_details = "SELECT pmid, sentences, drug_term, hdo_term, gene_symbols
-                                FROM biosummary25_Host
+                                FROM t_biosummary
                                 WHERE pmid IN ($pmidlistSQL_IN)";
                 $rs_details = $db->Execute($sql_details);
 

@@ -303,7 +303,7 @@ def biobert():
 
                         if pmid_list:
                             pmid_placeholders = ', '.join(['%s'] * len(pmid_list))
-                            query_sentences = f"SELECT pmid, sentences, drug_term, hdo_term, gene_symbols FROM biosummary25_Host WHERE pmid IN ({pmid_placeholders}) LIMIT 500"
+                            query_sentences = f"SELECT pmid, sentences, drug_term, hdo_term, gene_symbols FROM t_biosummary WHERE pmid IN ({pmid_placeholders}) LIMIT 500"
                             cursor.execute(query_sentences, tuple(pmid_list))
                             results_sentences = cursor.fetchall()
                             df = pd.DataFrame(results_sentences)

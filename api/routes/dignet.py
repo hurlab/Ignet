@@ -566,7 +566,7 @@ def network_graph(query_id: int):
 def network_entities(query_id: int):
     """
     Fast entity lookup for a Dignet query's PMIDs.
-    Queries biosummary25_Host and t_ino directly using cached PMIDs.
+    Queries t_biosummary and t_ino directly using cached PMIDs.
     Much faster than the full enrichment endpoint for sidebar use.
     """
     try:
@@ -583,10 +583,10 @@ def network_entities(query_id: int):
             placeholders = ",".join(["%s"] * min(len(pmids), 500))
             pmid_subset = tuple(pmids[:500])
 
-            # Drugs from biosummary25_Host (direct PMID lookup, no gene JOIN)
+            # Drugs from t_biosummary (direct PMID lookup, no gene JOIN)
             cursor.execute(
                 f"""SELECT drug_term AS term, COUNT(*) AS cnt
-                    FROM biosummary25_Host
+                    FROM t_biosummary
                     WHERE pmid IN ({placeholders})
                       AND drug_term IS NOT NULL AND drug_term != ''
                     GROUP BY drug_term ORDER BY cnt DESC LIMIT 20""",
@@ -597,7 +597,7 @@ def network_entities(query_id: int):
             # Diseases
             cursor.execute(
                 f"""SELECT hdo_term AS term, COUNT(*) AS cnt
-                    FROM biosummary25_Host
+                    FROM t_biosummary
                     WHERE pmid IN ({placeholders})
                       AND hdo_term IS NOT NULL AND hdo_term != ''
                     GROUP BY hdo_term ORDER BY cnt DESC LIMIT 20""",

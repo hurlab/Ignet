@@ -126,7 +126,7 @@ def summarize():
         )
         upstream.raise_for_status()
 
-        # Enrich response with entity lists from biosummary25_Host
+        # Enrich response with entity lists from t_biosummary
         try:
             result = upstream.json()
             genes_input = body.get("genes", [])
@@ -148,7 +148,7 @@ def summarize():
 
                         # Top gene symbols
                         cursor.execute(
-                            f"SELECT gene_symbols, COUNT(*) AS cnt FROM biosummary25_Host "
+                            f"SELECT gene_symbols, COUNT(*) AS cnt FROM t_biosummary "
                             f"WHERE pmid IN ({pmid_ph}) AND gene_symbols IS NOT NULL AND gene_symbols != '' "
                             f"GROUP BY gene_symbols ORDER BY cnt DESC LIMIT 20",
                             tuple(pmids)
@@ -157,7 +157,7 @@ def summarize():
 
                         # Top drug terms
                         cursor.execute(
-                            f"SELECT drug_term, COUNT(*) AS cnt FROM biosummary25_Host "
+                            f"SELECT drug_term, COUNT(*) AS cnt FROM t_biosummary "
                             f"WHERE pmid IN ({pmid_ph}) AND drug_term IS NOT NULL AND drug_term != '' "
                             f"GROUP BY drug_term ORDER BY cnt DESC LIMIT 20",
                             tuple(pmids)
@@ -166,7 +166,7 @@ def summarize():
 
                         # Top HDO (disease) terms
                         cursor.execute(
-                            f"SELECT hdo_term, COUNT(*) AS cnt FROM biosummary25_Host "
+                            f"SELECT hdo_term, COUNT(*) AS cnt FROM t_biosummary "
                             f"WHERE pmid IN ({pmid_ph}) AND hdo_term IS NOT NULL AND hdo_term != '' "
                             f"GROUP BY hdo_term ORDER BY cnt DESC LIMIT 20",
                             tuple(pmids)

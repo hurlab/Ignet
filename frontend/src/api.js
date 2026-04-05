@@ -62,7 +62,7 @@ export const api = {
   predictPair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}/predict`, { method: 'POST' }),
 
   // filters: { ino_type?: string, has_vaccine?: boolean, year_min?: number, year_max?: number }
-  dignetSearch: (keywords, limit, filters = {}) => {
+  dignetSearch: (keywords, limit, filters = {}, useCache = true) => {
     const params = new URLSearchParams()
     if (filters.ino_type) params.set('ino_type', filters.ino_type)
     if (filters.has_vaccine) params.set('has_vaccine', 'true')
@@ -71,7 +71,8 @@ export const api = {
     const qs = params.toString()
     return request(`/dignet/search${qs ? `?${qs}` : ''}`, {
       method: 'POST',
-      body: JSON.stringify({ keywords }),
+      body: JSON.stringify({ keywords, use_cache: useCache }),
+      timeout: 60000,
     })
   },
 

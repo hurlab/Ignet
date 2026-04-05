@@ -80,25 +80,50 @@ function buildElements(result) {
   if (!pairs || pairs.length === 0) return []
   const limitedPairs = pairs.slice(0, MAX_GRAPH_EDGES)
   const genes = new Set()
-  const edges = []
-  limitedPairs.forEach((p, i) => {
+
+  // Aggregate: one edge per unique gene pair, weight = number of supporting PMIDs
+  const edgeMap = new Map()
+  limitedPairs.forEach((p) => {
     const g1 = p.gene1
     const g2 = p.gene2
     if (!g1 || !g2) return
     genes.add(g1)
     genes.add(g2)
-    edges.push({
-      data: {
-        id: `e${i}`,
-        source: g1,
-        target: g2,
-        weight: p.score ?? 1,
-        // INO fields from backend enrichment
+    // Canonical key (sorted) so A-B and B-A merge
+    const key = g1 < g2 ? `${g1}|${g2}` : `${g2}|${g1}`
+    const existing = edgeMap.get(key)
+    if (existing) {
+      existing.pmid_count += 1
+      if (p.score != null && (existing.best_score == null || p.score > existing.best_score)) {
+        existing.best_score = p.score
+      }
+      if (p.ino_category && p.ino_category !== 'unknown') {
+        existing.ino_category = p.ino_category
+        existing.ino_color = p.ino_color
+      }
+    } else {
+      edgeMap.set(key, {
+        source: key.split('|')[0],
+        target: key.split('|')[1],
+        pmid_count: 1,
+        best_score: p.score ?? null,
         ino_category: p.ino_category ?? 'unknown',
         ino_color: p.ino_color ?? INO_FALLBACK_COLOR,
-      },
-    })
+      })
+    }
   })
+
+  const edges = [...edgeMap.entries()].map(([key, e]) => ({
+    data: {
+      id: `e_${key}`,
+      source: e.source,
+      target: e.target,
+      weight: e.pmid_count,
+      score: e.best_score,
+      ino_category: e.ino_category,
+      ino_color: e.ino_color,
+    },
+  }))
   const degrees = {}
   edges.forEach(({ data: { source, target } }) => {
     degrees[source] = (degrees[source] ?? 0) + 1
@@ -209,7 +234,7 @@ export default function Dignet() {
     }).catch(() => {})
   }, [])
 
-  const runSearch = useCallback(async (searchQuery, searchLimit, filters) => {
+  const runSearch = useCallback(async (searchQuery, searchLimit, filters, opts) => {
     const q = (searchQuery ?? query).trim()
     if (!q) return
 
@@ -230,7 +255,8 @@ export default function Dignet() {
     }
     try {
       const activeFilters = filters ?? { ino_type: inoFilter, has_vaccine: vaccineOnly }
-      const raw = await api.dignetSearch(q, searchLimit ?? limit, activeFilters)
+      const useCache = opts?.useCache !== false
+      const raw = await api.dignetSearch(q, searchLimit ?? limit, activeFilters, useCache)
       if (controller.signal.aborted) return // stale result
       const data = raw?.data ?? raw
       setResult(data)
@@ -432,9 +458,18 @@ export default function Dignet() {
               { label: 'Edges', value: edgeCount },
               { label: 'Cached', value: result.cached ? 'Yes' : 'No' },
             ].filter(Boolean).map(({ label, value }) => (
-              <div key={label} className="bg-white border border-gray-200 rounded px-3 py-1.5">
+              <div key={label} className="bg-white border border-gray-200 rounded px-3 py-1.5 flex items-center gap-1">
                 <span className="text-xs text-gray-500 mr-1">{label}:</span>
                 <span className="text-xs font-semibold text-navy">{value}</span>
+                {label === 'Cached' && result.cached && (
+                  <button
+                    onClick={() => runSearch(query, limit, { ino_type: inoFilter, has_vaccine: vaccineOnly }, { useCache: false })}
+                    className="ml-1 text-[10px] text-blue-500 hover:text-blue-700 underline"
+                    title="Re-query PubMed for fresh results"
+                  >
+                    Refresh
+                  </button>
+                )}
               </div>
             ))}
           </div>

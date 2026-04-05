@@ -1,8 +1,7 @@
-import { useState, useCallback, useRef, useMemo } from 'react'
+import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import CytoscapeComponent from 'react-cytoscapejs'
 
 function buildStylesheet(elements) {
-  // Compute actual ranges from the data for meaningful visual mapping
   const nodes = elements.filter(e => !e.data.source)
   const edges = elements.filter(e => e.data.source)
 
@@ -14,13 +13,9 @@ function buildStylesheet(elements) {
   const maxDegree = Math.max(...Object.values(degrees), 1)
   const minDegree = Math.min(...Object.values(degrees), 1)
 
-  // Check if we have real centrality data
   const hasCentrality = nodes.some(n => n.data.centrality_d > 0)
-
-  // Check if we have INO colors
   const hasIno = edges.some(e => e.data.ino_color && e.data.ino_color !== '#a0aec0')
 
-  // Compute weight range for edge thickness
   const weights = edges.map(e => e.data.weight || 1).filter(w => w > 0)
   const maxWeight = Math.max(...weights, 1)
   const minWeight = Math.min(...weights, 1)
@@ -39,11 +34,9 @@ function buildStylesheet(elements) {
         'text-outline-color': '#ffffff',
         'text-outline-width': 2,
         'min-zoomed-font-size': 6,
-        // Node color: use centrality if available, otherwise degree-based
         'background-color': hasCentrality
           ? 'mapData(centrality_d, 0, 1, #bfdbfe, #1e3a5f)'
           : `mapData(degree, ${minDegree}, ${Math.max(maxDegree, minDegree + 1)}, #93c5fd, #1e3a5f)`,
-        // Node size: proportional to degree with meaningful range
         width: `mapData(degree, ${minDegree}, ${Math.max(maxDegree, minDegree + 1)}, 25, 60)`,
         height: `mapData(degree, ${minDegree}, ${Math.max(maxDegree, minDegree + 1)}, 25, 60)`,
         'border-width': 1.5,
@@ -52,7 +45,6 @@ function buildStylesheet(elements) {
       },
     },
     {
-      // Hub nodes (top 20% by degree) get special styling
       selector: `node[degree >= ${Math.floor(maxDegree * 0.8)}]`,
       style: {
         'border-width': 3,
@@ -74,7 +66,6 @@ function buildStylesheet(elements) {
       style: {
         'line-color': hasIno ? 'data(ino_color)' : '#94a3b8',
         'target-arrow-color': hasIno ? 'data(ino_color)' : '#94a3b8',
-        // Edge width proportional to weight with meaningful range
         width: maxWeight > minWeight
           ? `mapData(weight, ${minWeight}, ${maxWeight}, 1, 5)`
           : 1.5,
@@ -91,49 +82,42 @@ function buildStylesheet(elements) {
         width: 3,
       },
     },
-    // Drug nodes — green diamonds
     {
       selector: 'node[nodeType="drug"]',
       style: {
         'background-color': '#38a169',
         'shape': 'diamond',
-        width: 20,
-        height: 20,
+        width: 20, height: 20,
         'border-color': '#276749',
         'border-width': 1.5,
         'font-size': '8px',
         color: '#276749',
       },
     },
-    // Disease nodes — red triangles
     {
       selector: 'node[nodeType="disease"]',
       style: {
         'background-color': '#e53e3e',
         'shape': 'triangle',
-        width: 20,
-        height: 20,
+        width: 20, height: 20,
         'border-color': '#9b2c2c',
         'border-width': 1.5,
         'font-size': '8px',
         color: '#9b2c2c',
       },
     },
-    // INO type nodes — purple hexagons
     {
       selector: 'node[nodeType="ino"]',
       style: {
         'background-color': '#9f7aea',
         'shape': 'hexagon',
-        width: 18,
-        height: 18,
+        width: 18, height: 18,
         'border-color': '#6b46c1',
         'border-width': 1.5,
         'font-size': '7px',
         color: '#6b46c1',
       },
     },
-    // Edges connecting to entity nodes — dashed, lighter
     {
       selector: 'edge[edgeType="entity"]',
       style: {
@@ -163,11 +147,31 @@ function buildLayout(elementCount) {
 
 export default function NetworkGraph({ elements, onNodeClick, onCyReady }) {
   const [tooltip, setTooltip] = useState(null)
+  const [fullscreen, setFullscreen] = useState(false)
   const cyRef = useRef(null)
+  const containerRef = useRef(null)
 
   const nodeCount = useMemo(() => elements?.filter(e => !e.data.source).length || 0, [elements])
   const stylesheet = useMemo(() => buildStylesheet(elements || []), [elements])
   const layout = useMemo(() => buildLayout(nodeCount), [nodeCount])
+
+  // Handle ESC to exit fullscreen
+  useEffect(() => {
+    if (!fullscreen) return
+    function onKey(e) { if (e.key === 'Escape') setFullscreen(false) }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [fullscreen])
+
+  // Refit graph when toggling fullscreen
+  useEffect(() => {
+    if (cyRef.current) {
+      setTimeout(() => {
+        cyRef.current.resize()
+        cyRef.current.fit(undefined, 30)
+      }, 100)
+    }
+  }, [fullscreen])
 
   function exportPNG() {
     if (!cyRef.current) return
@@ -176,6 +180,50 @@ export default function NetworkGraph({ elements, onNodeClick, onCyReady }) {
     a.href = dataUrl
     a.download = 'ignet-network.png'
     a.click()
+  }
+
+  function exportCytoscapeJSON() {
+    if (!cyRef.current) return
+    const json = cyRef.current.json()
+    const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'ignet-network.cyjs'
+    a.click()
+    URL.revokeObjectURL(a.href)
+  }
+
+  function exportXGMML() {
+    if (!cyRef.current) return
+    const cy = cyRef.current
+    const nodes = cy.nodes().map(n => {
+      const pos = n.position()
+      return `    <node id="${n.id()}" label="${n.data('label') || n.id()}">
+      <att name="degree" type="integer" value="${n.degree()}"/>
+      <graphics x="${pos.x.toFixed(1)}" y="${pos.y.toFixed(1)}"/>
+    </node>`
+    })
+    const edges = cy.edges().map(e => {
+      const parts = [`    <edge source="${e.data('source')}" target="${e.data('target')}"`]
+      if (e.data('label')) parts.push(` label="${e.data('label')}"`)
+      parts.push('>')
+      if (e.data('weight')) parts.push(`      <att name="weight" type="real" value="${e.data('weight')}"/>`)
+      if (e.data('score') != null) parts.push(`      <att name="score" type="real" value="${e.data('score')}"/>`)
+      if (e.data('ino_category')) parts.push(`      <att name="ino_category" type="string" value="${e.data('ino_category')}"/>`)
+      parts.push('    </edge>')
+      return parts.join('\n')
+    })
+    const xgmml = `<?xml version="1.0" encoding="UTF-8"?>
+<graph label="Ignet Network" xmlns="http://www.cs.rpi.edu/XGMML">
+${nodes.join('\n')}
+${edges.join('\n')}
+</graph>`
+    const blob = new Blob([xgmml], { type: 'application/xml' })
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = 'ignet-network.xgmml'
+    a.click()
+    URL.revokeObjectURL(a.href)
   }
 
   function fitGraph() {
@@ -205,7 +253,7 @@ export default function NetworkGraph({ elements, onNodeClick, onCyReady }) {
         const weight = edge.data('weight')
         const parts = []
         if (cat && cat !== 'unknown') parts.push(cat.replace(/_/g, ' '))
-        if (weight > 1) parts.push(`${weight} evidence`)
+        if (weight > 1) parts.push(`${weight} PMIDs`)
         if (parts.length > 0) {
           const renderedPos = evt.renderedPosition
           setTooltip({ x: renderedPos.x, y: renderedPos.y, label: parts.join(' | ') })
@@ -235,13 +283,17 @@ export default function NetworkGraph({ elements, onNodeClick, onCyReady }) {
     )
   }
 
+  const wrapperClass = fullscreen
+    ? 'fixed inset-0 z-[9999] bg-white flex flex-col'
+    : 'relative border border-gray-200 rounded-md overflow-hidden bg-white'
+
   return (
-    <div className="relative border border-gray-200 rounded-md overflow-hidden bg-white">
+    <div ref={containerRef} className={wrapperClass}>
       <CytoscapeComponent
         elements={elements}
         stylesheet={stylesheet}
         layout={layout}
-        style={{ width: '100%', height: '500px' }}
+        style={{ width: '100%', height: fullscreen ? 'calc(100vh - 44px)' : '500px' }}
         cy={handleCy}
       />
       {tooltip && (
@@ -252,20 +304,33 @@ export default function NetworkGraph({ elements, onNodeClick, onCyReady }) {
           {tooltip.label}
         </div>
       )}
-      <div className="flex gap-2 p-2 border-t border-gray-100 flex-wrap items-center">
+      <div className="flex gap-2 p-2 border-t border-gray-100 flex-wrap items-center bg-white">
         <button
-          onClick={fitGraph}
-          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors"
+          onClick={() => setFullscreen(f => !f)}
+          className="text-xs bg-navy hover:bg-navy-dark text-white px-2.5 py-1 rounded transition-colors font-medium"
+          title={fullscreen ? 'Exit fullscreen (Esc)' : 'Expand to fullscreen'}
         >
-          Fit to Screen
+          {fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
         </button>
-        <button
-          onClick={exportPNG}
-          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors"
-        >
-          Export PNG
+        <button onClick={fitGraph}
+          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">
+          Fit
         </button>
-        <div className="text-[10px] text-gray-400 mt-1 ml-auto">Scroll to zoom · Drag to pan · Click a node for details</div>
+        <button onClick={exportPNG}
+          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">
+          PNG
+        </button>
+        <button onClick={exportCytoscapeJSON}
+          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">
+          Cytoscape JSON
+        </button>
+        <button onClick={exportXGMML}
+          className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">
+          XGMML
+        </button>
+        <div className="text-[10px] text-gray-400 ml-auto">
+          {fullscreen ? 'Press Esc to exit · ' : ''}Scroll to zoom · Drag to pan · Click node for details
+        </div>
       </div>
     </div>
   )

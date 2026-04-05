@@ -88,3 +88,30 @@ SELECT '' AS '';
 DESCRIBE t_drug;
 SELECT '' AS '';
 DESCRIBE t_hdo;
+
+-- =========================================================================
+-- Legacy Compatibility VIEWs
+-- Created to keep ignet_legacy PHP site functional after table renames.
+-- These VIEWs map old table/column names to the new snake_case tables.
+-- No data duplication — legacy site sees the same current data.
+-- =========================================================================
+
+CREATE OR REPLACE VIEW t_sentence_hit_gene2gene_Host AS
+SELECT id, pmid AS PMID, sentence_id AS sentenceID,
+       gene_match1 AS geneMatch1, gene_match2 AS geneMatch2,
+       gene_symbol1 AS geneSymbol1, gene_symbol2 AS geneSymbol2,
+       score, has_vaccine AS hasVaccine
+FROM t_gene_pairs;
+
+CREATE OR REPLACE VIEW sentences25_genepair AS
+SELECT sentence_id AS sentenceID, pmid AS PMID, sentence
+FROM t_sentences;
+
+CREATE OR REPLACE VIEW biosummary25_Host AS
+SELECT * FROM t_biosummary;
+
+CREATE OR REPLACE VIEW ino_host25 AS
+SELECT sentence_id, pmid, ino_id AS id, matching_phrase
+FROM t_ino;
+
+SELECT 'Legacy VIEWs created' AS status;

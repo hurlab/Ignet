@@ -273,15 +273,15 @@ export default function Dignet() {
     }
   }, [inoFilter, vaccineOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-search on mount if URL contains ?q=
+  // Auto-search when URL contains ?q= (on mount or when query param changes)
   useEffect(() => {
     const q = searchParams.get('q')
-    if (q && !didAutoSearch.current) {
-      didAutoSearch.current = true
+    if (q && q !== didAutoSearch.current) {
+      didAutoSearch.current = q
       setQuery(q)
       runSearch(q, limit, { ino_type: '', has_vaccine: false })
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const geneElements = result ? buildElements(result) : []
 

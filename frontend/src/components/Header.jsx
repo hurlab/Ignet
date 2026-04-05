@@ -37,22 +37,24 @@ const allLinks = navGroups.flatMap(g => g.items)
 function Dropdown({ group }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
+  const closeTimer = useRef(null)
   const location = useLocation()
   const isGroupActive = group.items.some(item => location.pathname.startsWith(item.to))
-
-  useEffect(() => {
-    function handleClickOutside(e) {
-      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
 
   // Close on navigation
   useEffect(() => { setOpen(false) }, [location.pathname])
 
+  function handleEnter() {
+    clearTimeout(closeTimer.current)
+    setOpen(true)
+  }
+
+  function handleLeave() {
+    closeTimer.current = setTimeout(() => setOpen(false), 150)
+  }
+
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative" onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
       <button
         onClick={() => setOpen(prev => !prev)}
         className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-sm font-medium transition-colors whitespace-nowrap ${
@@ -67,23 +69,25 @@ function Dropdown({ group }) {
         </svg>
       </button>
       {open && (
-        <div className="absolute top-full left-0 mt-1 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px] z-50">
-          {group.items.map(item => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                `block px-4 py-2 text-sm transition-colors ${
-                  isActive
-                    ? 'bg-blue-50 text-navy font-semibold'
-                    : 'text-gray-700 hover:bg-gray-50 hover:text-navy'
-                }`
-              }
-            >
-              <div className="font-medium">{item.label}</div>
-              {item.desc && <div className="text-xs text-gray-400 mt-0.5">{item.desc}</div>}
-            </NavLink>
-          ))}
+        <div className="absolute top-full left-0 pt-1 z-50">
+          <div className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px]">
+            {group.items.map(item => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  `block px-4 py-2 text-sm transition-colors ${
+                    isActive
+                      ? 'bg-blue-50 text-navy font-semibold'
+                      : 'text-gray-700 hover:bg-gray-50 hover:text-navy'
+                  }`
+                }
+              >
+                <div className="font-medium">{item.label}</div>
+                {item.desc && <div className="text-xs text-gray-400 mt-0.5">{item.desc}</div>}
+              </NavLink>
+            ))}
+          </div>
         </div>
       )}
     </div>

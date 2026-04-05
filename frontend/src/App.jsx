@@ -26,6 +26,7 @@ const Contact = lazy(() => import('./pages/Contact.jsx'))
 const Links = lazy(() => import('./pages/Links.jsx'))
 const Disclaimer = lazy(() => import('./pages/Disclaimer.jsx'))
 const Acknowledgements = lazy(() => import('./pages/Acknowledgements.jsx'))
+const Manual = lazy(() => import('./pages/Manual.jsx'))
 
 function usePageTracking() {
   const location = useLocation()
@@ -66,6 +67,7 @@ function App() {
             <Route path="links" element={<Links />} />
             <Route path="disclaimer" element={<Disclaimer />} />
             <Route path="acknowledgements" element={<Acknowledgements />} />
+            <Route path="manual" element={<Manual />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

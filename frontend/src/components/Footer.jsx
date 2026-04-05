@@ -39,6 +39,7 @@ export default function Footer() {
                 { label: 'MCP for AI', href: '/ignet/api-docs#mcp' },
                 { label: 'FAQs', href: '/ignet/faqs' },
                 { label: 'Contact Us', href: '/ignet/contact' },
+                { label: 'User Manual', href: '/ignet/manual' },
                 { label: 'Report an Issue', href: 'https://github.com/hurlab/Ignet/issues' },
               ].map((item) => (
                 <li key={item.label}>

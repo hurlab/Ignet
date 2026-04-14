@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="6" fill="#1a365d"/>
+  <!-- Stylized I with network nodes at terminals -->
+  <rect x="12.5" y="6" width="7" height="2.5" rx="1" fill="#ed8936"/>
+  <rect x="14.5" y="8.5" width="3" height="15" rx="1" fill="#63b3ed"/>
+  <rect x="12.5" y="23.5" width="7" height="2.5" rx="1" fill="#ed8936"/>
+  <!-- Small network nodes on the I -->
+  <circle cx="10" cy="12" r="2" fill="#4299e1" opacity="0.7"/>
+  <circle cx="22" cy="12" r="2" fill="#4299e1" opacity="0.7"/>
+  <circle cx="10" cy="20" r="2" fill="#4299e1" opacity="0.7"/>
+  <circle cx="22" cy="20" r="2" fill="#4299e1" opacity="0.7"/>
+  <!-- Edges from I to nodes -->
+  <line x1="14.5" y1="12" x2="12" y2="12" stroke="#63b3ed" stroke-width="1" opacity="0.5"/>
+  <line x1="17.5" y1="12" x2="20" y2="12" stroke="#63b3ed" stroke-width="1" opacity="0.5"/>
+  <line x1="14.5" y1="20" x2="12" y2="20" stroke="#63b3ed" stroke-width="1" opacity="0.5"/>
+  <line x1="17.5" y1="20" x2="20" y2="20" stroke="#63b3ed" stroke-width="1" opacity="0.5"/>
+</svg>

@@ -1,0 +1,103 @@
+Tricuspid valve incompetence	http://purl.obolibrary.org/obo/OAE_0001471
+Thrombocytopenia	http://purl.obolibrary.org/obo/OAE_0001448
+Respiratory failure	http://purl.obolibrary.org/obo/OAE_0001370
+Renal impairment	http://purl.obolibrary.org/obo/OAE_0001366
+Pulse absent	http://purl.obolibrary.org/obo/OAE_0001346
+Pulmonary oedema	http://purl.obolibrary.org/obo/OAE_0001345
+Pulmonary congestion	http://purl.obolibrary.org/obo/OAE_0001339
+Pleural effusion	http://purl.obolibrary.org/obo/OAE_0001298
+Pericardial effusion	http://purl.obolibrary.org/obo/OAE_0001281
+Osteonecrosis	http://purl.obolibrary.org/obo/OAE_0001259
+Osteomyelitis	http://purl.obolibrary.org/obo/OAE_0001256
+Myocardial ischaemia	http://purl.obolibrary.org/obo/OAE_0001200
+Mitral valve incompetence	http://purl.obolibrary.org/obo/OAE_0001188
+Metastases to liver	http://purl.obolibrary.org/obo/OAE_0001177
+Metastases to central nervous system	http://purl.obolibrary.org/obo/OAE_0001176
+Malignant neoplasm progression	http://purl.obolibrary.org/obo/OAE_0001157
+Liver disorder	http://purl.obolibrary.org/obo/OAE_0001135
+Leukopenia	http://purl.obolibrary.org/obo/OAE_0001129
+Left ventricular hypertrophy	http://purl.obolibrary.org/obo/OAE_0001121
+Left ventricular dysfunction	http://purl.obolibrary.org/obo/OAE_0001119
+Left atrial dilatation	http://purl.obolibrary.org/obo/OAE_0001118
+Infusion related reaction	http://purl.obolibrary.org/obo/OAE_0001081
+Haematocrit decreased	http://purl.obolibrary.org/obo/OAE_0001005
+Haematemesis	http://purl.obolibrary.org/obo/OAE_0001003
+General physical health deterioration	http://purl.obolibrary.org/obo/OAE_0000983
+Fluid overload	http://purl.obolibrary.org/obo/OAE_0000950
+Electrocardiogram qt prolonged	http://purl.obolibrary.org/obo/OAE_0000911
+Ejection fraction decreased	http://purl.obolibrary.org/obo/OAE_0000908
+Dyspnoea exertional	http://purl.obolibrary.org/obo/OAE_0000901
+Drug intolerance	http://purl.obolibrary.org/obo/OAE_0000891
+Disease progression	http://purl.obolibrary.org/obo/OAE_0000879
+Dilatation ventricular	http://purl.obolibrary.org/obo/OAE_0000878
+Congestive cardiomyopathy	http://purl.obolibrary.org/obo/OAE_0000836
+Circulatory collapse	http://purl.obolibrary.org/obo/OAE_0000821
+Chronic obstructive pulmonary disease	http://purl.obolibrary.org/obo/OAE_0000817
+Chronic myeloid leukaemia	http://purl.obolibrary.org/obo/OAE_0000815
+Cardiotoxicity	http://purl.obolibrary.org/obo/OAE_0000786
+Cardiomyopathy	http://purl.obolibrary.org/obo/OAE_0000785
+Cardiac failure congestive	http://purl.obolibrary.org/obo/OAE_0000780
+Cardiac failure	http://purl.obolibrary.org/obo/OAE_0000779
+Capillary leak syndrome	http://purl.obolibrary.org/obo/OAE_0000775
+Blood urea increased	http://purl.obolibrary.org/obo/OAE_0000747
+Hypokalaemia	http://purl.obolibrary.org/obo/OAE_0000741
+Blood creatinine increased	http://purl.obolibrary.org/obo/OAE_0000729
+Atelectasis	http://purl.obolibrary.org/obo/OAE_0000674
+Blood creatine phosphokinase increased	http://purl.obolibrary.org/obo/OAE_0000661
+Atrial fibrillation	http://purl.obolibrary.org/obo/OAE_0000659
+Pneumonia	http://purl.obolibrary.org/obo/OAE_0000647
+Death	http://purl.obolibrary.org/obo/OAE_0000632
+Sepsis	http://purl.obolibrary.org/obo/OAE_0000618
+Diarrhoea	http://purl.obolibrary.org/obo/OAE_0000616
+Pallor	http://purl.obolibrary.org/obo/OAE_0000606
+Vomiting	http://purl.obolibrary.org/obo/OAE_0000601
+Oedema	http://purl.obolibrary.org/obo/OAE_0000556
+Arrhythmia	http://purl.obolibrary.org/obo/OAE_0000553
+Hypotension	http://purl.obolibrary.org/obo/OAE_0000551
+Dehydration	http://purl.obolibrary.org/obo/OAE_0000545
+Bone pain	http://purl.obolibrary.org/obo/OAE_0000533
+Cardiovascular disorder	http://purl.obolibrary.org/obo/OAE_0000493
+Anaemia	http://purl.obolibrary.org/obo/OAE_0000471
+Palpitations	http://purl.obolibrary.org/obo/OAE_0000471
+Cardiac arrest	http://purl.obolibrary.org/obo/OAE_0000461
+Vertigo	http://purl.obolibrary.org/obo/OAE_0000460
+Ascites	http://purl.obolibrary.org/obo/OAE_0000456
+Anaphylactic reaction	http://purl.obolibrary.org/obo/OAE_0000454
+Lung disorder	http://purl.obolibrary.org/obo/OAE_0000434
+Gastrointestinal haemorrhage	http://purl.obolibrary.org/obo/OAE_0000416
+Back pain	http://purl.obolibrary.org/obo/OAE_0000414
+Cough	http://purl.obolibrary.org/obo/OAE_0000398
+Oedema peripheral	http://purl.obolibrary.org/obo/OAE_0000389
+Asthenia	http://purl.obolibrary.org/obo/OAE_0000382
+White blood cell count increased	http://purl.obolibrary.org/obo/OAE_0000379
+Infection	http://purl.obolibrary.org/obo/OAE_0000363
+Muscular weakness	http://purl.obolibrary.org/obo/OAE_0000333
+Influenza	http://purl.obolibrary.org/obo/OAE_0000319
+Haemoglobin decreased	http://purl.obolibrary.org/obo/OAE_0000316
+Dyspnoea	http://purl.obolibrary.org/obo/OAE_0000310
+Cold sweat	http://purl.obolibrary.org/obo/OAE_0000305
+Abdominal pain upper	http://purl.obolibrary.org/obo/OAE_0000296
+Alanine aminotransferase increased	http://purl.obolibrary.org/obo/OAE_0000272
+Abdominal discomfort	http://purl.obolibrary.org/obo/OAE_0000242
+Bradycardia	http://purl.obolibrary.org/obo/OAE_0000218
+Cardiac disorder	http://purl.obolibrary.org/obo/OAE_0000084
+Surgery	http://purl.obolibrary.org/obo/OAE_0000067
+Wheezing	http://purl.obolibrary.org/obo/OAE_0000053
+Fatigue	http://purl.obolibrary.org/obo/OAE_0000034
+Cardio-respiratory arrest	http://purl.obolibrary.org/obo/OAE_0000461
+Renal disorder	http://purl.obolibrary.org/obo/OAE_0000328 
+Restrictive cardiomyopathy	http://purl.obolibrary.org/obo/OAE_0001531
+Stress cardiomyopathy	http://purl.obolibrary.org/obo/OAE_0001535
+Hypertrophic cardiomyopathy	http://purl.obolibrary.org/obo/OAE_0001468
+Ischaemic cardiomyopathy	http://purl.obolibrary.org/obo/OAE_0001522
+Dilatation atrial	http://purl.obolibrary.org/obo/OAE_0001173
+Bundle branch block left	http://purl.obolibrary.org/obo/OAE_0001008
+Stent placement	http://purl.obolibrary.org/obo/OAE_0001534
+Cardiomegaly	http://purl.obolibrary.org/obo/OAE_0001070
+Ventricular fibrillation	http://purl.obolibrary.org/obo/OAE_0001538
+Orthostatic hypotension	http://purl.obolibrary.org/obo/OAE_0001528
+Tooth extraction	http://purl.obolibrary.org/obo/OAE_0001536
+Osteoporosis	http://purl.obolibrary.org/obo/OAE_0001529
+Heart rate irregular	http://purl.obolibrary.org/obo/OAE_0001453
+Fluid retention	http://purl.obolibrary.org/obo/OAE_0000556
+Coronary artery disease	http://purl.obolibrary.org/obo/OAE_0001161

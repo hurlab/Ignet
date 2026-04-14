@@ -1,0 +1,131 @@
+body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+input:focus, textarea:focus {
+  background-color: #FFFFDD;
+}
+
+img {
+  border: 0px;
+  vertical-align: text-bottom;
+}
+
+.warning {
+  color: red;
+  font-weight: bold;
+  font-size: 1.2em;
+  margin-bottom: 10px;
+}
+
+.block_generic {
+  margin-left: 16px;
+  padding-left: 0px;
+  margin-top: 4px;
+  padding-top: 0px;
+  margin-right: 0px;
+  padding-right: 0px;
+  margin-bottom: 4px;
+  padding-bottom: 0px;
+}
+
+.block_search_groups {
+  margin-left: 16px;
+  padding-left: 16px;
+  margin-top: 0px;
+  padding-top: 0px;
+  margin-right: 0px;
+  padding-right: 0px;
+  margin-bottom: 0px;
+  padding-bottom: 0px;
+}
+
+.block_references {
+  font-size: 12px;
+  margin-left: 2px;
+  padding-left: 0px;
+  margin-top: 4px;
+  padding-top: 0px;
+  margin-right: 0px;
+  padding-right: 0px;
+  margin-bottom: 4px;
+  padding-bottom: 0px;
+}
+
+.smallContent { font-size: 12px; }
+.xsmallContent { font-size: 11px; }
+
+.h3gray {
+  font-weight: bold;
+  font-size: 14px;
+  color: #333333;
+}
+
+.mainhead {
+  font-size: 30px;
+  color: #333333;
+  font-weight: bold;
+}
+
+.mainheadblue {
+  font-size: 16px;
+  line-height: 20px;
+  color: #333333;
+  font-weight: bold;
+  text-decoration: none;
+}
+
+hr {
+  height: 1px;
+  color: #BBBBBB;
+  background-color: #BBBBBB;
+  border: 0px;
+}
+
+div#msgbox {
+  width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 60px;
+}
+
+div#msgbox_caption {
+  font-weight: bold;
+}
+
+.msgbox_operation {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+div#errbox {
+  width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 60px;
+}
+
+div#errbox_caption {
+  font-weight: bold;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+div#errbox_msg {
+  color: #FF0000;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+div#errbox_header {
+  color: #990000;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+div#errbox_operation {
+  margin-top: 10px;
+  margin-bottom: 10px;
+}

@@ -1,0 +1,63 @@
+const faqs = [
+  {
+    q: 'What is Ignet?',
+    a: 'Ignet (Integrative Gene Network) is a biomedical database and web platform built from large-scale literature mining of PubMed abstracts. It identifies gene co-occurrence relationships using NLP tools, applies BioBERT to predict interaction directionality, and provides AI-powered literature summaries through BioSummarAI. Ignet covers 15.8 million gene interactions across 11,800+ genes derived from 2.6 million PubMed publications.',
+  },
+  {
+    q: 'What data does Ignet use?',
+    a: 'Ignet is built from PubMed abstract text. SciMiner, an NLP tool, extracts gene mentions and co-occurrences from over 6 million sentences. These are curated into a relational database of gene interaction records, each linked to supporting PMIDs and INO-classified interaction types. The database is periodically updated to incorporate new PubMed literature.',
+  },
+  {
+    q: 'How are gene interactions identified?',
+    a: 'Gene interactions are identified through a multi-step pipeline. First, SciMiner performs entity recognition and extracts gene co-occurrences from PubMed abstract sentences. Each co-occurrence is then evaluated for interaction directionality and type using the Interaction Network Ontology (INO). The CONDL strategy ranks interactions by biological significance using centrality metrics including degree, eigenvector, closeness, and betweenness centrality.',
+  },
+  {
+    q: 'What is BioBERT and how is it used in Ignet?',
+    a: 'BioBERT is a domain-specific pre-trained language model fine-tuned on biomedical text including PubMed abstracts and full-text articles. In Ignet, BioBERT is used to predict gene interaction relationships from literature sentences, enabling more accurate classification of interaction types beyond simple co-occurrence counting. This improves the precision of interaction records stored in the database.',
+  },
+  {
+    q: 'What is BioSummarAI?',
+    a: 'BioSummarAI is Ignet\'s AI-powered literature summarization feature built on GPT-4o. For any gene pair in the database, BioSummarAI retrieves the supporting PubMed sentences and generates a concise, human-readable summary of the known interaction landscape between those genes. This allows researchers to quickly assess the state of literature evidence without manually reviewing individual papers.',
+  },
+  {
+    q: 'How do I search for gene interactions?',
+    a: 'You can search by entering a gene symbol or NCBI Gene ID in the Gene Search page. This returns the gene\'s interaction network, supporting PMIDs, INO interaction types, and centrality metrics. For pairwise queries, use the Gene Pair page to explore the interaction between two specific genes and retrieve BioSummarAI-generated literature summaries. The Explore page supports broader network exploration.',
+  },
+  {
+    q: 'Can I upload my own gene list?',
+    a: 'Yes. The Gene Set Enrichment and Comparative Network tools accept user-provided gene lists. You can paste a list of gene symbols or upload a file to perform enrichment analysis against Ignet\'s literature-derived interaction network, or to compare multiple gene sets side by side within a shared network context.',
+  },
+  {
+    q: 'What export formats are available?',
+    a: 'Ignet supports several data export formats depending on the analysis. Network data can be exported as JSON or CSV for downstream analysis. Interaction tables can be downloaded as tab-delimited files. The REST API provides programmatic access to all data endpoints in JSON format, enabling integration with custom bioinformatics pipelines.',
+  },
+  {
+    q: 'Do I need to register to use Ignet?',
+    a: 'Basic gene search, network exploration, and interaction browsing are available without registration. Some advanced features, including BioSummarAI summaries and large-scale data exports, may require a registered account. Registration is free for academic and research users.',
+  },
+  {
+    q: 'How do I cite Ignet in my research?',
+    a: 'If you use Ignet in published research, please cite: Ozgur A, Hur J, Xiang Z, Ong E, Radev D, and He Y. Ignet: A centrality and INO-based web system for analyzing and visualizing literature-mined gene interaction networks. ICBO 2016, BioCreative 2016.',
+  },
+]
+
+export default function Faqs() {
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <h1 className="text-2xl font-bold text-navy">Frequently Asked Questions</h1>
+      <p className="text-gray-600 text-sm leading-relaxed">
+        Common questions about Ignet 2.0, its data, and how to use the platform for
+        gene interaction research.
+      </p>
+
+      <div className="space-y-4">
+        {faqs.map((item, idx) => (
+          <div key={idx} className="bg-white border border-gray-200 rounded-lg p-5 space-y-2">
+            <h2 className="text-base font-bold text-navy">{item.q}</h2>
+            <p className="text-gray-600 text-sm leading-relaxed">{item.a}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}

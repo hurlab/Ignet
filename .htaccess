@@ -1,0 +1,50 @@
+# Ignet 2.0 SPA Routing
+# Serves React SPA at /ignet/ while preserving PHP file access
+# and /ignet_legacy/ alias for the old interface.
+
+Options -MultiViews -Indexes
+DirectorySlash Off
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+
+  # Restore trailing-slash redirect for the /ignet directory itself.
+  # DirectorySlash Off disables it globally; we re-enable just for root.
+  RewriteCond %{REQUEST_URI} ^/ignet$
+  RewriteRule ^ /ignet/ [R=301,L]
+
+  # Skip /ignet_legacy/ requests entirely (served by Apache Alias)
+  RewriteCond %{REQUEST_URI} ^/ignet_legacy
+  RewriteRule ^ - [L]
+
+  # Skip API proxy (handled by Apache VirtualHost ProxyPass)
+  RewriteRule ^api/ - [L]
+
+  # Skip dist-react directory (SPA build output)
+  RewriteRule ^dist-react/ - [L]
+
+  # SPA routes that conflict with PHP directory names
+  RewriteRule ^(gene|genepair|biosummarai|dignet|login|analyze|explore|api-docs)$ dist-react/index.html [L]
+
+  # Skip requests for files with extensions (PHP, static assets)
+  RewriteCond %{REQUEST_URI} \.(php|html|css|js|png|jpg|jpeg|gif|ico|svg|woff2?|ttf|eot|json|xml|txt|map|pdf|csv|zip)$
+  RewriteRule ^ - [L]
+
+  # Assets served via symlink: /ignet/assets -> dist-react/assets
+
+  # SPA fallback: all other requests serve dist-react/index.html
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^ dist-react/index.html [L]
+</IfModule>
+
+# Security headers
+<IfModule mod_headers.c>
+  Header always set X-Content-Type-Options "nosniff"
+  Header always set X-Frame-Options "SAMEORIGIN"
+  Header always set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
+
+# Block access to sensitive files
+<FilesMatch "\.(env|lock|yml|yaml)$">
+  Require all denied
+</FilesMatch>

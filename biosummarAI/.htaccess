@@ -1,0 +1,17 @@
+# Suppress PHP errors in JSON API responses
+php_flag display_errors off
+php_flag display_startup_errors off
+
+# Set writable temp directory for large POST bodies
+php_value upload_tmp_dir /data/var/www/html/ignet/biosummarAI/.php_tmp
+php_value sys_temp_dir /data/var/www/html/ignet/biosummarAI/.php_tmp
+
+# Block web access to sensitive files
+<FilesMatch "\.(env|py|pyc|log|db|sqlite)$">
+    Require all denied
+</FilesMatch>
+
+# Block access to hidden directories
+<DirectoryMatch "^\.|/\.">
+    Require all denied
+</DirectoryMatch>

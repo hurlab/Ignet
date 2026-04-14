@@ -1,0 +1,26 @@
+# Requirements for BioSummarAI service (api_biosummary.py)
+# Python 3.12+ | Flask + Waitress | Port 9636
+# Updated 2026-03-15
+
+# Web framework & server
+flask>=3.0
+waitress>=3.0
+
+# OpenAI GPT-4o
+openai>=1.0
+
+# Token counting (GPT2Tokenizer)
+transformers>=4.30
+tokenizers>=0.13
+
+# Database
+mysql-connector-python>=8.0
+
+# Environment & config
+python-dotenv>=1.0
+
+# Data processing
+pandas>=2.0
+
+# Console output
+rich>=13.0

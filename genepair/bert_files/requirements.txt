@@ -1,0 +1,36 @@
+# Requirements for BioBERT prediction service (biobert_prediction.py)
+# Python 3.12+ | Flask + Waitress | Port 9635
+# Updated 2026-03-15
+#
+# Install torch CPU-only FIRST, then this file:
+#   pip install torch --index-url https://download.pytorch.org/whl/cpu
+#   pip install -r requirements.txt
+
+# Web framework & server
+flask>=3.0
+waitress>=3.0
+
+# Core ML
+transformers>=4.40,<5.0
+huggingface-hub>=0.25,<1.0
+safetensors
+
+# PyTorch CPU-only (install separately — see header)
+# pip install torch --index-url https://download.pytorch.org/whl/cpu
+
+# Data processing
+numpy>=1.24,<3.0
+pandas>=2.0
+
+# Text tokenization
+tokenizers>=0.15
+regex
+
+# HTTP
+requests>=2.28
+
+# Utilities
+tqdm>=4.64
+PyYAML>=6.0
+packaging>=21.0
+filelock>=3.10

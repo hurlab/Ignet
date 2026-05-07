@@ -178,7 +178,7 @@ export default function Header() {
             href="/ignet_legacy/"
             className="text-blue-300 text-[11px] hover:text-white transition-colors"
           >
-            v2.1
+            v1.0
           </a>
           {auth?.user ? (
             <>

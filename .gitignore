@@ -298,5 +298,7 @@ dignet/condl/pmidfiles/
 dignet/condl*/exportFiles*.tgz
 biomert/
 
-# Server-specific systemd units (do not ship)
+# Server-specific systemd units: ship the canonical copies under deploy/systemd/,
+# but keep ad-hoc *.service files elsewhere in the tree out of git.
 ignet-*.service
+!deploy/systemd/ignet-*.service

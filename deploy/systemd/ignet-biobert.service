@@ -1,0 +1,24 @@
+[Unit]
+Description=Ignet BioBERT Protein Interaction Prediction Service
+Documentation=https://github.com/hurlab/Ignet
+After=network.target
+
+[Service]
+Type=simple
+User=juhur
+Group=webapps
+WorkingDirectory=/data/var/www/html/ignet/genepair/bert_files
+ExecStart=/data/var/www/html/ignet/genepair/bert_files/ignet_cpu/bin/python biobert_prediction.py
+Environment=HF_HOME=/data/var/www/html/ignet/genepair/bert_files/.hf_cache
+Environment=PYTHONUNBUFFERED=1
+
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ignet-biobert
+
+[Install]
+WantedBy=multi-user.target

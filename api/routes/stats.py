@@ -27,16 +27,33 @@ _PIPELINE_TRACKER = os.getenv(
     "IGNET_PIPELINE_TRACKER",
     "/var/lib/ignet/last_processed_number.txt",
 )
+_PUBMED_FILE_DIR = os.getenv(
+    "IGNET_PUBMED_FILE_DIR",
+    "/var/lib/ignet/pubmed-files",
+)
+_PUBMED_FILE_PATTERN = "pubmed26n{number}.xml.gz"
 
 
-def _get_data_last_updated() -> str | None:
-    """Return ISO-8601 date string of the pipeline's last run, or None on failure."""
+def _get_data_last_updated() -> tuple[str | None, int | None]:
+    """Return (date, file_number) for the most recently processed PubMed file.
+
+    Reads the file number from the pipeline tracker, then returns the mtime of
+    the corresponding pubmed26n{N}.xml.gz file in the PubMed file directory.
+    The XML.gz mtime is the NCBI release date for that update file, so the
+    returned date is the upper bound of PubMed coverage in the database.
+
+    Returns (None, None) when the tracker or PubMed file is missing/unreadable.
+    """
     try:
-        mtime = os.path.getmtime(_PIPELINE_TRACKER)
-        dt = datetime.fromtimestamp(mtime, tz=timezone.utc)
-        return dt.strftime("%Y-%m-%d")
-    except Exception:
-        return None
+        with open(_PIPELINE_TRACKER, encoding="utf-8") as f:
+            number = int(f.read().strip())
+        xml_path = os.path.join(_PUBMED_FILE_DIR, _PUBMED_FILE_PATTERN.format(number=number))
+        mtime = os.path.getmtime(xml_path)
+        date_str = datetime.fromtimestamp(mtime, tz=timezone.utc).strftime("%Y-%m-%d")
+        return date_str, number
+    except (OSError, ValueError) as exc:
+        logger.debug("data_last_updated lookup failed: %s", exc)
+        return None, None
 
 
 def _get_from_cache(redis_client, key: str) -> int | None:
@@ -124,10 +141,12 @@ def get_stats():
             logger.exception("Error fetching stats from database: %s", exc)
             return jsonify({"error": "DatabaseError", "message": "Failed to fetch statistics."}), 500
 
+    data_last_updated, data_file_number = _get_data_last_updated()
     return jsonify({
         "total_genes": total_genes,
         "total_pmids": total_pmids,
         "total_sentences": total_sentences,
         "total_interactions": total_interactions,
-        "data_last_updated": _get_data_last_updated(),
+        "data_last_updated": data_last_updated,
+        "data_file_number": data_file_number,
     })

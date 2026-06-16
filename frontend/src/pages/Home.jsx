@@ -92,6 +92,18 @@ function StatCard({ label, value, loading }) {
   )
 }
 
+const MONTHS = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+]
+
+function dataThroughLabel(isoDate) {
+  if (!isoDate) return '2026'
+  const d = new Date(isoDate + 'T00:00:00Z')
+  if (Number.isNaN(d.getTime())) return '2026'
+  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+}
+
 export default function Home() {
   const [stats, setStats] = useState(null)
   const [statsLoading, setStatsLoading] = useState(true)
@@ -102,6 +114,8 @@ export default function Home() {
       .catch(() => setStats(null))
       .finally(() => setStatsLoading(false))
   }, [])
+
+  const dataThrough = dataThroughLabel(stats?.data_last_updated)
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -134,7 +148,7 @@ export default function Home() {
       {/* Live stats */}
       <section>
         <h2 className="text-base font-semibold text-gray-700 mb-0">Database Statistics</h2>
-        <p className="text-xs text-gray-400 mt-0.5 mb-3">Based on PubMed literature through 2025</p>
+        <p className="text-xs text-gray-400 mt-0.5 mb-3">Based on PubMed literature through {dataThrough}</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Genes" value={stats?.total_genes} loading={statsLoading} />
           <StatCard label="Gene Pairs" value={stats?.total_interactions} loading={statsLoading} />

@@ -82,7 +82,7 @@ export default function About() {
               institution: 'University of North Dakota',
               focus: 'Systems biology, network medicine, bioinformatics, and vaccine informatics.',
               photo: '/ignet/images/hur.jpg',
-              url: 'http://hurlab.med.und.edu',
+              url: 'https://hurlab.med.und.edu',
             },
             {
               name: 'Yongqun "Oliver" He, DVM, Ph.D.',

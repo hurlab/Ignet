@@ -1,26 +1,7 @@
-import { useEffect, useState } from 'react'
-
-function useDataLastUpdated() {
-  const [lastUpdated, setLastUpdated] = useState(null)
-
-  useEffect(() => {
-    fetch('/api/v1/stats')
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => {
-        if (data?.data_last_updated) {
-          // Format "2026-03-26" -> "March 26, 2026"
-          const d = new Date(data.data_last_updated + 'T00:00:00Z')
-          setLastUpdated(d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' }))
-        }
-      })
-      .catch(() => {})
-  }, [])
-
-  return lastUpdated
-}
+import useDataLastUpdated from '../hooks/useDataLastUpdated'
 
 export default function Footer() {
-  const lastUpdated = useDataLastUpdated()
+  const { longFormat: lastUpdated } = useDataLastUpdated()
 
   return (
     <footer className="bg-gray-100 border-t border-gray-200 mt-auto">

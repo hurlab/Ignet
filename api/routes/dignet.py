@@ -39,6 +39,15 @@ _NCBI_SLEEP = 0.34
 _CACHE_TTL_SECONDS = 7 * 24 * 60 * 60
 # Chunk size for SQL IN clauses
 _PMID_CHUNK = 500
+# Maximum PMIDs accepted from a user-supplied list upload
+_MAX_UPLOAD_PMIDS = 50000
+# Plausible PMID integer range (used to reject junk input)
+_PMID_MIN = 1
+_PMID_MAX = 99999999
+# Default cap on aggregated edges returned from a PMID-list network
+_AGG_TOP_N_DEFAULT = 5000
+# Default minimum CoV<->gene shared-PMID count for the CoV overlay
+_COV_MIN_SHARED_DEFAULT = 2
 
 # ---------------------------------------------------------------------------
 # Input sanitisation
@@ -250,6 +259,125 @@ def _fetch_gene_pairs(
     return pairs
 
 
+def _query_gene_set(conn, pmids: list[int]) -> list[str]:
+    """Return the distinct host gene symbols co-occurring in the given PMIDs.
+
+    Chunked over _PMID_CHUNK. Used to scope entity/CoV overlays to the genes
+    actually present in a query's network.
+    """
+    genes: set[str] = set()
+    for i in range(0, len(pmids), _PMID_CHUNK):
+        chunk = pmids[i : i + _PMID_CHUNK]
+        placeholders = ",".join(["%s"] * len(chunk))
+        cursor = conn.cursor()
+        cursor.execute(
+            f"SELECT DISTINCT gene_symbol1, gene_symbol2 FROM t_gene_pairs "
+            f"WHERE pmid IN ({placeholders})",
+            tuple(chunk),
+        )
+        for g1, g2 in cursor.fetchall():
+            if g1:
+                genes.add(g1)
+            if g2:
+                genes.add(g2)
+        cursor.close()
+    return list(genes)
+
+
+def _aggregate_gene_pairs(
+    conn,
+    pmids: list[int],
+    min_evidence: int = 1,
+    top_n: int = _AGG_TOP_N_DEFAULT,
+    has_vaccine: bool | None = None,
+    year_min: int | None = None,
+    year_max: int | None = None,
+) -> tuple[list[dict], int]:
+    """Aggregate t_gene_pairs over a PMID list into weighted, deduped edges.
+
+    Aggregation is done in SQL (GROUP BY canonical unordered gene pair) so we
+    never materialise the raw per-sentence rows in Python — essential for large
+    uploads (a 50k-PMID list can otherwise expand to hundreds of thousands of
+    rows). Edge weight = COUNT(DISTINCT pmid) supporting the pair.
+
+    Chunks partition the PMID space, so summing per-chunk DISTINCT-pmid counts
+    across chunks yields the true total distinct-PMID evidence per pair.
+
+    Returns (edges, total_edges_after_min_evidence). `edges` is ranked by
+    evidence desc and truncated to top_n.
+    """
+    vaccine_clause = ""
+    if has_vaccine is True:
+        vaccine_clause = " AND has_vaccine = 1"
+    elif has_vaccine is False:
+        vaccine_clause = " AND has_vaccine = 0"
+    use_year_filter = year_min is not None or year_max is not None
+
+    agg: dict[tuple[str, str], dict] = {}
+    for i in range(0, len(pmids), _PMID_CHUNK):
+        chunk = pmids[i : i + _PMID_CHUNK]
+        placeholders = ",".join(["%s"] * len(chunk))
+        params: list = list(chunk)
+
+        if use_year_filter:
+            year_clause = ""
+            if year_min is not None:
+                year_clause += " AND py.pub_year >= %s"
+                params.append(year_min)
+            if year_max is not None:
+                year_clause += " AND py.pub_year <= %s"
+                params.append(year_max)
+            sql = f"""
+                SELECT LEAST(h.gene_symbol1, h.gene_symbol2)    AS g1,
+                       GREATEST(h.gene_symbol1, h.gene_symbol2) AS g2,
+                       COUNT(DISTINCT h.pmid)                   AS evidence,
+                       MAX(h.score)                             AS best_score
+                FROM t_gene_pairs h
+                JOIN t_pmid_year py ON py.pmid = h.pmid
+                WHERE h.pmid IN ({placeholders}){vaccine_clause}{year_clause}
+                GROUP BY g1, g2
+            """
+        else:
+            sql = f"""
+                SELECT LEAST(gene_symbol1, gene_symbol2)    AS g1,
+                       GREATEST(gene_symbol1, gene_symbol2) AS g2,
+                       COUNT(DISTINCT pmid)                 AS evidence,
+                       MAX(score)                           AS best_score
+                FROM t_gene_pairs
+                WHERE pmid IN ({placeholders}){vaccine_clause}
+                GROUP BY g1, g2
+            """
+
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        for g1, g2, evidence, best in cursor.fetchall():
+            if not g1 or not g2 or g1 == g2:
+                continue
+            key = (g1, g2)
+            entry = agg.get(key)
+            if entry:
+                entry["evidence"] += int(evidence)
+                if best is not None and (entry["best_score"] is None or best > entry["best_score"]):
+                    entry["best_score"] = best
+            else:
+                agg[key] = {"evidence": int(evidence), "best_score": best}
+        cursor.close()
+
+    edges = [
+        {
+            "gene1": g1,
+            "gene2": g2,
+            "evidence_count": v["evidence"],
+            "best_score": float(v["best_score"]) if v["best_score"] is not None else None,
+        }
+        for (g1, g2), v in agg.items()
+        if v["evidence"] >= min_evidence
+    ]
+    total_edges = len(edges)
+    edges.sort(key=lambda e: (e["evidence_count"], e["best_score"] or 0.0), reverse=True)
+    return edges[:top_n], total_edges
+
+
 # ---------------------------------------------------------------------------
 # INO and centrality helpers
 # ---------------------------------------------------------------------------
@@ -418,6 +546,126 @@ def network_search():
             "gene_pairs": pairs,
             "total_pairs": len(pairs),
             "pmid_count": len(pmids),
+            "cached": False,
+        }
+    })
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/dignet/search-pmids
+# ---------------------------------------------------------------------------
+
+
+@dignet_bp.route("/dignet/search-pmids", methods=["POST"])
+def network_search_pmids():
+    """
+    Build a gene co-occurrence network from a user-supplied list of PMIDs.
+
+    Unlike /dignet/search this does NOT call NCBI — the caller provides the
+    PMIDs directly. Results are aggregated server-side (one weighted edge per
+    unique gene pair) so large lists (up to _MAX_UPLOAD_PMIDS) stay tractable.
+
+    Request JSON:
+        pmids        - list of integer PMIDs (required, max _MAX_UPLOAD_PMIDS)
+        label        - optional display label
+        min_evidence - minimum supporting PMIDs per edge (default 1)
+        top_n        - max aggregated edges returned (default _AGG_TOP_N_DEFAULT)
+        has_vaccine  - optional bool filter
+        year_min/year_max - optional publication-year filters
+
+    Response JSON (data): query_id, label, mode="pmids", pmid_count,
+        pmid_count_in_db, coverage_pct, aggregated_edges, total_edges,
+        returned_edges, node_count, cached.
+    """
+    body = request.get_json(silent=True) or {}
+    raw_pmids = body.get("pmids")
+    if not isinstance(raw_pmids, list) or not raw_pmids:
+        return jsonify({"error": "MissingParameter", "message": "'pmids' must be a non-empty list."}), 400
+
+    # Validate, coerce to int, dedupe, range-check
+    seen: set[int] = set()
+    for p in raw_pmids:
+        try:
+            n = int(p)
+        except (TypeError, ValueError):
+            continue
+        if _PMID_MIN <= n <= _PMID_MAX:
+            seen.add(n)
+    pmids_submitted = sorted(seen)
+    if not pmids_submitted:
+        return jsonify({"error": "InvalidInput", "message": "No valid PMIDs in 'pmids'."}), 400
+    if len(pmids_submitted) > _MAX_UPLOAD_PMIDS:
+        return jsonify({
+            "error": "TooManyPMIDs",
+            "message": f"At most {_MAX_UPLOAD_PMIDS} PMIDs allowed (got {len(pmids_submitted)}).",
+        }), 413
+
+    label = _sanitize_keywords(str(body.get("label", "")))[:120] or f"PMID list ({len(pmids_submitted)} IDs)"
+    try:
+        min_evidence = max(1, int(body.get("min_evidence", 1)))
+    except (TypeError, ValueError):
+        min_evidence = 1
+    try:
+        top_n = max(1, min(int(body.get("top_n", _AGG_TOP_N_DEFAULT)), _AGG_TOP_N_DEFAULT))
+    except (TypeError, ValueError):
+        top_n = _AGG_TOP_N_DEFAULT
+
+    has_vaccine = body.get("has_vaccine")
+    if isinstance(has_vaccine, str):
+        has_vaccine = has_vaccine.lower() in ("true", "1", "yes")
+    elif not isinstance(has_vaccine, bool):
+        has_vaccine = None
+    year_min = body.get("year_min")
+    year_max = body.get("year_max")
+    year_min = int(year_min) if isinstance(year_min, (int, float)) else None
+    year_max = int(year_max) if isinstance(year_max, (int, float)) else None
+
+    # Content-addressed cache key so re-uploading the same list reuses the row
+    pmid_hash = hashlib.md5(",".join(map(str, pmids_submitted)).encode()).hexdigest()[:10]
+    cache_text = f"{label} [pmidset:{pmid_hash}]"
+
+    try:
+        with db_connection() as conn:
+            # Filter to PMIDs present in our processed corpus (chunked)
+            in_db: set[int] = set()
+            for i in range(0, len(pmids_submitted), _PMID_CHUNK):
+                chunk = pmids_submitted[i : i + _PMID_CHUNK]
+                placeholders = ",".join(["%s"] * len(chunk))
+                cursor = conn.cursor()
+                cursor.execute(
+                    f"SELECT DISTINCT pmid FROM t_gene_pairs WHERE pmid IN ({placeholders})",
+                    tuple(chunk),
+                )
+                in_db.update(r[0] for r in cursor.fetchall())
+                cursor.close()
+            pmids_in_db = sorted(in_db)
+
+            query_id = _upsert_query(conn, cache_text, pmids_in_db)
+
+            edges, total_edges = _aggregate_gene_pairs(
+                conn, pmids_in_db,
+                min_evidence=min_evidence, top_n=top_n,
+                has_vaccine=has_vaccine, year_min=year_min, year_max=year_max,
+            )
+    except Exception as exc:
+        logger.exception("Error in network_search_pmids: %s", exc)
+        return jsonify({"error": "DatabaseError", "message": "Failed to query database."}), 500
+
+    node_count = len({e["gene1"] for e in edges} | {e["gene2"] for e in edges})
+    coverage_pct = round(len(pmids_in_db) / len(pmids_submitted) * 100, 1) if pmids_submitted else 0.0
+
+    return jsonify({
+        "data": {
+            "query_id": query_id,
+            "label": label,
+            "mode": "pmids",
+            "pmid_count": len(pmids_submitted),
+            "pmid_count_in_db": len(pmids_in_db),
+            "coverage_pct": coverage_pct,
+            "aggregated_edges": edges,
+            "total_edges": total_edges,
+            "returned_edges": len(edges),
+            "node_count": node_count,
             "cached": False,
         }
     })
@@ -627,6 +875,89 @@ def network_entities(query_id: int):
         "diseases": diseases,
         "ino_distribution": ino_distribution,
     })
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/dignet/<query_id>/cov-genes  (coronavirus protein overlay)
+# ---------------------------------------------------------------------------
+
+
+@dignet_bp.route("/dignet/<int:query_id>/cov-genes", methods=["GET"])
+def network_cov_genes(query_id: int):
+    """
+    Coronavirus (CoV) viral-protein entities that co-occur with the host genes
+    in this query's network, for overlaying as a distinct node type.
+
+    Source: t_cooccurrence_cov_gene (cov_id <-> host gene_symbol, weighted by
+    shared_pmids). CoV nodes are viral PROTEINS (spike, nucleocapsid, nsp1-16,
+    ORFs, RdRp), labelled from cov_term. The 'SARS'/'SERS' artifact row (virus
+    name misresolved to the human SARS gene) is excluded.
+
+    Query params:
+        min_shared - minimum shared_pmids per CoV-gene edge (default
+                     _COV_MIN_SHARED_DEFAULT); ~76% of edges are single-PMID noise.
+
+    Response JSON:
+        cov_nodes: [{cov_id, label, total_shared, gene_count}]
+        cov_edges: [{cov_id, gene, shared_pmids, gene_term}]
+    """
+    min_shared_param = request.args.get("min_shared")
+    try:
+        min_shared = int(min_shared_param) if min_shared_param else _COV_MIN_SHARED_DEFAULT
+    except ValueError:
+        min_shared = _COV_MIN_SHARED_DEFAULT
+    min_shared = max(1, min_shared)
+
+    try:
+        with db_connection() as conn:
+            row = _load_query(conn, query_id)
+            if not row:
+                return jsonify({"error": "NotFound", "message": f"query_id {query_id} not found."}), 404
+
+            pmids = [int(p) for p in row["pmid_list"].split(",") if p.strip().isdigit()]
+            if not pmids:
+                return jsonify({"cov_nodes": [], "cov_edges": []})
+
+            genes = _query_gene_set(conn, pmids)
+            if not genes:
+                return jsonify({"cov_nodes": [], "cov_edges": []})
+
+            nodes: dict[str, dict] = {}
+            edges: list[dict] = []
+            for i in range(0, len(genes), _PMID_CHUNK):
+                chunk = genes[i : i + _PMID_CHUNK]
+                placeholders = ",".join(["%s"] * len(chunk))
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute(
+                    f"""SELECT cov_id, cov_term, gene_symbol, gene_term, shared_pmids
+                        FROM t_cooccurrence_cov_gene
+                        WHERE gene_symbol IN ({placeholders})
+                          AND shared_pmids >= %s
+                          AND NOT (gene_symbol = 'SARS' AND gene_term = 'SERS')
+                        ORDER BY shared_pmids DESC""",
+                    tuple(chunk) + (min_shared,),
+                )
+                for r in cursor.fetchall():
+                    cov_id = r["cov_id"]
+                    label = (r.get("cov_term") or cov_id or "").strip() or cov_id
+                    node = nodes.setdefault(
+                        cov_id, {"cov_id": cov_id, "label": label, "total_shared": 0, "gene_count": 0}
+                    )
+                    node["total_shared"] += int(r["shared_pmids"])
+                    node["gene_count"] += 1
+                    edges.append({
+                        "cov_id": cov_id,
+                        "gene": r["gene_symbol"],
+                        "shared_pmids": int(r["shared_pmids"]),
+                        "gene_term": r.get("gene_term"),
+                    })
+                cursor.close()
+    except Exception as exc:
+        logger.exception("Error in network_cov_genes: %s", exc)
+        return jsonify({"error": "DatabaseError", "message": "Failed to query database."}), 500
+
+    cov_nodes = sorted(nodes.values(), key=lambda n: n["total_shared"], reverse=True)
+    return jsonify({"cov_nodes": cov_nodes, "cov_edges": edges})
 
 
 # ---------------------------------------------------------------------------

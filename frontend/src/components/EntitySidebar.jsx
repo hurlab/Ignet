@@ -43,7 +43,7 @@ function Section({ title, color, items, onItemClick, activeItem }) {
   )
 }
 
-export default function EntitySidebar({ entities, loading, onHighlight, activeHighlight, onClearHighlight, visibleCategories, onToggleCategory }) {
+export default function EntitySidebar({ entities, loading, onHighlight, activeHighlight, onClearHighlight, visibleCategories, onToggleCategory, covCount = 0, covLoading = false }) {
   if (loading) {
     return (
       <div className="text-xs text-gray-400 py-4 text-center">
@@ -52,7 +52,10 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
     )
   }
 
-  if (!entities) return null
+  // Render the toggle controls even when there are no drug/disease/INO entities,
+  // so the CoV-protein overlay toggle stays reachable.
+  const safeEntities = entities || { drugs: [], diseases: [], ino_distribution: [] }
+  entities = safeEntities
 
   return (
     <div className="space-y-3">
@@ -74,6 +77,7 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
           { key: 'drugs', label: 'Drugs', color: 'bg-green-500' },
           { key: 'diseases', label: 'Diseases', color: 'bg-red-500' },
           { key: 'ino', label: 'INO Types', color: 'bg-purple-500' },
+          { key: 'cov', label: 'CoV proteins', color: 'bg-teal-500' },
         ].map(({ key, label, color }) => (
           <label key={key} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
             <button
@@ -90,6 +94,7 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
             <span className="text-gray-400">({
               key === 'drugs' ? entities?.drugs?.length || 0 :
               key === 'diseases' ? entities?.diseases?.length || 0 :
+              key === 'cov' ? (covLoading ? '…' : covCount) :
               entities?.ino_distribution?.length || 0
             })</span>
           </label>

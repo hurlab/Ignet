@@ -76,8 +76,25 @@ export const api = {
     })
   },
 
+  // opts: { min_evidence?, top_n?, has_vaccine?, year_min?, year_max?, label? }
+  dignetSearchPmids: (pmids, opts = {}) => request('/dignet/search-pmids', {
+    method: 'POST',
+    body: JSON.stringify({
+      pmids,
+      ...(opts.min_evidence != null ? { min_evidence: opts.min_evidence } : {}),
+      ...(opts.top_n != null ? { top_n: opts.top_n } : {}),
+      ...(opts.has_vaccine ? { has_vaccine: true } : {}),
+      ...(opts.year_min != null ? { year_min: opts.year_min } : {}),
+      ...(opts.year_max != null ? { year_max: opts.year_max } : {}),
+      ...(opts.label ? { label: opts.label } : {}),
+    }),
+    timeout: 120000,
+  }),
+
   dignetYearRange: () => request('/dignet/year-range'),
   dignetEntities: (queryId) => request(`/dignet/${queryId}/entities`),
+  dignetCovGenes: (queryId, minShared) =>
+    request(`/dignet/${queryId}/cov-genes${minShared != null ? `?min_shared=${minShared}` : ''}`),
 
   dignetCompare: (queryA, queryB) =>
     request('/dignet/compare', {

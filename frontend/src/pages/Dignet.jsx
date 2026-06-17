@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
@@ -66,6 +66,22 @@ function downloadCSV(pairs, query) {
   const a = document.createElement('a')
   a.href = url
   a.download = `ignet-dignet-${query.replace(/\s+/g, '_')}.csv`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+function downloadAggregatedCSV(edges, label) {
+  if (!edges?.length) return
+  const comment = `# Ignet Dignet PMID-list network "${label}" - https://ignet.org/ignet/dignet\n`
+  const header = 'Gene1,Gene2,Evidence_PMID_count,Best_score\n'
+  const rows = edges.map(e =>
+    [e.gene1, e.gene2, e.evidence_count ?? '', e.best_score ?? ''].join(',')
+  ).join('\n')
+  const blob = new Blob([comment + header + rows], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `ignet-dignet-${(label || 'pmid-list').replace(/[^\w]+/g, '_')}.csv`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -154,9 +170,70 @@ function buildElements(result) {
   return [...nodes, ...edges]
 }
 
+// Build elements from a server-aggregated PMID-upload network. The backend
+// already collapsed pairs into weighted edges (evidence_count = supporting
+// PMIDs), so there is no second-pass aggregation here. Nodes are sized by
+// in-graph degree (no precomputed centrality exists for uploaded lists).
+function buildAggregatedElements(result) {
+  const aggEdges = result?.aggregated_edges
+  if (!aggEdges || aggEdges.length === 0) return []
+  const genes = new Set()
+  const edges = aggEdges.map((e) => {
+    genes.add(e.gene1)
+    genes.add(e.gene2)
+    const key = e.gene1 < e.gene2 ? `${e.gene1}|${e.gene2}` : `${e.gene2}|${e.gene1}`
+    return {
+      data: {
+        id: `e_${key}`,
+        source: e.gene1,
+        target: e.gene2,
+        weight: e.evidence_count ?? 1,
+        score: e.best_score ?? null,
+        ino_category: 'unknown',
+        ino_color: INO_FALLBACK_COLOR,
+      },
+    }
+  })
+  const degrees = {}
+  edges.forEach(({ data: { source, target } }) => {
+    degrees[source] = (degrees[source] ?? 0) + 1
+    degrees[target] = (degrees[target] ?? 0) + 1
+  })
+  const maxDeg = Math.max(1, ...Object.values(degrees))
+  const nodes = [...genes].map((g) => ({
+    data: {
+      id: g,
+      label: g,
+      degree: degrees[g] ?? 1,
+      highDegree: (degrees[g] ?? 1) > maxDeg * 0.6,
+      centrality_d: 0,
+    },
+  }))
+  return [...nodes, ...edges]
+}
+
+// Parse a free-form PMID list (whitespace/comma/semicolon separated). Returns
+// a deduped array of valid integer PMIDs. Run on submit only (one-shot), not
+// per keystroke.
+function parsePmids(rawText) {
+  if (!rawText) return []
+  const set = new Set()
+  for (const tok of rawText.split(/[\s,;]+/)) {
+    if (!tok) continue
+    const n = parseInt(tok, 10)
+    if (Number.isInteger(n) && n >= 1 && n <= 99999999) set.add(n)
+  }
+  return [...set]
+}
+
+const MAX_UPLOAD_PMIDS = 50000
+const MAX_PMID_FILE_BYTES = 10 * 1024 * 1024 // 10 MB
+
 export default function Dignet() {
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
+  const [inputMode, setInputMode] = useState('keywords') // 'keywords' | 'pmids'
+  const [pmidText, setPmidText] = useState('')
   const [limit, setLimit] = useState(100)
   const [inoFilter, setInoFilter] = useState('')
   const [vaccineOnly, setVaccineOnly] = useState(false)
@@ -171,7 +248,9 @@ export default function Dignet() {
   const [entitiesLoading, setEntitiesLoading] = useState(false)
   const [activeHighlight, setActiveHighlight] = useState(null)
   const [highlightType, setHighlightType] = useState(null)
-  const [visibleCategories, setVisibleCategories] = useState({ drugs: true, diseases: true, ino: true })
+  const [visibleCategories, setVisibleCategories] = useState({ drugs: true, diseases: true, ino: true, cov: false })
+  const [covData, setCovData] = useState(null)
+  const [covLoading, setCovLoading] = useState(false)
   const cyInstanceRef = useRef(null)
   const didAutoSearch = useRef(false)
   const abortRef = useRef(null)
@@ -250,6 +329,7 @@ export default function Dignet() {
     setSelectedNode(null)
     if (isNewQuery) {
       setEntities(null)
+      setCovData(null)
       setActiveHighlight(null)
       setHighlightType(null)
     }
@@ -278,9 +358,71 @@ export default function Dignet() {
     }
   }, [query, limit, inoFilter, vaccineOnly])
 
+  const runPmidSearch = useCallback(async () => {
+    const pmids = parsePmids(pmidText)
+    if (!pmids.length) {
+      setError('No valid PMIDs found. Paste numeric PubMed IDs separated by spaces, commas, or new lines.')
+      return
+    }
+    if (pmids.length > MAX_UPLOAD_PMIDS) {
+      setError(`Too many PMIDs (${pmids.length.toLocaleString()}). The maximum is ${MAX_UPLOAD_PMIDS.toLocaleString()}.`)
+      return
+    }
+    if (abortRef.current) abortRef.current.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    setLoading(true)
+    setError(null)
+    setResult(null)
+    setSelectedNode(null)
+    setEntities(null)
+    setCovData(null)
+    setActiveHighlight(null)
+    setHighlightType(null)
+    try {
+      const raw = await api.dignetSearchPmids(pmids, { has_vaccine: vaccineOnly })
+      if (controller.signal.aborted) return
+      const data = raw?.data ?? raw
+      setResult(data)
+      const queryId = data.query_id
+      if (queryId) {
+        setEntitiesLoading(true)
+        api.dignetEntities(queryId)
+          .then(setEntities)
+          .catch(() => setEntities(null))
+          .finally(() => setEntitiesLoading(false))
+      }
+    } catch (err) {
+      if (controller.signal.aborted || err.name === 'AbortError') return
+      setError(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }, [pmidText, vaccineOnly])
+
   async function handleSearch(e) {
     e?.preventDefault()
-    await runSearch()
+    if (inputMode === 'pmids') {
+      await runPmidSearch()
+    } else {
+      await runSearch()
+    }
+  }
+
+  function handlePmidFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > MAX_PMID_FILE_BYTES) {
+      setError(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 10 MB.`)
+      e.target.value = ''
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => setPmidText(String(reader.result || ''))
+    reader.onerror = () => setError('Failed to read the file.')
+    reader.readAsText(file)
+    e.target.value = ''
   }
 
   function handleYearChange(newMin, newMax) {
@@ -309,14 +451,30 @@ export default function Dignet() {
     }
   }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const geneElements = result ? buildElements(result) : []
+  // Lazily fetch the CoV-protein overlay the first time it is toggled on.
+  useEffect(() => {
+    const qid = result?.query_id
+    if (visibleCategories.cov && qid && !covData && !covLoading) {
+      setCovLoading(true)
+      api.dignetCovGenes(qid)
+        .then((d) => setCovData(d || { cov_nodes: [], cov_edges: [] }))
+        .catch(() => setCovData({ cov_nodes: [], cov_edges: [] }))
+        .finally(() => setCovLoading(false))
+    }
+  }, [visibleCategories.cov, result]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const parsedPmidCount = useMemo(() => parsePmids(pmidText).length, [pmidText])
+
+  const geneElements = result
+    ? (result.mode === 'pmids' ? buildAggregatedElements(result) : buildElements(result))
+    : []
 
   // Build entity nodes and edges based on visible categories
   function buildEntityElements() {
-    if (!entities || !result) return []
+    if (!result) return []
     const extra = []
 
-    if (visibleCategories.drugs && entities.drugs?.length) {
+    if (visibleCategories.drugs && entities?.drugs?.length) {
       entities.drugs.slice(0, 10).forEach((drug, i) => {
         const drugId = `drug_${i}`
         extra.push({
@@ -334,7 +492,7 @@ export default function Dignet() {
       })
     }
 
-    if (visibleCategories.diseases && entities.diseases?.length) {
+    if (visibleCategories.diseases && entities?.diseases?.length) {
       entities.diseases.slice(0, 10).forEach((disease, i) => {
         const diseaseId = `disease_${i}`
         extra.push({
@@ -352,7 +510,7 @@ export default function Dignet() {
       })
     }
 
-    if (visibleCategories.ino && entities.ino_distribution?.length) {
+    if (visibleCategories.ino && entities?.ino_distribution?.length) {
       entities.ino_distribution.slice(0, 8).forEach((ino, i) => {
         const inoId = `ino_${i}`
         extra.push({
@@ -374,6 +532,31 @@ export default function Dignet() {
       })
     }
 
+    // CoV viral-protein overlay: connect each CoV protein to the host genes it
+    // co-occurs with that are actually present in the current network.
+    if (visibleCategories.cov && covData?.cov_nodes?.length) {
+      const geneIds = new Set(geneElements.filter(e => !e.data.source).map(e => e.data.id))
+      covData.cov_nodes.forEach((c) => {
+        const covNodeId = `cov_${c.cov_id}`
+        const matching = (covData.cov_edges || []).filter(
+          ed => ed.cov_id === c.cov_id && geneIds.has(ed.gene)
+        )
+        if (!matching.length) return
+        extra.push({
+          data: { id: covNodeId, label: c.label, nodeType: 'cov', degree: 1, centrality_d: 0 }
+        })
+        matching.forEach(ed => {
+          extra.push({
+            data: {
+              id: `ce_${covNodeId}_${ed.gene}`,
+              source: covNodeId, target: ed.gene,
+              weight: 1, edgeType: 'entity', ino_color: '#cbd5e0',
+            }
+          })
+        })
+      })
+    }
+
     return extra
   }
 
@@ -389,40 +572,88 @@ export default function Dignet() {
       <div>
         <h1 className="text-xl font-bold text-navy mb-1">Dignet</h1>
         <p className="text-gray-500 text-xs">
-          Enter a PubMed query to build a gene co-occurrence network from matching abstracts.
+          Build a gene co-occurrence network from PubMed — search by keywords, or paste/upload your own list of PMIDs. Toggle the CoV-protein overlay to see coronavirus proteins linked to host genes.
         </p>
       </div>
 
       {/* Search form */}
       <form onSubmit={handleSearch} className="bg-white border border-gray-200 rounded-lg p-4 flex flex-wrap gap-3 items-end">
-        <div className="flex-1 min-w-48">
-          <label className="block text-xs font-medium text-gray-600 mb-1">PubMed Query</label>
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder='e.g. "vaccine IFNG"'
-            className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-xs font-medium text-gray-600 mb-1">Limit</label>
-          <select
-            value={limit}
-            onChange={(e) => setLimit(Number(e.target.value))}
-            className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500"
-          >
-            {LIMIT_OPTIONS.map((n) => (
-              <option key={n} value={n}>{n}</option>
+        {/* Input mode toggle */}
+        <div className="w-full">
+          <div className="inline-flex text-xs border border-gray-200 rounded overflow-hidden">
+            {['keywords', 'pmids'].map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setInputMode(m)}
+                className={`px-3 py-1 transition-colors ${
+                  inputMode === m ? 'bg-navy text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {m === 'keywords' ? 'Keywords' : 'PMID list'}
+              </button>
             ))}
-          </select>
+          </div>
         </div>
+
+        {inputMode === 'keywords' ? (
+          <>
+            <div className="flex-1 min-w-48">
+              <label className="block text-xs font-medium text-gray-600 mb-1">PubMed Query</label>
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder='e.g. "vaccine IFNG"'
+                className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Limit</label>
+              <select
+                value={limit}
+                onChange={(e) => setLimit(Number(e.target.value))}
+                className="border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+              >
+                {LIMIT_OPTIONS.map((n) => (
+                  <option key={n} value={n}>{n}</option>
+                ))}
+              </select>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 min-w-48">
+            <label className="block text-xs font-medium text-gray-600 mb-1">
+              PMID list <span className="text-gray-400 font-normal">— paste or upload, separated by spaces/commas/new lines (max 50,000)</span>
+            </label>
+            <textarea
+              value={pmidText}
+              onChange={(e) => setPmidText(e.target.value)}
+              rows={3}
+              placeholder="e.g. 32887946, 32296168, 32275812 ..."
+              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm font-mono focus:outline-none focus:border-blue-500 resize-y"
+            />
+            <div className="flex items-center gap-3 mt-1">
+              <label className="text-xs text-blue-600 hover:underline cursor-pointer">
+                Upload file
+                <input type="file" accept=".txt,.csv,.tsv" onChange={handlePmidFile} className="hidden" />
+              </label>
+              {pmidText.trim() && (
+                <span className="text-[11px] text-gray-400">{parsedPmidCount.toLocaleString()} valid PMIDs detected</span>
+              )}
+              {pmidText && (
+                <button type="button" onClick={() => setPmidText('')} className="text-[11px] text-gray-400 hover:text-gray-600 underline">Clear</button>
+              )}
+            </div>
+          </div>
+        )}
+
         <button
           type="submit"
           disabled={loading}
           className="bg-navy hover:bg-navy-dark disabled:opacity-50 text-white font-semibold px-5 py-1.5 rounded text-sm transition-colors"
         >
-          {loading ? 'Searching...' : 'Search'}
+          {loading ? 'Building…' : 'Search'}
         </button>
       </form>
 
@@ -453,10 +684,13 @@ export default function Dignet() {
           <div className="flex gap-4 flex-wrap">
             {[
               { label: 'PMIDs', value: result.pmid_count?.toLocaleString() },
+              result.mode === 'pmids'
+                ? { label: 'PMID Coverage', value: `${(result.pmid_count_in_db ?? 0).toLocaleString()}/${(result.pmid_count ?? 0).toLocaleString()} (${result.coverage_pct ?? 0}%)` }
+                : null,
               { label: 'Gene Nodes', value: geneNodeCount },
               entityNodeCount > 0 ? { label: 'Entity Nodes', value: entityNodeCount } : null,
               { label: 'Edges', value: edgeCount },
-              { label: 'Cached', value: result.cached ? 'Yes' : 'No' },
+              result.mode === 'pmids' ? null : { label: 'Cached', value: result.cached ? 'Yes' : 'No' },
             ].filter(Boolean).map(({ label, value }) => (
               <div key={label} className="bg-white border border-gray-200 rounded px-3 py-1.5 flex items-center gap-1">
                 <span className="text-xs text-gray-500 mr-1">{label}:</span>
@@ -474,16 +708,29 @@ export default function Dignet() {
             ))}
           </div>
 
-          {result.total_pairs > MAX_GRAPH_EDGES && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded px-3 py-1.5 text-xs text-yellow-700">
-              Showing {MAX_GRAPH_EDGES} of {result.total_pairs.toLocaleString()} gene pairs in the graph. Export GraphML for the full dataset.
-            </div>
+          {result.mode === 'pmids' ? (
+            result.total_edges > result.returned_edges && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded px-3 py-1.5 text-xs text-yellow-700">
+                Showing the top {result.returned_edges.toLocaleString()} of {result.total_edges.toLocaleString()} gene pairs (ranked by supporting-PMID count). Export CSV/GraphML for the full network.
+              </div>
+            )
+          ) : (
+            result.total_pairs > MAX_GRAPH_EDGES && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded px-3 py-1.5 text-xs text-yellow-700">
+                Showing {MAX_GRAPH_EDGES} of {result.total_pairs.toLocaleString()} gene pairs in the graph. Export GraphML for the full dataset.
+              </div>
+            )
           )}
 
           {/* Export buttons */}
           <div className="flex flex-wrap gap-2">
             <ExportDropdown>
-              <button onClick={() => downloadCSV(result.gene_pairs, query)} className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50">CSV</button>
+              <button
+                onClick={() => result.mode === 'pmids'
+                  ? downloadAggregatedCSV(result.aggregated_edges, result.label)
+                  : downloadCSV(result.gene_pairs, query)}
+                className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50"
+              >CSV</button>
               <a href={`/api/v1/dignet/${result.query_id || result.data?.query_id}/export/graphml`} download className="block w-full text-left px-3 py-1.5 text-xs hover:bg-gray-50">GraphML</a>
             </ExportDropdown>
           </div>
@@ -538,11 +785,12 @@ export default function Dignet() {
                 <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-full bg-[#1e3a5f]"></span> High centrality</span>
                 <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-full bg-[#93c5fd]"></span> Low centrality</span>
               </div>
-              {(visibleCategories.drugs || visibleCategories.diseases || visibleCategories.ino) && (
+              {(visibleCategories.drugs || visibleCategories.diseases || visibleCategories.ino || visibleCategories.cov) && (
                 <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
                   {visibleCategories.drugs && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-green-500 rotate-45"></span> Drug</span>}
                   {visibleCategories.diseases && <span className="flex items-center gap-1"><span className="inline-block w-0 h-0 border-l-[6px] border-r-[6px] border-b-[10px] border-transparent border-b-red-500"></span> Disease</span>}
                   {visibleCategories.ino && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-purple-500 rounded-sm"></span> INO Type</span>}
+                  {visibleCategories.cov && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3" style={{ backgroundColor: '#0694a2', clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' }}></span> CoV protein</span>}
                   <span className="text-gray-300">|</span>
                   <span className="text-gray-400">Dashed edges = entity associations</span>
                 </div>
@@ -601,6 +849,8 @@ export default function Dignet() {
                     onClearHighlight={() => { setActiveHighlight(null); setHighlightType(null) }}
                     visibleCategories={visibleCategories}
                     onToggleCategory={(key) => setVisibleCategories(prev => ({ ...prev, [key]: !prev[key] }))}
+                    covCount={covData?.cov_nodes?.length || 0}
+                    covLoading={covLoading}
                   />
                 )}
               </div>

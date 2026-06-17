@@ -119,6 +119,18 @@ function buildStylesheet(elements) {
       },
     },
     {
+      selector: 'node[nodeType="cov"]',
+      style: {
+        'background-color': '#0694a2',
+        'shape': 'pentagon',
+        width: 22, height: 22,
+        'border-color': '#047481',
+        'border-width': 1.5,
+        'font-size': '8px',
+        color: '#047481',
+      },
+    },
+    {
       selector: 'edge[edgeType="entity"]',
       style: {
         'line-style': 'dashed',

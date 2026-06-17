@@ -1,5 +1,10 @@
 import useDataLastUpdated from '../hooks/useDataLastUpdated'
 
+// Date the website/app itself was last deployed. Distinct from the database
+// data date (which is auto-driven by the API's data_last_updated). Bump this
+// when shipping site/feature changes.
+const SITE_UPDATED = 'June 16, 2026'
+
 export default function Footer() {
   const { longFormat: lastUpdated } = useDataLastUpdated()
 
@@ -88,8 +93,8 @@ export default function Footer() {
           </p>
           <p className="text-center text-gray-400 text-xs">
             {lastUpdated
-              ? <>Database updated daily from PubMed &middot; Last updated {lastUpdated}</>
-              : 'Database updated daily from PubMed'
+              ? <>Database updated daily from PubMed &middot; Data through {lastUpdated} &middot; Site updated {SITE_UPDATED}</>
+              : <>Database updated daily from PubMed &middot; Site updated {SITE_UPDATED}</>
             }
           </p>
           <p className="text-center text-gray-400 text-sm">

@@ -85,7 +85,7 @@ export default function Disclaimer() {
         </p>
       </div>
 
-      <p className="text-gray-400 text-xs text-right">Last updated: 2026</p>
+      <p className="text-gray-400 text-xs text-right">Last updated: June 16, 2026</p>
     </div>
   )
 }

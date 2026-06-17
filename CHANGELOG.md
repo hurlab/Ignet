@@ -4,6 +4,30 @@ All notable changes to the Ignet platform are documented here.
 
 ## [Unreleased]
 
+### 2026-06-16 — Dignet: PMID-list upload + CoV-protein overlay
+
+Two new Dignet capabilities:
+
+- **PMID-list upload mode.** Build a network from a user-supplied list of PMIDs
+  (paste or file upload, up to 50,000) instead of a keyword search. New endpoint
+  `POST /api/v1/dignet/search-pmids` (no NCBI call); gene pairs are aggregated
+  server-side into weighted edges (evidence = supporting-PMID count) so large
+  lists stay tractable. The UI shows a PMID-coverage stat (how many of the
+  uploaded PMIDs are in the Ignet corpus).
+- **CoV-protein overlay.** A toggle that overlays coronavirus viral proteins
+  (spike, nucleocapsid, RdRp, nsp1–16, ORFs) on the gene network as a distinct
+  node type (teal pentagons), sourced from `t_cooccurrence_cov_gene`
+  (`GET /api/v1/dignet/<id>/cov-genes`). This visually distinguishes host genes
+  from CoV proteins.
+
+Also: footer now shows a "Site updated" date distinct from the database data date;
+Disclaimer "Last updated" date refreshed.
+
+**Known limitation documented (future work):** gene/protein identification has no
+species disambiguation — a few pathogen protein names that collide with human gene
+symbols/aliases (e.g., "SARS", viral NSP1/NSP2/NSP3) are misattributed to human
+genes. See `docs/KNOWN_LIMITATIONS.md`.
+
 ### 2026-05-28 — Revert hurlab.med.und.edu HTTPS downgrade
 
 TLS on `hurlab.med.und.edu` is restored (UND wildcard `*.med.und.edu`,

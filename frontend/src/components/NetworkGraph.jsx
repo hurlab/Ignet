@@ -1,5 +1,14 @@
 import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import CytoscapeComponent from 'react-cytoscapejs'
+import cytoscape from 'cytoscape'
+import fcose from 'cytoscape-fcose'
+
+// Guard against double-registration in HMR / strict-mode environments
+let _fcoseRegistered = false
+if (!_fcoseRegistered) {
+  cytoscape.use(fcose)
+  _fcoseRegistered = true
+}
 
 function buildStylesheet(elements) {
   const nodes = elements.filter(e => !e.data.source)
@@ -142,16 +151,31 @@ function buildStylesheet(elements) {
   ]
 }
 
-function buildLayout(elementCount) {
-  const nodeCount = elementCount
+function buildLayout(nodeCount) {
+  if (nodeCount > 100) {
+    // fcose is significantly faster and produces better quality on large graphs
+    return {
+      name: 'fcose',
+      animate: false,
+      padding: 30,
+      nodeDimensionsIncludeLabels: true,
+      idealEdgeLength: 80,
+      nodeRepulsion: 8192,
+      gravity: 0.5,
+      numIter: 2500,
+      tile: true,
+      tilingPaddingVertical: 10,
+      tilingPaddingHorizontal: 10,
+    }
+  }
   return {
     name: 'cose',
     animate: nodeCount < 100,
     animationDuration: 400,
-    nodeRepulsion: nodeCount > 100 ? 8192 : 4096,
+    nodeRepulsion: 4096,
     idealEdgeLength: nodeCount > 50 ? 80 : 60,
-    gravity: nodeCount > 100 ? 0.5 : 0.8,
-    numIter: nodeCount > 100 ? 300 : 200,
+    gravity: 0.8,
+    numIter: 200,
     padding: 30,
     nodeDimensionsIncludeLabels: true,
   }

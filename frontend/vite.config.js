@@ -11,5 +11,14 @@ export default defineConfig({
   base: '/ignet/',
   build: {
     outDir: '../dist-react',
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/cytoscape-fcose') || id.includes('node_modules/cytoscape') || id.includes('node_modules/react-cytoscapejs')) {
+            return 'cytoscape'
+          }
+        },
+      },
+    },
   },
 })

@@ -465,12 +465,15 @@ export default function Dignet() {
 
   const parsedPmidCount = useMemo(() => parsePmids(pmidText).length, [pmidText])
 
-  const geneElements = result
-    ? (result.mode === 'pmids' ? buildAggregatedElements(result) : buildElements(result))
-    : []
+  const geneElements = useMemo(
+    () => result
+      ? (result.mode === 'pmids' ? buildAggregatedElements(result) : buildElements(result))
+      : [],
+    [result]
+  )
 
   // Build entity nodes and edges based on visible categories
-  function buildEntityElements() {
+  const entityElements = useMemo(() => {
     if (!result) return []
     const extra = []
 
@@ -558,10 +561,9 @@ export default function Dignet() {
     }
 
     return extra
-  }
+  }, [result, geneElements, entities, visibleCategories, covData])
 
-  const entityElements = buildEntityElements()
-  const elements = [...geneElements, ...entityElements]
+  const elements = useMemo(() => [...geneElements, ...entityElements], [geneElements, entityElements])
   const geneNodeCount = geneElements.filter(e => !e.data.source).length
   const entityNodeCount = entityElements.filter(e => !e.data.source).length
   const nodeCount = geneNodeCount + entityNodeCount

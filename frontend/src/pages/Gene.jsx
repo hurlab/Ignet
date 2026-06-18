@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
@@ -428,6 +428,11 @@ export default function Gene() {
     fetchGeneData(sym)
   }
 
+  const miniNetworkElements = useMemo(
+    () => buildMiniNetwork(gene, neighbors, reportData),
+    [gene, neighbors, reportData]
+  )
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-5">
       <div>
@@ -508,7 +513,7 @@ export default function Gene() {
             Click a node to search that gene. The center node is {gene}.
           </p>
           <NetworkGraph
-            elements={buildMiniNetwork(gene, neighbors, reportData)}
+            elements={miniNetworkElements}
             onNodeClick={(nodeData) => {
               const nodeId = typeof nodeData === 'string' ? nodeData : nodeData?.id
               if (nodeId && nodeId !== gene) {

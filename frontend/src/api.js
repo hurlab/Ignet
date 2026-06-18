@@ -134,6 +134,7 @@ export const api = {
   assistantAsk: (question, history = []) => request('/assistant/ask', {
     method: 'POST',
     body: JSON.stringify({ question, conversation_history: history }),
+    timeout: 150000,
   }),
 }
 

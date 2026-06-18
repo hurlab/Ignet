@@ -138,4 +138,67 @@ export const api = {
   }),
 }
 
+/**
+ * @MX:ANCHOR: [AUTO] Streaming enrichment entry point — called by Enrichment.jsx on every analysis run
+ * @MX:REASON: fan_in >= 3 (runAnalysis, fallback path, future callers); NDJSON chunk buffering is non-trivial
+ *
+ * POSTs to /api/v1/enrichment/analyze/stream and calls onEvent(obj) for each parsed NDJSON line.
+ * Chunks do NOT align to line boundaries: we maintain a string buffer, split on '\n',
+ * process all complete lines, and keep any trailing partial line for the next chunk.
+ * Throws if the response is not ok or ReadableStream is unavailable, so callers can fall back.
+ */
+export async function enrichmentStream(genes, { onEvent, signal } = {}) {
+  const token = getToken()
+  const headers = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  }
+
+  const res = await fetch(`${BASE_URL}/enrichment/analyze/stream`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ genes }),
+    signal,
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }))
+    throw new Error(err.message || `HTTP ${res.status}`)
+  }
+
+  if (!res.body) {
+    throw new Error('ReadableStream not supported in this browser')
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { done, value } = await reader.read()
+
+    if (done) {
+      // Process any remaining buffered text after the stream ends
+      const remaining = buffer.trim()
+      if (remaining) {
+        try { onEvent?.(JSON.parse(remaining)) } catch (_) { /* skip malformed */ }
+      }
+      break
+    }
+
+    buffer += decoder.decode(value, { stream: true })
+
+    // Split on newlines; the last element may be a partial line — keep it in the buffer
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (!trimmed) continue
+      try { onEvent?.(JSON.parse(trimmed)) } catch (_) { /* skip malformed */ }
+    }
+  }
+}
+
 export { getToken, setToken, removeToken }

@@ -1,12 +1,20 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, useSearchParams, useNavigate } from 'react-router-dom'
-import { api } from '../api.js'
+import { api, enrichmentStream } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
 import { useGeneSet } from '../GeneSetContext.jsx'
 
 const EXAMPLE_GENES = 'TNF, IL6, IFNG, IL1B, IL10'
+
+// Ordered stage definitions — matches the server's "stages" array
+const STAGE_DEFS = [
+  { key: 'interactions',    label: 'Interactions' },
+  { key: 'ino_distribution', label: 'Interaction types (INO)' },
+  { key: 'drugs',           label: 'Drugs' },
+  { key: 'diseases',        label: 'Diseases' },
+]
 
 function parseGeneInput(text) {
   return text
@@ -153,15 +161,101 @@ function TagList({ items, color }) {
   )
 }
 
+/**
+ * Compact 4-step progress indicator for the streaming enrichment flow.
+ * Each step is: pending → loading (in-flight) → done.
+ *
+ * stageStatus: Record<stageKey, 'pending' | 'loading' | 'done'>
+ */
+function StreamProgress({ stageStatus }) {
+  return (
+    // role="status" + aria-live="polite" so screen readers announce progress without interrupting
+    <div role="status" aria-live="polite" aria-label="Analysis progress" className="bg-white border border-gray-200 rounded-lg p-4">
+      <p className="text-xs font-semibold text-gray-500 mb-3 uppercase tracking-wide">Loading results…</p>
+      <ol className="flex flex-wrap gap-3" aria-label="Analysis stages">
+        {STAGE_DEFS.map(({ key, label }) => {
+          const status = stageStatus[key] ?? 'pending'
+          return (
+            <li key={key} className="flex items-center gap-1.5 text-xs">
+              {status === 'done' && (
+                <span
+                  aria-label={`${label} complete`}
+                  className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center"
+                >
+                  {/* checkmark */}
+                  <svg className="w-2.5 h-2.5 text-white" viewBox="0 0 10 10" fill="none" aria-hidden="true">
+                    <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </span>
+              )}
+              {status === 'loading' && (
+                <span
+                  aria-label={`${label} loading`}
+                  className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin"
+                  aria-hidden="false"
+                />
+              )}
+              {status === 'pending' && (
+                <span
+                  aria-label={`${label} pending`}
+                  className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-gray-300 bg-gray-50"
+                  aria-hidden="false"
+                />
+              )}
+              <span className={
+                status === 'done'    ? 'text-green-700 font-medium' :
+                status === 'loading' ? 'text-blue-700 font-medium' :
+                'text-gray-400'
+              }>
+                {label}
+              </span>
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
+/** Muted placeholder shown while a section is still pending during streaming */
+function SectionPending({ label }) {
+  return (
+    <div className="bg-white border border-gray-200 rounded-lg p-4">
+      <h3 className="text-sm font-semibold text-gray-300 mb-2">{label}</h3>
+      <div className="text-xs text-gray-300 italic">…</div>
+    </div>
+  )
+}
+
+// Initial per-section state used when starting a new analysis run
+const EMPTY_SECTIONS = { interactions: null, ino_distribution: null, drugs: null, diseases: null }
+const EMPTY_META = { coverage: 0, coverage_pct: 0, total_interactions: 0, input_genes: [] }
+const ALL_PENDING = Object.fromEntries(STAGE_DEFS.map(({ key }) => [key, 'pending']))
+
 export default function Enrichment() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [data, setData] = useState(null)
+
+  // Streaming state
+  const [streaming, setStreaming]     = useState(false)   // true while stream is in-flight
+  const [stageStatus, setStageStatus] = useState({})      // per-stage 'pending'|'loading'|'done'
+  const [sections, setSections]       = useState(EMPTY_SECTIONS)
+  const [meta, setMeta]               = useState(EMPTY_META)   // coverage data from interactions.meta
+  const [inputGenes, setInputGenes]   = useState([])      // from 'start' event
+
+  // Legacy / fallback state
+  const [error, setError]   = useState(null)
+  const [data, setData]     = useState(null)  // populated only by the fallback non-stream path
+
+  const abortRef = useRef(null)
   const didAutoAnalyze = useRef(false)
   const geneSet = useGeneSet()
+
+  // Cancel any in-flight stream on unmount
+  useEffect(() => {
+    return () => { abortRef.current?.abort() }
+  }, [])
 
   // Load genes transferred from the Gene Set page
   useEffect(() => {
@@ -179,7 +273,6 @@ export default function Enrichment() {
       didAutoAnalyze.current = true
       const geneText = genesParam.replace(/,/g, ', ')
       setInput(geneText)
-      // Trigger analysis after state update
       setTimeout(() => {
         const genes = parseGeneInput(geneText)
         if (genes.length >= 2) {
@@ -189,19 +282,107 @@ export default function Enrichment() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function runAnalysis(genes) {
+  // @MX:ANCHOR: [AUTO] Core analysis entry point — called by example button, auto-analyze effect, and handleAnalyze
+  // @MX:REASON: fan_in >= 3; streaming/fallback branching logic must remain stable across callers
+  const runAnalysis = useCallback(async (genes) => {
+    // Cancel any previous in-flight stream
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    // Reset all state for a fresh run
     setError(null)
     setData(null)
-    setLoading(true)
+    setSections(EMPTY_SECTIONS)
+    setMeta(EMPTY_META)
+    setInputGenes([])
+    setStageStatus(ALL_PENDING)
+    setStreaming(true)
+
+    let gotAnySection = false
+
     try {
-      const result = await api.enrichment(genes)
-      setData(result)
+      // Track which stage is "next expected" so we can mark it 'loading'
+      const stageOrder = STAGE_DEFS.map(({ key }) => key)
+      let nextStageIdx = 0
+
+      const markNextLoading = () => {
+        if (nextStageIdx < stageOrder.length) {
+          const key = stageOrder[nextStageIdx]
+          setStageStatus((prev) => ({ ...prev, [key]: 'loading' }))
+        }
+      }
+
+      await enrichmentStream(genes, {
+        signal: controller.signal,
+        onEvent(evt) {
+          if (evt.type === 'start') {
+            setInputGenes(evt.input_genes ?? [])
+            // Mark the first stage as loading immediately
+            markNextLoading()
+            return
+          }
+
+          if (evt.type === 'section') {
+            gotAnySection = true
+            const key = evt.name
+
+            // Advance stage pointer: mark this stage done, next stage loading
+            setStageStatus((prev) => ({ ...prev, [key]: 'done' }))
+            nextStageIdx = stageOrder.indexOf(key) + 1
+            markNextLoading()
+
+            setSections((prev) => ({ ...prev, [key]: evt.data }))
+
+            // Extract coverage meta from interactions section
+            if (key === 'interactions' && evt.meta) {
+              setMeta({
+                coverage:           evt.meta.coverage          ?? 0,
+                coverage_pct:       evt.meta.coverage_pct      ?? 0,
+                total_interactions: evt.meta.total_interactions ?? 0,
+              })
+            }
+            return
+          }
+
+          if (evt.type === 'done') {
+            // Mark any remaining stages as done (handles cached fast-path)
+            setStageStatus(Object.fromEntries(STAGE_DEFS.map(({ key }) => [key, 'done'])))
+            setStreaming(false)
+            return
+          }
+
+          if (evt.type === 'error') {
+            setError(evt.message ?? 'Stream error')
+            setStreaming(false)
+          }
+        },
+      })
+
+      // Stream finished cleanly without a 'done' event (should not happen, but guard)
+      setStreaming(false)
     } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+      // AbortError from our own cancel — silently ignore
+      if (err.name === 'AbortError') {
+        setStreaming(false)
+        return
+      }
+
+      // Streaming threw before any section arrived → fall back to non-stream endpoint
+      if (!gotAnySection) {
+        try {
+          const result = await api.enrichment(genes)
+          setData(result)
+        } catch (fallbackErr) {
+          setError(fallbackErr.message)
+        }
+      } else {
+        // At least some data already rendered — just surface the error
+        setError(err.message)
+      }
+      setStreaming(false)
     }
-  }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleAnalyze() {
     setError(null)
@@ -214,18 +395,33 @@ export default function Enrichment() {
       setError('Maximum 500 genes allowed.')
       return
     }
-    setLoading(true)
-    try {
-      const result = await api.enrichment(genes)
-      setData(result)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    runAnalysis(genes)
   }
 
-  const cyElements = data ? buildCytoscapeElements(data.interactions) : []
+  // Determine whether any result is available to show (stream or fallback)
+  const hasStreamResult = sections.interactions !== null || sections.ino_distribution !== null ||
+    sections.drugs !== null || sections.diseases !== null
+  const hasFallbackResult = Boolean(data)
+  const hasAnyResult = hasStreamResult || hasFallbackResult
+
+  // Build a unified data-shape for CoverageCard / CSV / graph:
+  // stream path assembles from sections + meta; fallback path uses raw data
+  const unifiedData = hasFallbackResult ? data : (hasStreamResult ? {
+    input_genes:        inputGenes,
+    coverage:           meta.coverage,
+    coverage_pct:       meta.coverage_pct,
+    total_interactions: meta.total_interactions,
+    interactions:       sections.interactions ?? [],
+    ino_distribution:   sections.ino_distribution ?? [],
+    drugs:              sections.drugs ?? [],
+    diseases:           sections.diseases ?? [],
+  } : null)
+
+  const cyElements = sections.interactions ? buildCytoscapeElements(sections.interactions)
+    : hasFallbackResult ? buildCytoscapeElements(data.interactions)
+    : []
+
+  const showProgress = streaming && !hasFallbackResult
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-6 space-y-6">
@@ -254,10 +450,10 @@ export default function Enrichment() {
         <div className="flex items-center gap-3">
           <button
             onClick={handleAnalyze}
-            disabled={loading || !input.trim()}
+            disabled={streaming || !input.trim()}
             className="bg-navy hover:bg-blue-800 text-white text-sm font-semibold px-5 py-2 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'Analyzing...' : 'Analyze'}
+            {streaming ? 'Analyzing...' : 'Analyze'}
           </button>
           <button
             onClick={() => { setInput(EXAMPLE_GENES); runAnalysis(parseGeneInput(EXAMPLE_GENES)) }}
@@ -274,10 +470,10 @@ export default function Enrichment() {
               Load from Gene Set ({geneSet.genes.length})
             </button>
           )}
-          {data && (
+          {hasAnyResult && (
             <div className="ml-auto flex items-center gap-2">
               <button
-                onClick={() => downloadCSV(data)}
+                onClick={() => downloadCSV(unifiedData)}
                 className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded transition-colors"
               >
                 Export CSV
@@ -294,15 +490,23 @@ export default function Enrichment() {
       </div>
 
       <ErrorMessage message={error} />
-      {loading && <LoadingSpinner message="Analyzing gene set..." />}
 
-      {/* Results */}
-      {data && !loading && (
+      {/* Fallback loading spinner — only shown when stream helper is unavailable and
+          the page fell back to the non-streaming call */}
+      {!streaming && !hasStreamResult && !hasFallbackResult && !error && null}
+
+      {/* Streaming progress indicator */}
+      {showProgress && <StreamProgress stageStatus={stageStatus} />}
+
+      {/* Results — rendered progressively as sections arrive */}
+      {hasAnyResult && (
         <div className="space-y-6">
-          {/* Coverage */}
-          <CoverageCard data={data} />
+          {/* Coverage — shown as soon as interactions section arrives (meta is populated then) */}
+          {(sections.interactions !== null || hasFallbackResult) && (
+            <CoverageCard data={unifiedData} />
+          )}
 
-          {/* Network graph */}
+          {/* Network graph — available once interactions section is ready */}
           {cyElements.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-gray-700 mb-2">Subnetwork</h2>
@@ -315,31 +519,59 @@ export default function Enrichment() {
             </div>
           )}
 
-          {/* INO distribution */}
-          <InoDistribution distribution={data.ino_distribution} />
+          {/* INO distribution — streaming: show placeholder until data arrives */}
+          {sections.ino_distribution !== null ? (
+            <InoDistribution distribution={sections.ino_distribution} />
+          ) : hasFallbackResult ? (
+            <InoDistribution distribution={data.ino_distribution} />
+          ) : streaming ? (
+            <SectionPending label="INO Interaction Types" />
+          ) : null}
 
           {/* Drug associations */}
-          {data.drugs?.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-navy mb-3">Drug Associations</h3>
-              <TagList items={data.drugs} color="blue" />
-            </div>
-          )}
+          {sections.drugs !== null ? (
+            sections.drugs?.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-navy mb-3">Drug Associations</h3>
+                <TagList items={sections.drugs} color="blue" />
+              </div>
+            )
+          ) : hasFallbackResult ? (
+            data.drugs?.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-navy mb-3">Drug Associations</h3>
+                <TagList items={data.drugs} color="blue" />
+              </div>
+            )
+          ) : streaming ? (
+            <SectionPending label="Drug Associations" />
+          ) : null}
 
           {/* Disease associations */}
-          {data.diseases?.length > 0 && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-navy mb-3">Disease Associations</h3>
-              <TagList items={data.diseases} color="red" />
-            </div>
-          )}
+          {sections.diseases !== null ? (
+            sections.diseases?.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-navy mb-3">Disease Associations</h3>
+                <TagList items={sections.diseases} color="red" />
+              </div>
+            )
+          ) : hasFallbackResult ? (
+            data.diseases?.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-lg p-4">
+                <h3 className="text-sm font-semibold text-navy mb-3">Disease Associations</h3>
+                <TagList items={data.diseases} color="red" />
+              </div>
+            )
+          ) : streaming ? (
+            <SectionPending label="Disease Associations" />
+          ) : null}
 
-          {/* Gene list with links */}
-          {data.input_genes?.length > 0 && (
+          {/* Gene list with links — shown once inputGenes is known (from 'start' event or fallback) */}
+          {((inputGenes.length > 0) || hasFallbackResult) && (
             <div className="bg-white border border-gray-200 rounded-lg p-4">
               <h3 className="text-sm font-semibold text-navy mb-3">Input Genes</h3>
               <div className="flex flex-wrap gap-1.5">
-                {data.input_genes.map((gene) => (
+                {(hasFallbackResult ? data.input_genes : inputGenes).map((gene) => (
                   <Link
                     key={gene}
                     to={`/gene?q=${encodeURIComponent(gene)}`}

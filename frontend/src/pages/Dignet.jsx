@@ -6,6 +6,7 @@ import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
 import ExportDropdown from '../components/ExportDropdown.jsx'
 import EntitySidebar from '../components/EntitySidebar.jsx'
+import EvidencePopup from '../components/EvidencePopup.jsx'
 
 const LIMIT_OPTIONS = [50, 100, 200, 500, 1000, 2000, 5000]
 
@@ -251,6 +252,7 @@ export default function Dignet() {
   const [visibleCategories, setVisibleCategories] = useState({ drugs: true, diseases: true, ino: true, cov: false })
   const [covData, setCovData] = useState(null)
   const [covLoading, setCovLoading] = useState(false)
+  const [evidencePair, setEvidencePair] = useState(null)
   const cyInstanceRef = useRef(null)
   const didAutoSearch = useRef(false)
   const abortRef = useRef(null)
@@ -776,8 +778,15 @@ export default function Dignet() {
           <div className="flex gap-4 flex-wrap lg:flex-nowrap">
             {/* Graph */}
             <div className="flex-1 min-w-0">
-              <NetworkGraph elements={elements} onNodeClick={setSelectedNode} onCyReady={(cy) => { cyInstanceRef.current = cy }} />
-              <p className="text-[11px] text-gray-400 mt-1">Click a node to view details. Hover an edge to see interaction type.</p>
+              <NetworkGraph elements={elements} onNodeClick={setSelectedNode} onEdgeClick={setEvidencePair} onCyReady={(cy) => { cyInstanceRef.current = cy }} />
+              {evidencePair && (
+                <EvidencePopup
+                  gene1={evidencePair.gene1}
+                  gene2={evidencePair.gene2}
+                  onClose={() => setEvidencePair(null)}
+                />
+              )}
+              <p className="text-[11px] text-gray-400 mt-1">Click a node to view details. Click a gene–gene edge to view evidence sentences. Hover an edge to see interaction type.</p>
               <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500 mt-2">
                 <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-[#38a169]"></span> Positive regulation</span>
                 <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-0.5 bg-[#e53e3e]"></span> Negative regulation</span>

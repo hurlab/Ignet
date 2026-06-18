@@ -148,6 +148,13 @@ function buildStylesheet(elements) {
         opacity: 0.4,
       },
     },
+    // Gene–gene edges: pointer cursor to hint click-for-evidence affordance
+    {
+      selector: 'edge:not([edgeType])',
+      style: {
+        cursor: 'pointer',
+      },
+    },
   ]
 }
 
@@ -181,7 +188,17 @@ function buildLayout(nodeCount) {
   }
 }
 
-export default function NetworkGraph({ elements, onNodeClick, onCyReady }) {
+// Gene–gene edge guard: both endpoints must have no nodeType (not drug/disease/ino/cov)
+// AND the edge itself must not have edgeType === 'entity'.
+function isGeneGeneEdge(edge) {
+  if (edge.data('edgeType') === 'entity') return false
+  const srcNodeType = edge.source().data('nodeType')
+  const tgtNodeType = edge.target().data('nodeType')
+  // Gene nodes do NOT set nodeType; entity nodes always set it.
+  return !srcNodeType && !tgtNodeType
+}
+
+export default function NetworkGraph({ elements, onNodeClick, onEdgeClick, onCyReady }) {
   const [tooltip, setTooltip] = useState(null)
   const [fullscreen, setFullscreen] = useState(false)
   const cyRef = useRef(null)
@@ -296,6 +313,16 @@ ${edges.join('\n')}
         }
       })
 
+      // Edge click: only fire for gene–gene edges (no nodeType on either endpoint, no edgeType)
+      cyInstance.on('tap', 'edge', (evt) => {
+        if (!onEdgeClick) return
+        const edge = evt.target
+        if (!isGeneGeneEdge(edge)) return
+        const gene1 = edge.source().data('label') || edge.source().id()
+        const gene2 = edge.target().data('label') || edge.target().id()
+        onEdgeClick({ gene1, gene2 })
+      })
+
       cyInstance.on('mouseover', 'edge', (evt) => {
         const edge = evt.target
         const cat = edge.data('ino_category')
@@ -321,7 +348,7 @@ ${edges.join('\n')}
 
       cyInstance.on('mouseout', 'node', () => setTooltip(null))
     },
-    [onNodeClick],
+    [onNodeClick, onEdgeClick],
   )
 
   if (!elements || elements.length === 0) {
@@ -341,6 +368,7 @@ ${edges.join('\n')}
       {/* Visually-hidden text alternative for screen readers */}
       <div className="sr-only">
         <p>{graphAriaLabel}</p>
+        <p>Click a gene node to view its report card. Click a gene–gene edge to view mined evidence sentences for that interaction.</p>
         {topEdges.length > 0 && (
           <>
             <p>Showing top {topEdges.length} interaction{topEdges.length !== 1 ? 's' : ''} by evidence count:</p>
@@ -426,7 +454,7 @@ ${edges.join('\n')}
           XGMML
         </button>
         <div className="text-[10px] text-gray-400 ml-auto">
-          {fullscreen ? 'Press Esc to exit · ' : ''}Scroll to zoom · Drag to pan · Click node for details
+          {fullscreen ? 'Press Esc to exit · ' : ''}Scroll to zoom · Drag to pan · Click node for details · Click gene edge for evidence
         </div>
       </div>
     </div>

@@ -6,6 +6,7 @@ import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
 import AddToSetButton from '../components/AddToSetButton.jsx'
 import GeneAutocomplete from '../components/GeneAutocomplete.jsx'
+import EvidencePopup from '../components/EvidencePopup.jsx'
 import { cleanTermLabel } from '../termUtils.js'
 
 function buildMiniNetwork(gene, neighbors, reportData) {
@@ -354,6 +355,7 @@ export default function Gene() {
   const [gene, setGene] = useState(null)
   const [neighbors, setNeighbors] = useState([])
   const [reportData, setReportData] = useState(null)
+  const [evidencePair, setEvidencePair] = useState(null)
   const navigate = useNavigate()
 
   async function fetchGeneData(sym) {
@@ -466,7 +468,7 @@ export default function Gene() {
             Interaction Network — Top {Math.min(20, neighbors.length)} Partners
           </h3>
           <p className="text-xs text-gray-400 mb-2">
-            Click a node to search that gene. The center node is {gene}.
+            Click a node to search that gene. Click a gene–gene edge to view evidence. The center node is {gene}.
           </p>
           <NetworkGraph
             elements={miniNetworkElements}
@@ -477,8 +479,16 @@ export default function Gene() {
                 fetchGeneData(nodeId)
               }
             }}
+            onEdgeClick={setEvidencePair}
           />
         </section>
+      )}
+      {evidencePair && (
+        <EvidencePopup
+          gene1={evidencePair.gene1}
+          gene2={evidencePair.gene2}
+          onClose={() => setEvidencePair(null)}
+        />
       )}
 
       {/* Neighbors Table */}

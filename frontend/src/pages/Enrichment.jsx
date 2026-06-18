@@ -4,6 +4,7 @@ import { api, enrichmentStream } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
+import EvidencePopup from '../components/EvidencePopup.jsx'
 import { useGeneSet } from '../GeneSetContext.jsx'
 
 const EXAMPLE_GENES = 'TNF, IL6, IFNG, IL1B, IL10'
@@ -248,6 +249,8 @@ export default function Enrichment() {
   const [error, setError]   = useState(null)
   const [data, setData]     = useState(null)  // populated only by the fallback non-stream path
 
+  const [evidencePair, setEvidencePair] = useState(null)
+
   const abortRef = useRef(null)
   const didAutoAnalyze = useRef(false)
   const geneSet = useGeneSet()
@@ -263,22 +266,6 @@ export default function Enrichment() {
     if (searchParams.get('from') === 'geneset' && transferred) {
       setInput(transferred.replace(/,/g, '\n'))
       localStorage.removeItem('ignet_geneset_transfer')
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Auto-analyze if ?genes= URL param is provided (from Compare page)
-  useEffect(() => {
-    const genesParam = searchParams.get('genes')
-    if (genesParam && !didAutoAnalyze.current) {
-      didAutoAnalyze.current = true
-      const geneText = genesParam.replace(/,/g, ', ')
-      setInput(geneText)
-      setTimeout(() => {
-        const genes = parseGeneInput(geneText)
-        if (genes.length >= 2) {
-          runAnalysis(genes)
-        }
-      }, 0)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -381,6 +368,23 @@ export default function Enrichment() {
         setError(err.message)
       }
       setStreaming(false)
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-analyze if ?genes= URL param is provided (from Compare page).
+  // Declared after runAnalysis so the callback is initialized before this effect references it.
+  useEffect(() => {
+    const genesParam = searchParams.get('genes')
+    if (genesParam && !didAutoAnalyze.current) {
+      didAutoAnalyze.current = true
+      const geneText = genesParam.replace(/,/g, ', ')
+      setInput(geneText)
+      setTimeout(() => {
+        const genes = parseGeneInput(geneText)
+        if (genes.length >= 2) {
+          runAnalysis(genes)
+        }
+      }, 0)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -515,9 +519,63 @@ export default function Enrichment() {
                 onNodeClick={(node) => {
                   window.open(`/ignet/gene?q=${encodeURIComponent(node.label)}`, '_blank')
                 }}
+                onEdgeClick={setEvidencePair}
               />
+              {evidencePair && (
+                <EvidencePopup
+                  gene1={evidencePair.gene1}
+                  gene2={evidencePair.gene2}
+                  onClose={() => setEvidencePair(null)}
+                />
+              )}
             </div>
           )}
+
+          {/* Interactions table — top 20 by evidence count, with View Pair affordance */}
+          {(sections.interactions?.length > 0 || (hasFallbackResult && data?.interactions?.length > 0)) && (() => {
+            const rows = (sections.interactions ?? data?.interactions ?? [])
+              .slice()
+              .sort((a, b) => (b.evidence_count ?? 0) - (a.evidence_count ?? 0))
+              .slice(0, 20)
+            return (
+              <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
+                <h3 className="text-sm font-semibold text-navy mb-3">Top Interactions</h3>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b">
+                      <th className="py-1 pr-2">Gene 1</th>
+                      <th className="py-1 pr-2">Gene 2</th>
+                      <th className="py-1 pr-2 text-right">Evidence</th>
+                      {rows.some((r) => r.unique_pmids != null) && (
+                        <th className="py-1 pr-2 text-right">PMIDs</th>
+                      )}
+                      <th className="py-1" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, i) => (
+                      <tr key={i} className="border-b border-gray-50 hover:bg-blue-50 transition-colors">
+                        <td className="py-1 pr-2 font-medium text-navy">{row.gene1}</td>
+                        <td className="py-1 pr-2 font-medium text-navy">{row.gene2}</td>
+                        <td className="py-1 pr-2 text-right text-gray-600">{row.evidence_count ?? '—'}</td>
+                        {rows.some((r) => r.unique_pmids != null) && (
+                          <td className="py-1 pr-2 text-right text-gray-600">{row.unique_pmids ?? '—'}</td>
+                        )}
+                        <td className="py-1">
+                          <button
+                            onClick={() => setEvidencePair({ gene1: row.gene1, gene2: row.gene2 })}
+                            className="text-[11px] text-purple-600 hover:underline"
+                          >
+                            View Pair
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          })()}
 
           {/* INO distribution — streaming: show placeholder until data arrives */}
           {sections.ino_distribution !== null ? (

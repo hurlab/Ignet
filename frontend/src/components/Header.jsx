@@ -33,8 +33,8 @@ function GeneSearch({ mobile = false, onDone }) {
     } else { setSugg([]); setOpen(false) }
   }
   const inputCls = mobile
-    ? 'flex-1 bg-blue-800 text-white placeholder-blue-300 text-sm px-3 py-2 rounded border border-blue-600 focus:outline-none focus:border-blue-400'
-    : 'bg-blue-800 text-white placeholder-blue-300 text-sm px-2 py-1 rounded border border-blue-600 focus:outline-none focus:border-blue-400 w-36'
+    ? 'flex-1 bg-blue-800 text-white placeholder-blue-200 text-sm px-3 py-2 rounded border border-blue-600 focus:outline-none focus:border-blue-400'
+    : 'bg-blue-800 text-white placeholder-blue-200 text-sm px-2 py-1 rounded border border-blue-600 focus:outline-none focus:border-blue-400 w-36'
 
   return (
     <form onSubmit={(e) => { e.preventDefault(); go() }} className={`relative ${mobile ? 'flex-1' : ''}`}>
@@ -210,7 +210,7 @@ export default function Header() {
             value={pubmedQuery}
             onChange={(e) => setPubmedQuery(e.target.value)}
             placeholder="PubMed search..."
-            className="bg-blue-800 text-white placeholder-blue-300 text-sm px-2 py-1 rounded border border-blue-600 focus:outline-none focus:border-blue-400 w-36"
+            className="bg-blue-800 text-white placeholder-blue-200 text-sm px-2 py-1 rounded border border-blue-600 focus:outline-none focus:border-blue-400 w-36"
           />
           <button
             type="submit"
@@ -311,7 +311,7 @@ export default function Header() {
               value={pubmedQuery}
               onChange={(e) => setPubmedQuery(e.target.value)}
               placeholder="PubMed search..."
-              className="flex-1 bg-blue-800 text-white placeholder-blue-300 text-sm px-3 py-2 rounded border border-blue-600 focus:outline-none focus:border-blue-400"
+              className="flex-1 bg-blue-800 text-white placeholder-blue-200 text-sm px-3 py-2 rounded border border-blue-600 focus:outline-none focus:border-blue-400"
             />
             <button
               type="submit"

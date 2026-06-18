@@ -480,7 +480,7 @@ export default function Gene() {
 
       {!gene && !loading && !error && (
         <div className="text-center py-12 space-y-4">
-          <p className="text-gray-400 text-sm">Search for a gene symbol to see its report card and interaction partners.</p>
+          <p className="text-gray-500 text-sm">Search for a gene symbol to see its report card and interaction partners.</p>
           <div className="flex flex-wrap justify-center gap-2">
             {['BRCA1', 'TP53', 'IFNG', 'TNF', 'IL6'].map((g) => (
               <button
@@ -595,7 +595,7 @@ export default function Gene() {
       )}
 
       {gene && neighbors.length === 0 && !loading && (
-        <div className="text-center py-8 text-gray-400 text-sm">
+        <div className="text-center py-8 text-gray-500 text-sm">
           No neighbors found for <strong>{gene}</strong>.
         </div>
       )}

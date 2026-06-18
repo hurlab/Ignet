@@ -51,9 +51,9 @@ export default function Assistant() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  async function handleAsk(e) {
-    e.preventDefault()
-    const q = question.trim()
+  async function handleAsk(e, explicitQuestion) {
+    if (e) e.preventDefault()
+    const q = (explicitQuestion ?? question).trim()
     if (!q || loading) return
 
     setQuestion('')
@@ -88,6 +88,7 @@ export default function Assistant() {
 
   function handleExampleClick(q) {
     setQuestion(q)
+    handleAsk(null, q)
   }
 
   function handleNewChat() {
@@ -120,7 +121,7 @@ export default function Assistant() {
       {/* Example questions — show when no messages */}
       {messages.length === 0 && (
         <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-          <p className="text-gray-400 text-sm">Try one of these questions:</p>
+          <p className="text-gray-500 text-sm">Try one of these questions:</p>
           <div className="flex flex-wrap justify-center gap-2">
             {EXAMPLE_QUESTIONS.map((q) => (
               <button

@@ -260,7 +260,7 @@ export default function Enrichment() {
             {loading ? 'Analyzing...' : 'Analyze'}
           </button>
           <button
-            onClick={() => setInput(EXAMPLE_GENES)}
+            onClick={() => { setInput(EXAMPLE_GENES); runAnalysis(parseGeneInput(EXAMPLE_GENES)) }}
             className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
           >
             Example: TNF, IL6, IFNG, IL1B, IL10

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import useDataLastUpdated from '../hooks/useDataLastUpdated'
 
 // Date the website/app itself was last deployed. Distinct from the database
@@ -19,26 +20,33 @@ export default function Footer() {
             </h4>
             <ul className="grid grid-cols-2 gap-x-4 gap-y-1">
               {[
-                { label: 'About', href: '/ignet/about' },
-                { label: 'API Docs', href: '/ignet/api-docs' },
-                { label: 'Links', href: '/ignet/links' },
-                { label: 'MCP for AI', href: '/ignet/api-docs#mcp' },
-                { label: 'FAQs', href: '/ignet/faqs' },
-                { label: 'Contact Us', href: '/ignet/contact' },
-                { label: 'User Manual', href: '/ignet/manual' },
-                { label: 'Report an Issue', href: 'https://github.com/hurlab/Ignet/issues' },
+                { label: 'About', href: '/about' },
+                { label: 'API Docs', href: '/api-docs' },
+                { label: 'Links', href: '/links' },
+                { label: 'MCP for AI', href: '/api-docs#mcp' },
+                { label: 'FAQs', href: '/faqs' },
+                { label: 'Contact Us', href: '/contact' },
+                { label: 'User Manual', href: '/manual' },
               ].map((item) => (
                 <li key={item.label}>
-                  <a
-                    href={item.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <Link
+                    to={item.href}
                     className="text-gray-500 hover:text-navy text-sm transition-colors"
                   >
                     {item.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
+              <li>
+                <a
+                  href="https://github.com/hurlab/Ignet/issues"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-gray-500 hover:text-navy text-sm transition-colors"
+                >
+                  Report an Issue
+                </a>
+              </li>
             </ul>
           </div>
 
@@ -49,18 +57,16 @@ export default function Footer() {
             </h4>
             <ul className="space-y-1">
               {[
-                { label: 'Disclaimer', href: '/ignet/disclaimer' },
-                { label: 'Acknowledgements', href: '/ignet/acknowledgements' },
+                { label: 'Disclaimer', href: '/disclaimer' },
+                { label: 'Acknowledgements', href: '/acknowledgements' },
               ].map((item) => (
                 <li key={item.label}>
-                  <a
-                    href={item.href}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <Link
+                    to={item.href}
                     className="text-gray-500 hover:text-navy text-sm transition-colors"
                   >
                     {item.label}
-                  </a>
+                  </Link>
                 </li>
               ))}
             </ul>

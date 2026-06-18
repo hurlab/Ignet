@@ -108,10 +108,10 @@ export default function GenePair() {
     }
   }
 
-  async function handleSubmit(e) {
+  async function handleSubmit(e, explicitGene1, explicitGene2) {
     if (e) e.preventDefault()
-    const g1 = gene1.trim().toUpperCase()
-    const g2 = gene2.trim().toUpperCase()
+    const g1 = (explicitGene1 ?? gene1).trim().toUpperCase()
+    const g2 = (explicitGene2 ?? gene2).trim().toUpperCase()
     if (!g1 || !g2) return
     setLoading(true)
     setError(null)
@@ -235,8 +235,19 @@ export default function GenePair() {
 
       {!pairData && !loading && !error && (
         <div className="text-center py-12 space-y-4">
-          <p className="text-gray-400 text-sm">Enter two gene symbols to explore their interaction evidence.</p>
-          <p className="text-gray-300 text-xs">Examples: BRCA1 + TP53, IFNG + TNF, IL6 + STAT3</p>
+          <p className="text-gray-500 text-sm">Enter two gene symbols to explore their interaction evidence.</p>
+          <div className="flex flex-wrap justify-center gap-2">
+            {[['BRCA1', 'TP53'], ['IFNG', 'TNF'], ['IL6', 'STAT3']].map(([g1, g2]) => (
+              <button
+                key={`${g1}-${g2}`}
+                type="button"
+                onClick={() => { setGene1(g1); setGene2(g2); handleSubmit(null, g1, g2) }}
+                className="bg-blue-50 text-navy text-xs font-medium px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
+              >
+                {g1} + {g2}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

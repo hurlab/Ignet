@@ -663,7 +663,7 @@ export default function Dignet() {
 
       {!result && !loading && !error && (
         <div className="text-center py-8 space-y-4">
-          <p className="text-gray-400 text-sm">Enter PubMed keywords to build a gene interaction network.</p>
+          <p className="text-gray-500 text-sm">Enter PubMed keywords to build a gene interaction network.</p>
           <div className="flex flex-wrap justify-center gap-2">
             {['vaccine immunity', 'BRCA1 breast cancer', 'IFNG tuberculosis', 'COVID-19 cytokine'].map((q) => (
               <button

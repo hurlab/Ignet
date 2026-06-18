@@ -179,7 +179,7 @@ export default function GeneSet() {
         </div>
       ) : (
         <div className="text-center py-12 space-y-3">
-          <p className="text-gray-400 text-sm">Your gene set is empty.</p>
+          <p className="text-gray-500 text-sm">Your gene set is empty.</p>
           <p className="text-gray-300 text-xs">Add genes from the Gene, Explore, or Dignet pages using the + buttons.</p>
           <div className="flex justify-center gap-2">
             <Link to="/gene" className="text-xs text-blue-600 hover:underline">Gene Search</Link>

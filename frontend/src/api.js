@@ -102,7 +102,7 @@ export const api = {
       body: JSON.stringify({ query_a: queryA, query_b: queryB }),
     }),
 
-  enrichment: (genes) => request('/enrichment/analyze', { method: 'POST', body: JSON.stringify({ genes }), timeout: 60000 }),
+  enrichment: (genes) => request('/enrichment/analyze', { method: 'POST', body: JSON.stringify({ genes }), timeout: 120000 }),
 
   summarize: (genes) => request('/summarize', {
     method: 'POST',
@@ -113,6 +113,7 @@ export const api = {
   chat: (conversation_history, prompt) => request('/chat', {
     method: 'POST',
     body: JSON.stringify({ conversation_history, prompt }),
+    timeout: 150000,
   }),
 
   login: (email, password) => request('/auth/login', {

@@ -104,15 +104,16 @@ export default function BioSummarAI() {
     }
   }
 
-  async function handleSummarize() {
-    if (selectedGenes.length === 0) return
+  async function handleSummarize(explicitGenes) {
+    const genes = explicitGenes ?? selectedGenes
+    if (genes.length === 0) return
     setSummarizing(true)
     setError(null)
     setSummary(null)
     setEntities(null)
     setChatMessages([])
     try {
-      const data = await api.summarize(selectedGenes)
+      const data = await api.summarize(genes)
       setSummary(data?.data?.reply ?? data?.Summary?.reply ?? data?.reply ?? data?.summary ?? data?.text ?? JSON.stringify(data))
       setEntities(data?.entities ?? data?.data?.entities ?? null)
     } catch (err) {
@@ -161,14 +162,14 @@ export default function BioSummarAI() {
       {/* Example gene sets */}
       {selectedGenes.length === 0 && !summary && (
         <div className="text-center py-6 space-y-3">
-          <p className="text-gray-400 text-sm">Select genes to generate an AI-powered literature summary.</p>
+          <p className="text-gray-500 text-sm">Select genes to generate an AI-powered literature summary.</p>
           <div className="flex flex-wrap justify-center gap-2">
             {[
               { label: 'Immune signaling', genes: ['IFNG', 'TNF', 'IL6', 'STAT1'] },
               { label: 'Tumor suppressors', genes: ['BRCA1', 'TP53', 'RB1'] },
               { label: 'Vaccine targets', genes: ['TLR4', 'CD80', 'IL12A'] },
             ].map(({ label, genes }) => (
-              <button key={label} onClick={() => genes.forEach(g => addGene(g))}
+              <button key={label} onClick={() => { genes.forEach(g => addGene(g)); handleSummarize(genes) }}
                 className="bg-blue-50 text-navy text-xs font-medium px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors">
                 {label}
               </button>

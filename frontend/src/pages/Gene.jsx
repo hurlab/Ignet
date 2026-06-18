@@ -5,6 +5,7 @@ import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
 import AddToSetButton from '../components/AddToSetButton.jsx'
+import { cleanTermLabel } from '../termUtils.js'
 
 function buildMiniNetwork(gene, neighbors, reportData) {
   if (!gene || !neighbors?.length) return []
@@ -213,7 +214,7 @@ function TagCloud({ items, colorClass }) {
           className={`inline-block text-xs px-2 py-0.5 rounded-full ${colorClass}`}
           title={`${item.term} (${item.count})`}
         >
-          {item.term} <span className="opacity-60">({item.count})</span>
+          {cleanTermLabel(item.term)} <span className="opacity-60">({item.count})</span>
         </span>
       ))}
     </div>

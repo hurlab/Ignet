@@ -183,6 +183,13 @@ secret-*.*
 .moai/worktrees/
 
 # ===========================================
+# Evolution Telemetry (local-only usage data)
+# Learnings and new-skills are git-tracked for team sharing.
+# ===========================================
+.moai/evolution/telemetry/*.jsonl
+!.moai/evolution/telemetry/.gitkeep
+
+# ===========================================
 # Node.js (for docs/Nextra)
 # ===========================================
 node_modules/
@@ -223,7 +230,6 @@ tmp/
 nohup.out
 *.png
 *.jpeg
-# Allow documentation screenshots and images to ship in the public repo
 !docs/**/*.png
 !docs/**/*.jpeg
 !docs/**/*.jpg
@@ -244,13 +250,8 @@ docs/ENTITY_COOCCURRENCE_SPEC.md
 frontend/SETUP_STATUS.md
 frontend/.claude/
 api/.claude/
-
-# ===========================================
-# Public-release exclusions
-# ===========================================
 .claude/
 .moai/
-.moai-backups/
 .agency/
 .mcp.json
 .playwright-mcp/
@@ -259,16 +260,11 @@ pubmed26ndata/
 dignet/userfiles/
 chat_limits.db
 nohup.out
-*.log
-
-# MoAI / Claude-specific docs
 CLAUDE.md
 PROJECT_HANDOFF.md
 PROJECT_LOG.md
 SECURITY_NOTES.md
 IGNET_IMPROVEMENT_PLAN.md
-
-# ADOdb library test scripts with hardcoded example passwords
 inc/adodb5/t.php
 inc/adodb5/t1.php
 inc/adodb5/t2.php
@@ -278,27 +274,17 @@ inc/adodb5/t5.php
 inc/adodb5/t-pdo.php
 inc/adodb5/test-945.php
 inc/adodb5/test-sqlsrv.php
-
-# Dated backup files (legacy workflow)
 *-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_[0-9][0-9]-[0-9][0-9]-[0-9][0-9]
 *_backup_[0-9]*
 *.phpes
 *.out
-*.log
-
-# Backup/old directories
 **/backup/
 **/backup_n_oldfiles/
 **/*_backup.*
 *_backup.php
-
-# Local development prototypes and old research artifacts
 dev/
 dignet/condl/pmidfiles/
 dignet/condl*/exportFiles*.tgz
 biomert/
-
-# Server-specific systemd units: ship the canonical copies under deploy/systemd/,
-# but keep ad-hoc *.service files elsewhere in the tree out of git.
 ignet-*.service
 !deploy/systemd/ignet-*.service

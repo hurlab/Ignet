@@ -122,7 +122,7 @@ export default function Home() {
       {/* Hero */}
       <section className="text-center py-4 space-y-3">
         <h1 className="text-3xl md:text-4xl font-bold text-navy leading-tight">
-          Integrative Gene Network
+          Integrative Gene Network{' '}
           <span className="ml-2 text-base font-semibold text-blue-500 align-super">2.0</span>
         </h1>
         <p className="text-gray-500 max-w-2xl mx-auto text-sm">

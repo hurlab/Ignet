@@ -2,6 +2,69 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../AuthContext.jsx'
 import { useGeneSet } from '../GeneSetContext.jsx'
+import { api } from '../api.js'
+
+// Global gene quick-search with autocomplete -> jumps to the gene report from any page.
+function GeneSearch({ mobile = false, onDone }) {
+  const [q, setQ] = useState('')
+  const [sugg, setSugg] = useState([])
+  const [open, setOpen] = useState(false)
+  const deb = useRef(null)
+  const navigate = useNavigate()
+
+  function go(sym) {
+    const s = (sym ?? q).trim().toUpperCase()
+    if (!s) return
+    setQ(''); setSugg([]); setOpen(false); onDone?.()
+    navigate(`/gene?q=${encodeURIComponent(s)}`)
+  }
+  function onChange(e) {
+    const v = e.target.value
+    setQ(v)
+    if (deb.current) clearTimeout(deb.current)
+    if (v.trim().length >= 2) {
+      deb.current = setTimeout(async () => {
+        try {
+          const r = await api.autocompleteGenes(v.trim())
+          setSugg((r.data || r || []).slice(0, 8))
+          setOpen(true)
+        } catch { setSugg([]) }
+      }, 250)
+    } else { setSugg([]); setOpen(false) }
+  }
+  const inputCls = mobile
+    ? 'flex-1 bg-blue-800 text-white placeholder-blue-300 text-sm px-3 py-2 rounded border border-blue-600 focus:outline-none focus:border-blue-400'
+    : 'bg-blue-800 text-white placeholder-blue-300 text-sm px-2 py-1 rounded border border-blue-600 focus:outline-none focus:border-blue-400 w-36'
+
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); go() }} className={`relative ${mobile ? 'flex-1' : ''}`}>
+      <input
+        type="text"
+        value={q}
+        onChange={onChange}
+        onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false) }}
+        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        placeholder="Search a gene..."
+        aria-label="Search a gene"
+        className={inputCls}
+      />
+      {open && sugg.length > 0 && (
+        <ul className="absolute z-50 left-0 mt-1 w-60 max-w-[80vw] bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
+          {sugg.map((s) => (
+            <li
+              key={s.symbol || s.gene_id}
+              onMouseDown={() => go(s.symbol)}
+              className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm flex items-baseline gap-2"
+            >
+              <span className="font-medium text-navy">{s.symbol}</span>
+              {s.description && <span className="text-gray-400 text-xs truncate">{s.description}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </form>
+  )
+}
 
 const navGroups = [
   {
@@ -135,6 +198,11 @@ export default function Header() {
           ))}
         </nav>
 
+        {/* Gene quick-search */}
+        <div className="hidden lg:block flex-shrink-0">
+          <GeneSearch />
+        </div>
+
         {/* PubMed search */}
         <form onSubmit={handlePubmed} className="hidden lg:flex items-center gap-1 flex-shrink-0">
           <input
@@ -230,6 +298,11 @@ export default function Header() {
               ))}
             </div>
           ))}
+
+          {/* Gene quick-search */}
+          <div className="flex items-center gap-2 mt-2">
+            <GeneSearch mobile onDone={() => setMenuOpen(false)} />
+          </div>
 
           {/* PubMed search */}
           <form onSubmit={(e) => { handlePubmed(e); setMenuOpen(false) }} className="flex items-center gap-2 mt-2">

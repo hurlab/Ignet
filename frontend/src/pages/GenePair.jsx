@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import GeneAutocomplete from '../components/GeneAutocomplete.jsx'
+import TrendChart from '../components/TrendChart.jsx'
 
 function downloadCSV(interactions, gene1, gene2) {
   if (!interactions?.length) return
@@ -31,7 +32,33 @@ export default function GenePair() {
   const [predictResult, setPredictResult] = useState(null)
   const [sortBy, setSortBy] = useState('score') // 'score' or 'pmid'
   const [showCount, setShowCount] = useState(20)
+  const [pairTrends, setPairTrends] = useState(null)   // null = not yet fetched, [] = empty
+  const [pairTrendsLoading, setPairTrendsLoading] = useState(false)
   const [searchParams] = useSearchParams()
+  // Guard against stale pair-trends responses when the user quickly switches pairs
+  const trendsRequestRef = useRef({ g1: '', g2: '' })
+
+  // Non-blocking trends fetch with stale-response guard
+  function fetchPairTrends(g1, g2) {
+    trendsRequestRef.current = { g1, g2 }
+    setPairTrends(null)
+    setPairTrendsLoading(true)
+    api.pairTrends(g1, g2)
+      .then((res) => {
+        // Ignore if a newer pair request has started
+        if (trendsRequestRef.current.g1 !== g1 || trendsRequestRef.current.g2 !== g2) return
+        setPairTrends(res?.trends ?? [])
+      })
+      .catch(() => {
+        if (trendsRequestRef.current.g1 !== g1 || trendsRequestRef.current.g2 !== g2) return
+        setPairTrends([])
+      })
+      .finally(() => {
+        if (trendsRequestRef.current.g1 === g1 && trendsRequestRef.current.g2 === g2) {
+          setPairTrendsLoading(false)
+        }
+      })
+  }
 
   // Auto-fill and auto-search from URL parameters on mount
   useEffect(() => {
@@ -58,6 +85,7 @@ export default function GenePair() {
       }).finally(() => {
         setLoading(false)
       })
+      fetchPairTrends(upper1, upper2)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -70,6 +98,9 @@ export default function GenePair() {
     setError(null)
     setPairData(null)
     setPredictResult(null)
+
+    // Kick off trends fetch immediately (non-blocking)
+    fetchPairTrends(g1, g2)
 
     try {
       const raw = await api.genePair(g1, g2)
@@ -193,6 +224,23 @@ export default function GenePair() {
                 <div className="text-xs text-gray-500">Gene Pair</div>
               </div>
             </div>
+
+            {/* Evidence over time trend chart (non-blocking) */}
+            {pairTrendsLoading
+              ? (
+                <div className="bg-white border border-gray-200 rounded-lg p-4 h-24 flex items-center">
+                  <span className="text-xs text-gray-400 animate-pulse">Loading evidence trend...</span>
+                </div>
+              )
+              : pairTrends !== null && (
+                <TrendChart
+                  data={pairTrends}
+                  valueKey="cooc"
+                  title="Evidence over time"
+                  color="#7c3aed"
+                />
+              )
+            }
 
             {/* BioBERT Prediction Summary */}
             {pairData?.prediction_summary && (

@@ -5,6 +5,7 @@ GET  /api/v1/pairs/<sym1>/<sym2>          - evidence sentences for a gene pair
 POST /api/v1/pairs/<sym1>/<sym2>/predict  - run BioBERT prediction on unscored sentences
 """
 
+import json
 import logging
 import re
 
@@ -12,12 +13,71 @@ import requests as http_requests
 from flask import Blueprint, jsonify, request
 
 from config import BIOBERT_URL as _BIOBERT_BASE
-from db import db_connection
+from db import db_connection, get_redis
 from utils import sanitize_gene_symbol
 
 logger = logging.getLogger(__name__)
 
 pairs_bp = Blueprint("pairs", __name__)
+
+# Co-occurrence evidence-trend cache 24h (data refreshes at most daily).
+_TRENDS_TTL = 86400
+
+
+@pairs_bp.route("/pairs/<sym1>/<sym2>/trends", methods=["GET"])
+def pair_trends(sym1, sym2):
+    """Co-occurrence evidence counts per publication year for a gene pair."""
+    s1 = sanitize_gene_symbol(sym1)
+    s2 = sanitize_gene_symbol(sym2)
+    if not s1 or not s2:
+        return jsonify({"error": "InvalidInput", "message": "Invalid gene symbol."}), 400
+
+    redis_client = get_redis()
+    cache_key = f"pair:trends:v1:{'|'.join(sorted([s1, s2]))}"
+    if redis_client:
+        try:
+            cached = redis_client.get(cache_key)
+            if cached:
+                return jsonify(json.loads(cached))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Pair trends cache read failed: %s", exc)
+
+    try:
+        with db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                """
+                SELECT y.pub_year AS year, COUNT(*) AS cooc,
+                       COUNT(DISTINCT h.pmid) AS pmids
+                FROM t_gene_pairs h JOIN t_pmid_year y ON y.pmid = h.pmid
+                WHERE ((h.gene_symbol1 = %s AND h.gene_symbol2 = %s)
+                    OR (h.gene_symbol1 = %s AND h.gene_symbol2 = %s))
+                  AND y.pub_year > 0
+                GROUP BY y.pub_year ORDER BY y.pub_year
+                """,
+                (s1, s2, s2, s1),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+    except Exception as exc:
+        logger.exception("Error in pair trends: %s", exc)
+        return jsonify({"error": "DatabaseError"}), 500
+
+    result = {
+        "gene1": s1,
+        "gene2": s2,
+        "trends": [
+            {"year": int(r["year"]), "cooc": int(r["cooc"]), "pmids": int(r["pmids"])}
+            for r in rows
+        ],
+    }
+    if redis_client:
+        try:
+            redis_client.set(cache_key, json.dumps(result), ex=_TRENDS_TTL)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Pair trends cache write failed: %s", exc)
+
+    return jsonify(result)
 
 
 def _parse_pagination(args) -> tuple[int, int]:

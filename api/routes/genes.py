@@ -8,6 +8,7 @@ GET /api/v1/genes/<symbol>/neighbors  - gene interaction neighbors
 GET /api/v1/genes/<symbol>/report     - aggregated gene report card
 """
 
+import json
 import logging
 import re
 
@@ -19,6 +20,72 @@ from utils import sanitize_gene_symbol
 logger = logging.getLogger(__name__)
 
 genes_bp = Blueprint("genes", __name__)
+
+# Co-occurrence evidence-trend cache 24h (data refreshes at most daily).
+_TRENDS_TTL = 86400
+
+
+@genes_bp.route("/genes/<symbol>/trends", methods=["GET"])
+def gene_trends(symbol):
+    """
+    Co-occurrence evidence counts per publication year for a gene.
+
+    Counts gene-pair co-occurrence rows mentioning this gene, grouped by the
+    publication year of the source PMID. Uses a UNION of two index-friendly
+    halves (gene as symbol1, gene as symbol2) instead of an OR, keeping the
+    worst case (most-connected genes) under ~0.2s.
+    """
+    sym = sanitize_gene_symbol(symbol)
+    if not sym:
+        return jsonify({"error": "InvalidInput", "message": "Invalid gene symbol."}), 400
+
+    redis_client = get_redis()
+    cache_key = f"gene:trends:v1:{sym}"
+    if redis_client:
+        try:
+            cached = redis_client.get(cache_key)
+            if cached:
+                return jsonify(json.loads(cached))
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Gene trends cache read failed: %s", exc)
+
+    try:
+        with db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+            cursor.execute(
+                """
+                SELECT pub_year AS year, SUM(cooc) AS cooc
+                FROM (
+                    SELECT y.pub_year, COUNT(*) AS cooc
+                    FROM t_gene_pairs h JOIN t_pmid_year y ON y.pmid = h.pmid
+                    WHERE h.gene_symbol1 = %s GROUP BY y.pub_year
+                    UNION ALL
+                    SELECT y.pub_year, COUNT(*) AS cooc
+                    FROM t_gene_pairs h JOIN t_pmid_year y ON y.pmid = h.pmid
+                    WHERE h.gene_symbol2 = %s GROUP BY y.pub_year
+                ) t
+                WHERE pub_year > 0
+                GROUP BY pub_year ORDER BY pub_year
+                """,
+                (sym, sym),
+            )
+            rows = cursor.fetchall()
+            cursor.close()
+    except Exception as exc:
+        logger.exception("Error in gene trends: %s", exc)
+        return jsonify({"error": "DatabaseError"}), 500
+
+    result = {
+        "symbol": sym,
+        "trends": [{"year": int(r["year"]), "cooc": int(r["cooc"])} for r in rows],
+    }
+    if redis_client:
+        try:
+            redis_client.set(cache_key, json.dumps(result), ex=_TRENDS_TTL)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Gene trends cache write failed: %s", exc)
+
+    return jsonify(result)
 
 
 def _parse_pagination(args) -> tuple[int, int]:

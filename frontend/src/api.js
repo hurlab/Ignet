@@ -58,7 +58,9 @@ export const api = {
   autocompleteGenes: (q, limit = 10) => request(`/genes/autocomplete?q=${encodeURIComponent(q)}&limit=${limit}`),
   geneNeighbors: (sym) => request(`/genes/${encodeURIComponent(sym)}/neighbors`),
   geneReport: (sym) => request(`/genes/${encodeURIComponent(sym)}/report`, { timeout: 60000 }),
+  geneTrends: (sym) => request(`/genes/${encodeURIComponent(sym)}/trends`),
   genePair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}?include_summary=true`),
+  pairTrends: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}/trends`),
   predictPair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}/predict`, { method: 'POST' }),
 
   // filters: { ino_type?: string, has_vaccine?: boolean, year_min?: number, year_max?: number }
@@ -174,7 +176,6 @@ export async function enrichmentStream(genes, { onEvent, signal } = {}) {
   const decoder = new TextDecoder()
   let buffer = ''
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const { done, value } = await reader.read()
 
@@ -182,7 +183,7 @@ export async function enrichmentStream(genes, { onEvent, signal } = {}) {
       // Process any remaining buffered text after the stream ends
       const remaining = buffer.trim()
       if (remaining) {
-        try { onEvent?.(JSON.parse(remaining)) } catch (_) { /* skip malformed */ }
+        try { onEvent?.(JSON.parse(remaining)) } catch { /* skip malformed */ }
       }
       break
     }
@@ -196,7 +197,7 @@ export async function enrichmentStream(genes, { onEvent, signal } = {}) {
     for (const line of lines) {
       const trimmed = line.trim()
       if (!trimmed) continue
-      try { onEvent?.(JSON.parse(trimmed)) } catch (_) { /* skip malformed */ }
+      try { onEvent?.(JSON.parse(trimmed)) } catch { /* skip malformed */ }
     }
   }
 }

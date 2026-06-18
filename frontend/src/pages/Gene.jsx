@@ -7,6 +7,7 @@ import NetworkGraph from '../components/NetworkGraph.jsx'
 import AddToSetButton from '../components/AddToSetButton.jsx'
 import GeneAutocomplete from '../components/GeneAutocomplete.jsx'
 import EvidencePopup from '../components/EvidencePopup.jsx'
+import TrendChart from '../components/TrendChart.jsx'
 import { cleanTermLabel } from '../termUtils.js'
 
 function buildMiniNetwork(gene, neighbors, reportData) {
@@ -356,6 +357,8 @@ export default function Gene() {
   const [neighbors, setNeighbors] = useState([])
   const [reportData, setReportData] = useState(null)
   const [evidencePair, setEvidencePair] = useState(null)
+  const [trends, setTrends] = useState(null)       // null = not yet fetched, [] = empty
+  const [trendsLoading, setTrendsLoading] = useState(false)
   const navigate = useNavigate()
 
   async function fetchGeneData(sym) {
@@ -364,6 +367,8 @@ export default function Gene() {
     setGene(null)
     setNeighbors([])
     setReportData(null)
+    setTrends(null)
+    setTrendsLoading(true)
     try {
       const [neighborsRes, reportRes] = await Promise.all([
         api.geneNeighbors(sym),
@@ -377,6 +382,11 @@ export default function Gene() {
     } finally {
       setLoading(false)
     }
+    // Fetch trends independently — failure never crashes the report
+    api.geneTrends(sym)
+      .then((res) => setTrends(res?.trends ?? []))
+      .catch(() => setTrends([]))
+      .finally(() => setTrendsLoading(false))
   }
 
   // Auto-search if query param provided
@@ -460,6 +470,24 @@ export default function Gene() {
 
       {/* Report Card Section */}
       {gene && <ReportCard reportData={reportData} gene={gene} />}
+
+      {/* Evidence over time trend chart (non-blocking, loads independently) */}
+      {gene && (
+        trendsLoading
+          ? (
+            <div className="bg-white border border-gray-200 rounded-lg p-4 h-24 flex items-center">
+              <span className="text-xs text-gray-400 animate-pulse">Loading evidence trend...</span>
+            </div>
+          )
+          : trends !== null && (
+            <TrendChart
+              data={trends}
+              valueKey="cooc"
+              title="Evidence over time"
+              color="#2563eb"
+            />
+          )
+      )}
 
       {/* Mini Network Visualization */}
       {gene && neighbors.length > 0 && (

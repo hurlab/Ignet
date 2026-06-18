@@ -1,10 +1,11 @@
-import { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
 import AddToSetButton from '../components/AddToSetButton.jsx'
+import GeneAutocomplete from '../components/GeneAutocomplete.jsx'
 import { cleanTermLabel } from '../termUtils.js'
 
 function buildMiniNetwork(gene, neighbors, reportData) {
@@ -353,16 +354,7 @@ export default function Gene() {
   const [gene, setGene] = useState(null)
   const [neighbors, setNeighbors] = useState([])
   const [reportData, setReportData] = useState(null)
-  const [suggestions, setSuggestions] = useState([])
-  const [showDropdown, setShowDropdown] = useState(false)
-  const debounceRef = useRef(null)
   const navigate = useNavigate()
-
-  useEffect(() => {
-    function handleClickOutside() { setShowDropdown(false) }
-    document.addEventListener('click', handleClickOutside)
-    return () => document.removeEventListener('click', handleClickOutside)
-  }, [])
 
   async function fetchGeneData(sym) {
     setLoading(true)
@@ -396,26 +388,6 @@ export default function Gene() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleInputChange(e) {
-    const val = e.target.value
-    setQuery(val)
-
-    if (debounceRef.current) clearTimeout(debounceRef.current)
-
-    if (val.trim().length >= 2) {
-      debounceRef.current = setTimeout(async () => {
-        try {
-          const res = await api.autocompleteGenes(val.trim())
-          setSuggestions(res.data || res || [])
-          setShowDropdown(true)
-        } catch { setSuggestions([]) }
-      }, 300)
-    } else {
-      setSuggestions([])
-      setShowDropdown(false)
-    }
-  }
-
   async function handleSearch(e) {
     e?.preventDefault()
     const sym = query.trim().toUpperCase()
@@ -444,31 +416,15 @@ export default function Gene() {
 
       <form onSubmit={handleSearch} className="bg-white border border-gray-200 rounded-lg p-4 flex gap-3 items-end">
         <div className="flex-1">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Gene Symbol</label>
-          <div className="relative" onClick={(e) => e.stopPropagation()}>
-            <input
-              type="text"
-              value={query}
-              onChange={handleInputChange}
-              onKeyDown={(e) => { if (e.key === 'Escape') setShowDropdown(false) }}
-              placeholder="e.g. IFNG, TP53, BRCA1"
-              className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
-            />
-            {showDropdown && suggestions.length > 0 && (
-              <ul className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
-                {suggestions.map((s) => (
-                  <li
-                    key={s.symbol || s.gene_id}
-                    onClick={() => { setQuery(s.symbol); setShowDropdown(false); searchGene(s.symbol) }}
-                    className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm"
-                  >
-                    <span className="font-medium text-navy">{s.symbol}</span>
-                    {s.description && <span className="text-gray-400 text-xs ml-2 truncate">{s.description}</span>}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <GeneAutocomplete
+            label="Gene Symbol"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onSelect={(sym) => { setQuery(sym); searchGene(sym) }}
+            placeholder="e.g. IFNG, TP53, BRCA1"
+            inputClassName="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+            debounceMs={300}
+          />
         </div>
         <button
           type="submit"

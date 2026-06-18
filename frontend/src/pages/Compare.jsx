@@ -218,25 +218,41 @@ export default function Compare() {
           {/* Venn diagram */}
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-sm font-semibold text-gray-600 mb-4 text-center">Gene Overlap</h2>
-            <div className="relative w-72 h-44 mx-auto">
-              <div className="absolute left-2 top-4 w-36 h-36 rounded-full bg-blue-100 border-2 border-blue-400 opacity-70 flex items-center justify-center">
-                <span className="text-sm font-bold text-blue-700">{result.overlap.unique_a}</span>
-              </div>
-              <div className="absolute right-2 top-4 w-36 h-36 rounded-full bg-orange-100 border-2 border-orange-400 opacity-70 flex items-center justify-center">
-                <span className="text-sm font-bold text-orange-700">{result.overlap.unique_b}</span>
-              </div>
-              <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
-                <span className="text-base font-bold text-gray-700">{result.overlap.shared}</span>
+            <div
+              role="img"
+              aria-label={`Overlap diagram: Set A "${result.query_a.keywords}" has ${result.query_a.gene_count} genes (${result.overlap.unique_a} unique to A). Set B "${result.query_b.keywords}" has ${result.query_b.gene_count} genes (${result.overlap.unique_b} unique to B). ${result.overlap.shared} genes are shared between both sets.`}
+            >
+              <div className="relative w-72 h-44 mx-auto">
+                {/* Set A circle — blue, dashed border for non-color distinction */}
+                <div className="absolute left-2 top-4 w-36 h-36 rounded-full bg-blue-100 border-2 border-dashed border-blue-600 opacity-70 flex items-start justify-start pt-3 pl-3">
+                  <span className="text-xs font-bold text-blue-800 leading-none">A</span>
+                </div>
+                <div className="absolute left-2 top-4 w-36 h-36 rounded-full flex items-center justify-center opacity-70">
+                  <span className="text-sm font-bold text-blue-700">{result.overlap.unique_a}</span>
+                </div>
+                {/* Set B circle — orange, solid border for non-color distinction */}
+                <div className="absolute right-2 top-4 w-36 h-36 rounded-full bg-orange-100 border-2 border-solid border-orange-600 opacity-70 flex items-start justify-end pt-3 pr-3">
+                  <span className="text-xs font-bold text-orange-800 leading-none">B</span>
+                </div>
+                <div className="absolute right-2 top-4 w-36 h-36 rounded-full flex items-center justify-center opacity-70">
+                  <span className="text-sm font-bold text-orange-700">{result.overlap.unique_b}</span>
+                </div>
+                {/* Shared count in overlap area */}
+                <div className="absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10">
+                  <span className="text-base font-bold text-gray-700">{result.overlap.shared}</span>
+                </div>
               </div>
             </div>
             <div className="flex justify-center gap-8 mt-2 text-xs text-gray-500">
               <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded-full bg-blue-300" />
-                {result.query_a.keywords}
+                {/* Dashed swatch matches Set A border style */}
+                <span className="inline-block w-4 h-4 rounded-full bg-blue-300 border-2 border-dashed border-blue-600" aria-hidden="true" />
+                <span><strong>A:</strong> {result.query_a.keywords}</span>
               </span>
               <span className="flex items-center gap-1">
-                <span className="inline-block w-3 h-3 rounded-full bg-orange-300" />
-                {result.query_b.keywords}
+                {/* Solid swatch matches Set B border style */}
+                <span className="inline-block w-4 h-4 rounded-full bg-orange-300 border-2 border-solid border-orange-600" aria-hidden="true" />
+                <span><strong>B:</strong> {result.query_b.keywords}</span>
               </span>
             </div>
           </div>

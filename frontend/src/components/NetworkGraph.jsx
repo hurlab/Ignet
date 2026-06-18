@@ -188,8 +188,21 @@ export default function NetworkGraph({ elements, onNodeClick, onCyReady }) {
   const containerRef = useRef(null)
 
   const nodeCount = useMemo(() => elements?.filter(e => !e.data.source).length || 0, [elements])
+  const edgeCount = useMemo(() => elements?.filter(e => e.data.source).length || 0, [elements])
   const stylesheet = useMemo(() => buildStylesheet(elements || []), [elements])
   const layout = useMemo(() => buildLayout(nodeCount), [nodeCount])
+
+  // Top edges for screen-reader alternative table (up to 10, sorted by weight desc)
+  const TOP_EDGE_LIMIT = 10
+  const topEdges = useMemo(() => {
+    if (!elements) return []
+    return elements
+      .filter(e => e.data.source)
+      .sort((a, b) => (b.data.weight || 1) - (a.data.weight || 1))
+      .slice(0, TOP_EDGE_LIMIT)
+  }, [elements])
+
+  const graphAriaLabel = `Gene interaction network: ${nodeCount} node${nodeCount !== 1 ? 's' : ''}, ${edgeCount} edge${edgeCount !== 1 ? 's' : ''}`
 
   // Handle ESC to exit fullscreen
   useEffect(() => {
@@ -325,13 +338,51 @@ ${edges.join('\n')}
 
   return (
     <div ref={containerRef} className={wrapperClass}>
-      <CytoscapeComponent
-        elements={elements}
-        stylesheet={stylesheet}
-        layout={layout}
-        style={{ width: '100%', height: fullscreen ? 'calc(100vh - 44px)' : '500px' }}
-        cy={handleCy}
-      />
+      {/* Visually-hidden text alternative for screen readers */}
+      <div className="sr-only">
+        <p>{graphAriaLabel}</p>
+        {topEdges.length > 0 && (
+          <>
+            <p>Showing top {topEdges.length} interaction{topEdges.length !== 1 ? 's' : ''} by evidence count:</p>
+            <table>
+              <caption>Top {topEdges.length} gene interactions in this network</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Source gene</th>
+                  <th scope="col">Target gene</th>
+                  <th scope="col">Weight / evidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topEdges.map((e, i) => (
+                  <tr key={e.data.id || i}>
+                    <td>{e.data.source}</td>
+                    <td>{e.data.target}</td>
+                    <td>{e.data.weight || 1}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
+
+      {/* Graph canvas — focusable and labelled for keyboard/AT users */}
+      <div
+        role="img"
+        aria-label={graphAriaLabel}
+        tabIndex={0}
+        className="focus:outline-2 focus:outline-blue-500 focus:outline-offset-[-2px]"
+      >
+        <CytoscapeComponent
+          elements={elements}
+          stylesheet={stylesheet}
+          layout={layout}
+          style={{ width: '100%', height: fullscreen ? 'calc(100vh - 44px)' : '500px' }}
+          cy={handleCy}
+        />
+      </div>
+
       {tooltip && (
         <div
           className="absolute z-10 bg-gray-800 text-white text-xs px-2 py-1 rounded pointer-events-none capitalize shadow-lg"
@@ -343,24 +394,34 @@ ${edges.join('\n')}
       <div className="flex gap-2 p-2 border-t border-gray-100 flex-wrap items-center bg-white">
         <button
           onClick={() => setFullscreen(f => !f)}
+          aria-pressed={fullscreen}
+          aria-label={fullscreen ? 'Exit fullscreen (Esc)' : 'Expand to fullscreen'}
           className="text-xs bg-navy hover:bg-navy-dark text-white px-2.5 py-1 rounded transition-colors font-medium"
           title={fullscreen ? 'Exit fullscreen (Esc)' : 'Expand to fullscreen'}
         >
           {fullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
         </button>
-        <button onClick={fitGraph}
+        <button
+          onClick={fitGraph}
+          aria-label="Fit graph to view"
           className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">
           Fit
         </button>
-        <button onClick={exportPNG}
+        <button
+          onClick={exportPNG}
+          aria-label="Export graph as PNG image"
           className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">
           PNG
         </button>
-        <button onClick={exportCytoscapeJSON}
+        <button
+          onClick={exportCytoscapeJSON}
+          aria-label="Export graph as Cytoscape JSON"
           className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">
           Cytoscape JSON
         </button>
-        <button onClick={exportXGMML}
+        <button
+          onClick={exportXGMML}
+          aria-label="Export graph as XGMML"
           className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 rounded transition-colors">
           XGMML
         </button>

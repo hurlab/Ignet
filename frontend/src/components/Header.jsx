@@ -2,66 +2,37 @@ import { useState, useEffect, useRef } from 'react'
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../AuthContext.jsx'
 import { useGeneSet } from '../GeneSetContext.jsx'
-import { api } from '../api.js'
+import GeneAutocomplete from './GeneAutocomplete.jsx'
 
-// Global gene quick-search with autocomplete -> jumps to the gene report from any page.
+// Global gene quick-search with accessible autocomplete -> jumps to gene report from any page.
 function GeneSearch({ mobile = false, onDone }) {
   const [q, setQ] = useState('')
-  const [sugg, setSugg] = useState([])
-  const [open, setOpen] = useState(false)
-  const deb = useRef(null)
   const navigate = useNavigate()
 
   function go(sym) {
     const s = (sym ?? q).trim().toUpperCase()
     if (!s) return
-    setQ(''); setSugg([]); setOpen(false); onDone?.()
+    setQ('')
+    onDone?.()
     navigate(`/gene?q=${encodeURIComponent(s)}`)
   }
-  function onChange(e) {
-    const v = e.target.value
-    setQ(v)
-    if (deb.current) clearTimeout(deb.current)
-    if (v.trim().length >= 2) {
-      deb.current = setTimeout(async () => {
-        try {
-          const r = await api.autocompleteGenes(v.trim())
-          setSugg((r.data || r || []).slice(0, 8))
-          setOpen(true)
-        } catch { setSugg([]) }
-      }, 250)
-    } else { setSugg([]); setOpen(false) }
-  }
+
   const inputCls = mobile
     ? 'flex-1 bg-blue-800 text-white placeholder-blue-200 text-sm px-3 py-2 rounded border border-blue-600 focus:outline-none focus:border-blue-400'
     : 'bg-blue-800 text-white placeholder-blue-200 text-sm px-2 py-1 rounded border border-blue-600 focus:outline-none focus:border-blue-400 w-36'
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); go() }} className={`relative ${mobile ? 'flex-1' : ''}`}>
-      <input
-        type="text"
+    <form onSubmit={(e) => { e.preventDefault(); go() }} className={mobile ? 'flex-1' : ''}>
+      <GeneAutocomplete
         value={q}
-        onChange={onChange}
-        onKeyDown={(e) => { if (e.key === 'Escape') setOpen(false) }}
-        onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={(e) => setQ(e.target.value)}
+        onSelect={(sym) => go(sym)}
         placeholder="Search a gene..."
         aria-label="Search a gene"
-        className={inputCls}
+        inputClassName={inputCls}
+        mobile={mobile}
+        debounceMs={250}
       />
-      {open && sugg.length > 0 && (
-        <ul className="absolute z-50 left-0 mt-1 w-60 max-w-[80vw] bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-y-auto">
-          {sugg.map((s) => (
-            <li
-              key={s.symbol || s.gene_id}
-              onMouseDown={() => go(s.symbol)}
-              className="px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm flex items-baseline gap-2"
-            >
-              <span className="font-medium text-navy">{s.symbol}</span>
-              {s.description && <span className="text-gray-400 text-xs truncate">{s.description}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
     </form>
   )
 }
@@ -100,12 +71,38 @@ const allLinks = navGroups.flatMap(g => g.items)
 function Dropdown({ group }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
+  const triggerRef = useRef(null)
   const closeTimer = useRef(null)
   const location = useLocation()
   const isGroupActive = group.items.some(item => location.pathname.startsWith(item.to))
 
   // Close on navigation
   useEffect(() => { setOpen(false) }, [location.pathname])
+
+  // Close when focus moves outside the entire dropdown widget
+  useEffect(() => {
+    if (!open) return
+    function handleFocusOut(e) {
+      if (ref.current && !ref.current.contains(e.relatedTarget)) {
+        setOpen(false)
+      }
+    }
+    const node = ref.current
+    node?.addEventListener('focusout', handleFocusOut)
+    return () => node?.removeEventListener('focusout', handleFocusOut)
+  }, [open])
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
 
   function handleEnter() {
     clearTimeout(closeTimer.current)
@@ -116,10 +113,38 @@ function Dropdown({ group }) {
     closeTimer.current = setTimeout(() => setOpen(false), 150)
   }
 
+  function handleTriggerKeyDown(e) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      setOpen(prev => !prev)
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+      triggerRef.current?.focus()
+    } else if (e.key === 'ArrowDown' && !open) {
+      e.preventDefault()
+      setOpen(true)
+    }
+  }
+
+  function handleMenuKeyDown(e) {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      setOpen(false)
+      triggerRef.current?.focus()
+    }
+  }
+
+  const menuId = `nav-menu-${group.label.toLowerCase().replace(/\s+/g, '-')}`
+
   return (
     <div ref={ref} className="relative" onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
       <button
+        ref={triggerRef}
+        aria-haspopup="true"
+        aria-expanded={open}
+        aria-controls={menuId}
         onClick={() => setOpen(prev => !prev)}
+        onKeyDown={handleTriggerKeyDown}
         className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-sm font-medium transition-colors whitespace-nowrap ${
           isGroupActive
             ? 'bg-blue-700 text-white'
@@ -127,12 +152,12 @@ function Dropdown({ group }) {
         }`}
       >
         {group.label}
-        <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className={`w-3 h-3 transition-transform ${open ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
         </svg>
       </button>
       {open && (
-        <div className="absolute top-full left-0 pt-1 z-50">
+        <div id={menuId} className="absolute top-full left-0 pt-1 z-50" onKeyDown={handleMenuKeyDown}>
           <div className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px]">
             {group.items.map(item => (
               <NavLink

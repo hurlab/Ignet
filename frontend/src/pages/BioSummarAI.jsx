@@ -205,7 +205,12 @@ export default function BioSummarAI() {
       {summarizing && <LoadingSpinner message="Generating AI summary from literature..." />}
 
       {summary && (
-        <div className="bg-white border border-gray-200 rounded-lg p-5 space-y-4">
+        <div
+          className="bg-white border border-gray-200 rounded-lg p-5 space-y-4"
+          role="status"
+          aria-live="polite"
+          aria-label="AI-generated summary"
+        >
           <h2 className="font-semibold text-gray-700 text-sm">Summary</h2>
           <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed space-y-1">
             {renderMarkdown(summary)}

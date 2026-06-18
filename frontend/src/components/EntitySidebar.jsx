@@ -72,33 +72,43 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
       </div>
 
       {/* Category toggle switches */}
-      <div className="flex flex-col gap-1 mb-2">
+      <div className="flex flex-col gap-1 mb-2" role="group" aria-label="Network entity category visibility">
         {[
           { key: 'drugs', label: 'Drugs', color: 'bg-green-500' },
           { key: 'diseases', label: 'Diseases', color: 'bg-red-500' },
           { key: 'ino', label: 'INO Types', color: 'bg-purple-500' },
           { key: 'cov', label: 'CoV proteins', color: 'bg-teal-500' },
-        ].map(({ key, label, color }) => (
-          <label key={key} className="flex items-center gap-2 text-xs text-gray-600 cursor-pointer">
-            <button
-              onClick={() => onToggleCategory?.(key)}
-              className={`relative w-8 h-4 rounded-full transition-colors ${
-                visibleCategories?.[key] ? color : 'bg-gray-300'
-              }`}
-            >
-              <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${
-                visibleCategories?.[key] ? 'translate-x-4' : 'translate-x-0.5'
-              }`} />
-            </button>
-            {label}
-            <span className="text-gray-400">({
-              key === 'drugs' ? entities?.drugs?.length || 0 :
-              key === 'diseases' ? entities?.diseases?.length || 0 :
-              key === 'cov' ? (covLoading ? '…' : covCount) :
-              entities?.ino_distribution?.length || 0
-            })</span>
-          </label>
-        ))}
+        ].map(({ key, label, color }) => {
+          const isOn = !!visibleCategories?.[key]
+          const count = key === 'drugs' ? entities?.drugs?.length || 0
+            : key === 'diseases' ? entities?.diseases?.length || 0
+            : key === 'cov' ? (covLoading ? '…' : covCount)
+            : entities?.ino_distribution?.length || 0
+          const switchId = `toggle-${key}`
+          const labelId = `label-${key}`
+          return (
+            <div key={key} className="flex items-center gap-2 text-xs text-gray-600">
+              <button
+                id={switchId}
+                role="switch"
+                aria-checked={isOn}
+                aria-labelledby={labelId}
+                onClick={() => onToggleCategory?.(key)}
+                className={`relative w-8 h-4 rounded-full transition-colors focus:outline-2 focus:outline-offset-1 focus:outline-blue-500 ${
+                  isOn ? color : 'bg-gray-300'
+                }`}
+              >
+                <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${
+                  isOn ? 'translate-x-4' : 'translate-x-0.5'
+                }`} />
+              </button>
+              <span id={labelId} className="cursor-default select-none" onClick={() => onToggleCategory?.(key)}>
+                {label}
+              </span>
+              <span className="text-gray-400">({count})</span>
+            </div>
+          )
+        })}
       </div>
 
       {activeHighlight && (

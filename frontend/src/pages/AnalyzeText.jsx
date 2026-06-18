@@ -388,7 +388,11 @@ export default function AnalyzeText() {
 
       {/* Results */}
       {results && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
+        <div
+          className="bg-white border border-gray-200 rounded-lg p-4 space-y-3"
+          aria-live="polite"
+          aria-label="BioBERT prediction results"
+        >
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h2 className="font-semibold text-gray-700 text-sm">
               Prediction Results
@@ -441,7 +445,12 @@ export default function AnalyzeText() {
 
       {/* AI Summary */}
       {summary && (
-        <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
+        <div
+          className="bg-white border border-gray-200 rounded-lg p-4 space-y-2"
+          role="status"
+          aria-live="polite"
+          aria-label="AI-generated summary"
+        >
           <h2 className="font-semibold text-gray-700 text-sm">AI Summary</h2>
           <div className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap">
             {summary}

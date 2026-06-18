@@ -112,9 +112,15 @@ export default function Assistant() {
         </div>
       )}
 
-      {/* Chat messages */}
+      {/* Chat messages — role="log" announces additions to screen readers */}
       {messages.length > 0 && (
-        <div className="flex-1 overflow-y-auto space-y-4 mb-4">
+        <div
+          className="flex-1 overflow-y-auto space-y-4 mb-4"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+          aria-label="Conversation"
+        >
           {messages.map((msg, i) => (
             <div key={i} className={msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'}>
               <div className={`max-w-[80%] rounded-lg p-3 ${

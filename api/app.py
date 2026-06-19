@@ -5,7 +5,6 @@ Flask application factory for the Ignet REST API.
 import logging
 from flask import Flask, jsonify
 from flask_cors import CORS
-from werkzeug.middleware.proxy_fix import ProxyFix
 
 from extensions import limiter
 
@@ -15,10 +14,10 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
 
-    # Behind Apache reverse proxy → waitress. Without this, get_remote_address
-    # sees 127.0.0.1 (the proxy) for every request, collapsing all clients into
-    # one rate-limit bucket. Trust exactly one proxy hop's X-Forwarded-For.
-    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
+    # Real client IP behind Apache is handled at the WSGI server (waitress
+    # trusted_proxy in run.py), which sets REMOTE_ADDR from X-Forwarded-For.
+    # werkzeug ProxyFix does NOT work here: waitress strips X-Forwarded-* before
+    # the WSGI app sees them unless the proxy is trusted at the waitress layer.
 
     # Rate limiting — in-memory storage (resets on restart, fine for single-server).
     # The Limiter singleton lives in extensions.py so blueprint route modules can

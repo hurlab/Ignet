@@ -23,4 +23,16 @@ app = create_app()
 
 if __name__ == "__main__":
     print(f"Starting Ignet API on http://0.0.0.0:{API_PORT}/")
-    serve(app, host="0.0.0.0", port=API_PORT, threads=8)
+    # Behind Apache (mod_proxy → 127.0.0.1:9637). Waitress discards
+    # X-Forwarded-* headers by default (clear_untrusted_proxy_headers), so
+    # without trusted_proxy REMOTE_ADDR is always 127.0.0.1 and rate limiting
+    # collapses every client into one bucket. Trusting the local Apache hop
+    # makes waitress set REMOTE_ADDR from X-Forwarded-For (the real client IP).
+    serve(
+        app,
+        host="0.0.0.0",
+        port=API_PORT,
+        threads=8,
+        trusted_proxy="127.0.0.1",
+        trusted_proxy_headers={"x-forwarded-for", "x-forwarded-proto", "x-forwarded-host"},
+    )

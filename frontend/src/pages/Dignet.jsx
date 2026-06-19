@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
-import { COHORT_COLORS, mergeCohortEdges, buildCohortDiffElements } from '../cohortDiff.js'
+import { COHORT_COLORS, mergeCohortEdges, buildCohortDiffElements, mergeCohorts, buildNCohortElements, sharedCountColor } from '../cohortDiff.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
@@ -214,6 +214,22 @@ function buildAggregatedElements(result) {
   return [...nodes, ...edges]
 }
 
+// CSV for an N-cohort (>2) differential: one weight column per cohort + shared count.
+function downloadNCohortCSV(diffEdges, cohortNames) {
+  if (!diffEdges?.length) return
+  const safe = (s, i) => (s || `C${i + 1}`).replace(/[^\w]+/g, '_')
+  const header = 'Gene1,Gene2,Shared_count,' + cohortNames.map((nm, i) => `Weight_${safe(nm, i)}`).join(',') + '\n'
+  const rows = diffEdges.map((e) => [e.gene1, e.gene2, e.sharedCount, ...e.weights].join(',')).join('\n')
+  const comment = `# Ignet ${cohortNames.length}-cohort comparison - https://ignet.org/ignet/dignet\n`
+  const blob = new Blob([comment + header + rows], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'ignet-cohort-compare.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 function downloadCohortCSV(diffEdges, nameA, nameB) {
   if (!diffEdges?.length) return
   const header = 'Gene1,Gene2,Membership,Weight_A,Weight_B\n'
@@ -283,10 +299,11 @@ export default function Dignet() {
   const [evidencePair, setEvidencePair] = useState(null)
   const [colorScheme, setColorScheme] = useState('none') // node color scheme (SPEC-COHORT-002)
   // Two-cohort differential mode (SPEC-COHORT-003)
-  const [cohortAName, setCohortAName] = useState('Cohort A')
-  const [cohortAText, setCohortAText] = useState('')
-  const [cohortBName, setCohortBName] = useState('Cohort B')
-  const [cohortBText, setCohortBText] = useState('')
+  // 2..5 cohorts (SPEC-COHORT-004)
+  const [cohorts, setCohorts] = useState([
+    { name: 'Cohort A', text: '' },
+    { name: 'Cohort B', text: '' },
+  ])
   const cyInstanceRef = useRef(null)
   const didAutoSearch = useRef(false)
   const abortRef = useRef(null)
@@ -453,14 +470,23 @@ export default function Dignet() {
     }
   }, [pmidText, vaccineOnly])
 
+  function updateCohort(idx, field, value) {
+    setCohorts(cs => cs.map((c, i) => (i === idx ? { ...c, [field]: value } : c)))
+  }
+  function addCohort() {
+    setCohorts(cs => (cs.length >= 5 ? cs : [...cs, { name: `Cohort ${String.fromCharCode(65 + cs.length)}`, text: '' }]))
+  }
+  function removeCohort(idx) {
+    setCohorts(cs => (cs.length <= 2 ? cs : cs.filter((_, i) => i !== idx)))
+  }
+
   async function runCohortCompare() {
-    const pmidsA = parsePmids(cohortAText)
-    const pmidsB = parsePmids(cohortBText)
-    if (!pmidsA.length || !pmidsB.length) {
-      setError('Provide PMIDs for both cohorts before comparing.')
+    const parsed = cohorts.map(c => parsePmids(c.text))
+    if (parsed.some(p => p.length === 0)) {
+      setError('Provide PMIDs for every cohort before comparing.')
       return
     }
-    if (pmidsA.length > MAX_UPLOAD_PMIDS || pmidsB.length > MAX_UPLOAD_PMIDS) {
+    if (parsed.some(p => p.length > MAX_UPLOAD_PMIDS)) {
       setError(`Each cohort is capped at ${MAX_UPLOAD_PMIDS.toLocaleString()} PMIDs.`)
       return
     }
@@ -473,24 +499,27 @@ export default function Dignet() {
     setCovData(null)
     try {
       // Reuse the existing aggregation endpoint once per cohort (no new backend).
-      const [rawA, rawB] = await Promise.all([
-        api.dignetSearchPmids(pmidsA, { has_vaccine: vaccineOnly }),
-        api.dignetSearchPmids(pmidsB, { has_vaccine: vaccineOnly }),
-      ])
-      const dataA = rawA?.data ?? rawA
-      const dataB = rawB?.data ?? rawB
-      const diff = mergeCohortEdges(dataA.aggregated_edges, dataB.aggregated_edges)
-      setResult({
-        mode: 'compare',
-        diff_edges: diff,
-        cohortA: { name: cohortAName || 'Cohort A', submitted: dataA.pmid_count, in_db: dataA.pmid_count_in_db, coverage_pct: dataA.coverage_pct },
-        cohortB: { name: cohortBName || 'Cohort B', submitted: dataB.pmid_count, in_db: dataB.pmid_count_in_db, coverage_pct: dataB.coverage_pct },
-        counts: {
+      const raws = await Promise.all(parsed.map(pmids => api.dignetSearchPmids(pmids, { has_vaccine: vaccineOnly })))
+      const datas = raws.map(r => r?.data ?? r)
+      const n = datas.length
+      const cohortStats = datas.map((d, i) => ({
+        name: cohorts[i].name || `Cohort ${i + 1}`,
+        submitted: d.pmid_count, in_db: d.pmid_count_in_db, coverage_pct: d.coverage_pct,
+      }))
+      let diff
+      let counts = null
+      if (n === 2) {
+        // N=2 keeps the SPEC-COHORT-003 A-only/B-only/shared tri-color view.
+        diff = mergeCohortEdges(datas[0].aggregated_edges, datas[1].aggregated_edges)
+        counts = {
           aOnly: diff.filter(e => e.membership === 'A-only').length,
           bOnly: diff.filter(e => e.membership === 'B-only').length,
           shared: diff.filter(e => e.membership === 'shared').length,
-        },
-      })
+        }
+      } else {
+        diff = mergeCohorts(datas.map(d => d.aggregated_edges))
+      }
+      setResult({ mode: 'compare', n, diff_edges: diff, cohorts: cohortStats, counts })
     } catch (err) {
       setError(err.message || 'Cohort comparison failed.')
     } finally {
@@ -498,7 +527,7 @@ export default function Dignet() {
     }
   }
 
-  function handleCohortFile(setter) {
+  function handleCohortFile(idx) {
     return (e) => {
       const file = e.target.files?.[0]
       if (!file) return
@@ -508,7 +537,7 @@ export default function Dignet() {
         return
       }
       const reader = new FileReader()
-      reader.onload = () => setter(String(reader.result || ''))
+      reader.onload = () => updateCohort(idx, 'text', String(reader.result || ''))
       reader.onerror = () => setError('Failed to read the file.')
       reader.readAsText(file)
       e.target.value = ''
@@ -595,7 +624,11 @@ export default function Dignet() {
   const geneElements = useMemo(
     () => {
       if (!result) return []
-      if (result.mode === 'compare') return buildCohortDiffElements(result.diff_edges)
+      if (result.mode === 'compare') {
+        return result.n === 2
+          ? buildCohortDiffElements(result.diff_edges)
+          : buildNCohortElements(result.diff_edges, result.n)
+      }
       return result.mode === 'pmids' ? buildAggregatedElements(result) : buildElements(result)
     },
     [result]
@@ -778,37 +811,54 @@ export default function Dignet() {
             </div>
           </div>
         ) : (
-          <div className="w-full grid md:grid-cols-2 gap-3">
-            {[
-              { label: 'A', name: cohortAName, setName: setCohortAName, text: cohortAText, setText: setCohortAText, accent: 'text-blue-700' },
-              { label: 'B', name: cohortBName, setName: setCohortBName, text: cohortBText, setText: setCohortBText, accent: 'text-red-700' },
-            ].map((c) => (
-              <div key={c.label} className="border border-gray-200 rounded p-3 space-y-2">
-                <input
-                  type="text"
-                  value={c.name}
-                  onChange={(e) => c.setName(e.target.value)}
-                  aria-label={`Cohort ${c.label} name`}
-                  className={`w-full border border-gray-300 rounded px-2 py-1 text-xs font-semibold ${c.accent} focus:outline-none focus:border-blue-500`}
-                />
-                <textarea
-                  value={c.text}
-                  onChange={(e) => c.setText(e.target.value)}
-                  rows={3}
-                  placeholder="PMIDs — paste or upload (max 50,000)"
-                  className="w-full border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-blue-500 resize-y"
-                />
-                <div className="flex items-center gap-3">
-                  <label className="text-xs text-blue-600 hover:underline cursor-pointer">
-                    Upload file
-                    <input type="file" accept=".txt,.csv,.tsv" onChange={handleCohortFile(c.setText)} className="hidden" />
-                  </label>
-                  {c.text.trim() && (
-                    <span className="text-[11px] text-gray-400">{parsePmids(c.text).length.toLocaleString()} valid PMIDs</span>
-                  )}
+          <div className="w-full space-y-2">
+            <div className="grid md:grid-cols-2 gap-3">
+              {cohorts.map((c, idx) => (
+                <div key={idx} className="border border-gray-200 rounded p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={c.name}
+                      onChange={(e) => updateCohort(idx, 'name', e.target.value)}
+                      aria-label={`Cohort ${idx + 1} name`}
+                      className="flex-1 border border-gray-300 rounded px-2 py-1 text-xs font-semibold text-navy focus:outline-none focus:border-blue-500"
+                    />
+                    {cohorts.length > 2 && (
+                      <button
+                        type="button"
+                        onClick={() => removeCohort(idx)}
+                        aria-label={`Remove ${c.name || `cohort ${idx + 1}`}`}
+                        className="text-[11px] text-gray-400 hover:text-red-600 px-1"
+                        title="Remove cohort"
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                  <textarea
+                    value={c.text}
+                    onChange={(e) => updateCohort(idx, 'text', e.target.value)}
+                    rows={3}
+                    placeholder="PMIDs — paste or upload (max 50,000)"
+                    className="w-full border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-blue-500 resize-y"
+                  />
+                  <div className="flex items-center gap-3">
+                    <label className="text-xs text-blue-600 hover:underline cursor-pointer">
+                      Upload file
+                      <input type="file" accept=".txt,.csv,.tsv" onChange={handleCohortFile(idx)} className="hidden" />
+                    </label>
+                    {c.text.trim() && (
+                      <span className="text-[11px] text-gray-400">{parsePmids(c.text).length.toLocaleString()} valid PMIDs</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            {cohorts.length < 5 && (
+              <button type="button" onClick={addCohort} className="text-xs text-blue-600 hover:underline">
+                + Add cohort ({cohorts.length}/5)
+              </button>
+            )}
           </div>
         )}
 
@@ -844,13 +894,13 @@ export default function Dignet() {
 
       {result && (
         <div className="space-y-4">
-          {/* Two-cohort differential header: per-cohort coverage + edge legend + CSV */}
+          {/* N-cohort differential header: per-cohort coverage + edge legend + CSV */}
           {result.mode === 'compare' && (
             <div className="space-y-2">
               <div className="flex gap-3 flex-wrap">
-                {[result.cohortA, result.cohortB].map((c, i) => (
+                {result.cohorts.map((c, i) => (
                   <div key={i} className="bg-white border border-gray-200 rounded px-3 py-1.5 text-xs">
-                    <span className="font-semibold" style={{ color: i === 0 ? COHORT_COLORS['A-only'] : COHORT_COLORS['B-only'] }}>{c.name}</span>
+                    <span className="font-semibold text-navy">{c.name}</span>
                     <span className="text-gray-500 ml-2">
                       {(c.in_db ?? 0).toLocaleString()}/{(c.submitted ?? 0).toLocaleString()} PMIDs in corpus ({c.coverage_pct ?? 0}%)
                     </span>
@@ -859,14 +909,29 @@ export default function Dignet() {
               </div>
               <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-gray-600 bg-white border border-gray-200 rounded px-3 py-1.5">
                 <span className="text-gray-500">Edges:</span>
-                {[['A-only', `${result.cohortA.name} only`, result.counts.aOnly], ['shared', 'Shared', result.counts.shared], ['B-only', `${result.cohortB.name} only`, result.counts.bOnly]].map(([key, label, count]) => (
-                  <span key={key} className="inline-flex items-center gap-1">
-                    <span className="inline-block w-4 h-[3px] rounded-sm" style={{ backgroundColor: COHORT_COLORS[key] }} aria-hidden="true" />
-                    {label} ({count})
-                  </span>
-                ))}
+                {result.n === 2 ? (
+                  [['A-only', `${result.cohorts[0].name} only`, result.counts.aOnly], ['shared', 'Shared', result.counts.shared], ['B-only', `${result.cohorts[1].name} only`, result.counts.bOnly]].map(([key, label, count]) => (
+                    <span key={key} className="inline-flex items-center gap-1">
+                      <span className="inline-block w-4 h-[3px] rounded-sm" style={{ backgroundColor: COHORT_COLORS[key] }} aria-hidden="true" />
+                      {label} ({count})
+                    </span>
+                  ))
+                ) : (
+                  Array.from({ length: result.n }, (_, i) => i + 1).map((cnt) => {
+                    const num = result.diff_edges.filter(e => e.sharedCount === cnt).length
+                    const label = cnt === 1 ? 'Unique to 1' : cnt === result.n ? `Shared by all ${result.n}` : `Shared by ${cnt}`
+                    return (
+                      <span key={cnt} className="inline-flex items-center gap-1">
+                        <span className="inline-block w-4 h-[3px] rounded-sm" style={{ backgroundColor: sharedCountColor(cnt, result.n) }} aria-hidden="true" />
+                        {label} ({num})
+                      </span>
+                    )
+                  })
+                )}
                 <button
-                  onClick={() => downloadCohortCSV(result.diff_edges, result.cohortA.name, result.cohortB.name)}
+                  onClick={() => (result.n === 2
+                    ? downloadCohortCSV(result.diff_edges, result.cohorts[0].name, result.cohorts[1].name)
+                    : downloadNCohortCSV(result.diff_edges, result.cohorts.map(c => c.name)))}
                   className="ml-auto text-blue-600 hover:underline"
                 >
                   Download CSV

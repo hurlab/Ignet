@@ -265,6 +265,7 @@ export default function Dignet() {
   const [covData, setCovData] = useState(null)
   const [covLoading, setCovLoading] = useState(false)
   const [evidencePair, setEvidencePair] = useState(null)
+  const [colorScheme, setColorScheme] = useState('none') // node color scheme (SPEC-COHORT-002)
   const cyInstanceRef = useRef(null)
   const didAutoSearch = useRef(false)
   const abortRef = useRef(null)
@@ -817,7 +818,22 @@ export default function Dignet() {
           <div className="flex gap-4 flex-wrap lg:flex-nowrap">
             {/* Graph */}
             <div className="flex-1 min-w-0">
-              <NetworkGraph elements={elements} onNodeClick={setSelectedNode} onEdgeClick={setEvidencePair} onCyReady={(cy) => { cyInstanceRef.current = cy }} />
+              <div className="flex items-center gap-2 mb-2">
+                <label htmlFor="dignet-color-scheme" className="text-xs text-gray-500">Color nodes by</label>
+                <select
+                  id="dignet-color-scheme"
+                  value={colorScheme}
+                  onChange={(e) => setColorScheme(e.target.value)}
+                  className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
+                >
+                  <option value="none">None (default)</option>
+                  <option value="function">Functional class</option>
+                  <option value="ino">INO interaction category</option>
+                  <option value="degree">Connectivity (degree)</option>
+                  <option value="species">Host vs pathogen</option>
+                </select>
+              </div>
+              <NetworkGraph elements={elements} colorScheme={colorScheme} onNodeClick={setSelectedNode} onEdgeClick={setEvidencePair} onCyReady={(cy) => { cyInstanceRef.current = cy }} />
               {evidencePair && (
                 <EvidencePopup
                   gene1={evidencePair.gene1}

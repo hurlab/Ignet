@@ -2,12 +2,91 @@ import { useState, useCallback, useRef, useMemo, useEffect } from 'react'
 import CytoscapeComponent from 'react-cytoscapejs'
 import cytoscape from 'cytoscape'
 import fcose from 'cytoscape-fcose'
+import { api } from '../api.js'
 
 // Guard against double-registration in HMR / strict-mode environments
 let _fcoseRegistered = false
 if (!_fcoseRegistered) {
   cytoscape.use(fcose)
   _fcoseRegistered = true
+}
+
+// --- Node color schemes (SPEC-COHORT-002) -------------------------------------
+// Only `function` needs a backend call; ino/degree/species are derived from the
+// element data already in the graph. `none` leaves the default styling untouched.
+const SPECIES_COLORS = { host: '#1e3a5f', pathogen: '#0694a2' }
+const DEGREE_LOW = '#bfdbfe'
+const DEGREE_HIGH = '#1e3a5f'
+const INO_FALLBACK = '#cbd5e0'
+const FUNC_FALLBACK = '#c7c7c7' // matches the "Other" bucket color
+
+// A gene node carries no nodeType (entity nodes set drug/disease/ino/cov).
+function isGeneNodeData(d) {
+  return !d.source && !d.nodeType
+}
+
+function geneNodeIds(elements) {
+  return (elements || []).filter(e => isGeneNodeData(e.data)).map(e => e.data.id)
+}
+
+function lerpColor(a, b, t) {
+  const ah = a.replace('#', ''), bh = b.replace('#', '')
+  const ar = parseInt(ah.slice(0, 2), 16), ag = parseInt(ah.slice(2, 4), 16), ab = parseInt(ah.slice(4, 6), 16)
+  const br = parseInt(bh.slice(0, 2), 16), bg = parseInt(bh.slice(2, 4), 16), bb = parseInt(bh.slice(4, 6), 16)
+  const r = Math.round(ar + (br - ar) * t), g = Math.round(ag + (bg - ag) * t), bl = Math.round(ab + (bb - ab) * t)
+  return `#${[r, g, bl].map(x => x.toString(16).padStart(2, '0')).join('')}`
+}
+
+function degreeColor(degree, minDeg, maxDeg) {
+  const span = Math.max(maxDeg - minDeg, 1)
+  return lerpColor(DEGREE_LOW, DEGREE_HIGH, Math.min(1, Math.max(0, (degree - minDeg) / span)))
+}
+
+// Dominant INO category color among a node's incident edges (ignores the
+// neutral/unknown placeholder color), else a fallback.
+function dominantInoColor(node) {
+  const counts = {}
+  node.connectedEdges().forEach(e => {
+    const cat = e.data('ino_category')
+    const col = e.data('ino_color')
+    if (cat && cat !== 'unknown' && col && col !== '#a0aec0') {
+      counts[cat] = counts[cat] || { col, n: 0 }
+      counts[cat].n += 1
+    }
+  })
+  let best = null
+  for (const k of Object.keys(counts)) {
+    if (!best || counts[k].n > counts[best].n) best = k
+  }
+  return best ? counts[best].col : INO_FALLBACK
+}
+
+// Apply node background colors imperatively (no relayout) for the active scheme.
+function applyNodeColors(cy, scheme, funcColorByGene) {
+  if (!cy) return
+  const degrees = cy.nodes().filter(n => isGeneNodeData(n.data())).map(n => n.degree())
+  const minDeg = degrees.length ? Math.min(...degrees) : 0
+  const maxDeg = degrees.length ? Math.max(...degrees) : 1
+  cy.batch(() => {
+    cy.nodes().forEach(node => {
+      const d = node.data()
+      if (scheme === 'none') { node.removeStyle('background-color'); return }
+      if (scheme === 'species') {
+        if (d.nodeType === 'cov') node.style('background-color', SPECIES_COLORS.pathogen)
+        else if (!d.nodeType) node.style('background-color', SPECIES_COLORS.host)
+        else node.removeStyle('background-color')
+        return
+      }
+      // function / ino / degree only recolor gene nodes; entity nodes keep their type color.
+      if (d.nodeType) { node.removeStyle('background-color'); return }
+      let color = null
+      if (scheme === 'function') color = (funcColorByGene && funcColorByGene[node.id()]) || FUNC_FALLBACK
+      else if (scheme === 'ino') color = dominantInoColor(node)
+      else if (scheme === 'degree') color = degreeColor(node.degree(), minDeg, maxDeg)
+      if (color) node.style('background-color', color)
+      else node.removeStyle('background-color')
+    })
+  })
 }
 
 function buildStylesheet(elements) {
@@ -198,11 +277,16 @@ function isGeneGeneEdge(edge) {
   return !srcNodeType && !tgtNodeType
 }
 
-export default function NetworkGraph({ elements, onNodeClick, onEdgeClick, onCyReady }) {
+export default function NetworkGraph({ elements, onNodeClick, onEdgeClick, onCyReady, colorScheme = 'none' }) {
   const [tooltip, setTooltip] = useState(null)
   const [fullscreen, setFullscreen] = useState(false)
+  const [cyReady, setCyReady] = useState(false)
+  const [funcClasses, setFuncClasses] = useState(null)   // {gene: bucket}
+  const [funcLegend, setFuncLegend] = useState([])       // [{bucket, color}]
+  const [funcError, setFuncError] = useState(null)
   const cyRef = useRef(null)
   const containerRef = useRef(null)
+  const funcFetchKeyRef = useRef(null)
 
   const nodeCount = useMemo(() => elements?.filter(e => !e.data.source).length || 0, [elements])
   const edgeCount = useMemo(() => elements?.filter(e => e.data.source).length || 0, [elements])
@@ -220,6 +304,69 @@ export default function NetworkGraph({ elements, onNodeClick, onEdgeClick, onCyR
   }, [elements])
 
   const graphAriaLabel = `Gene interaction network: ${nodeCount} node${nodeCount !== 1 ? 's' : ''}, ${edgeCount} edge${edgeCount !== 1 ? 's' : ''}`
+
+  // Map each gene to its bucket color for the `function` scheme.
+  const funcColorByGene = useMemo(() => {
+    if (!funcClasses) return null
+    const colorByBucket = {}
+    funcLegend.forEach(e => { colorByBucket[e.bucket] = e.color })
+    const out = {}
+    for (const g of Object.keys(funcClasses)) out[g] = colorByBucket[funcClasses[g]] || FUNC_FALLBACK
+    return out
+  }, [funcClasses, funcLegend])
+
+  // Fetch functional classes once per network when the `function` scheme is active.
+  useEffect(() => {
+    if (colorScheme !== 'function') return
+    const ids = geneNodeIds(elements)
+    if (!ids.length) return
+    const key = ids.slice().sort().join(',')
+    if (funcFetchKeyRef.current === key) return // already fetched/fetching for this network
+    funcFetchKeyRef.current = key
+    let cancelled = false
+    api.functionalClasses(ids)
+      .then(res => { if (!cancelled) { setFuncClasses(res.classes || {}); setFuncLegend(res.legend || []); setFuncError(null) } })
+      .catch(() => { if (!cancelled) setFuncError('Could not load functional classes.') })
+    return () => { cancelled = true }
+  }, [colorScheme, elements])
+
+  // Recolor nodes (imperative, no relayout) whenever the scheme, data, or fetched
+  // classes change and the cytoscape instance is ready.
+  useEffect(() => {
+    if (cyRef.current && cyReady) applyNodeColors(cyRef.current, colorScheme, funcColorByGene)
+  }, [colorScheme, funcColorByGene, elements, cyReady])
+
+  // Legend entries for the active scheme (null = no legend, e.g. 'none').
+  const schemeLegend = useMemo(() => {
+    if (colorScheme === 'function') {
+      const present = new Set(funcClasses ? Object.values(funcClasses) : [])
+      const items = funcLegend.filter(e => present.has(e.bucket)).map(e => ({ label: e.bucket, color: e.color }))
+      return items.length ? items : null
+    }
+    if (colorScheme === 'species') {
+      const items = [{ label: 'Host gene (human)', color: SPECIES_COLORS.host }]
+      if ((elements || []).some(e => e.data.nodeType === 'cov')) {
+        items.push({ label: 'SARS-CoV-2 protein', color: SPECIES_COLORS.pathogen })
+      }
+      return items
+    }
+    if (colorScheme === 'degree') {
+      return [{ label: 'Fewer partners', color: DEGREE_LOW }, { label: 'More partners', color: DEGREE_HIGH }]
+    }
+    if (colorScheme === 'ino') {
+      const m = {}
+      ;(elements || []).forEach(e => {
+        if (e.data.source) {
+          const c = e.data.ino_category, col = e.data.ino_color
+          if (c && c !== 'unknown' && col && col !== '#a0aec0') m[c] = col
+        }
+      })
+      const items = Object.entries(m).map(([c, col]) => ({ label: c.replace(/_/g, ' '), color: col }))
+      items.push({ label: 'Other / unknown', color: INO_FALLBACK })
+      return items
+    }
+    return null
+  }, [colorScheme, funcClasses, funcLegend, elements])
 
   // Handle ESC to exit fullscreen
   useEffect(() => {
@@ -299,6 +446,7 @@ ${edges.join('\n')}
   const handleCy = useCallback(
     (cyInstance) => {
       cyRef.current = cyInstance
+      setCyReady(true)
       if (onCyReady) onCyReady(cyInstance)
 
       cyInstance.on('tap', 'node', (evt) => {
@@ -417,6 +565,25 @@ ${edges.join('\n')}
           style={{ left: tooltip.x + 10, top: tooltip.y - 28 }}
         >
           {tooltip.label}
+        </div>
+      )}
+      {/* Active color-scheme legend (SPEC-COHORT-002) */}
+      {schemeLegend && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-2 py-1.5 border-t border-gray-100 bg-white" aria-label="Node color legend">
+          {funcError && colorScheme === 'function' ? (
+            <span className="text-[11px] text-amber-600">{funcError}</span>
+          ) : (
+            schemeLegend.map((item) => (
+              <span key={item.label} className="inline-flex items-center gap-1 text-[11px] text-gray-600">
+                <span
+                  className="inline-block w-3 h-3 rounded-sm border border-gray-300"
+                  style={{ backgroundColor: item.color }}
+                  aria-hidden="true"
+                />
+                {item.label}
+              </span>
+            ))
+          )}
         </div>
       )}
       <div className="flex gap-2 p-2 border-t border-gray-100 flex-wrap items-center bg-white">

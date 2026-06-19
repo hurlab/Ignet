@@ -110,6 +110,11 @@ export const api = {
     body: JSON.stringify(libraries ? { genes, libraries } : { genes }),
     timeout: 60000,
   }),
+  functionalClasses: (genes) => request('/genes/functional-classes', {
+    method: 'POST',
+    body: JSON.stringify({ genes }),
+    timeout: 30000,
+  }),
 
   summarize: (genes) => request('/summarize', {
     method: 'POST',

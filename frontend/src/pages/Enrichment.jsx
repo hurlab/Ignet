@@ -6,6 +6,7 @@ import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
 import EvidencePopup from '../components/EvidencePopup.jsx'
 import AddToSetButton from '../components/AddToSetButton.jsx'
+import PathwayPanel from '../components/PathwayPanel.jsx'
 import { useGeneSet } from '../GeneSetContext.jsx'
 
 const EXAMPLE_GENES = 'TNF, IL6, IFNG, IL1B, IL10'
@@ -640,6 +641,11 @@ export default function Enrichment() {
                 ))}
               </div>
             </div>
+          )}
+
+          {/* Pathway over-representation (GO / KEGG / Reactome) — on demand */}
+          {((inputGenes.length > 1) || (hasFallbackResult && (data.input_genes?.length > 1))) && (
+            <PathwayPanel genes={hasFallbackResult ? data.input_genes : inputGenes} />
           )}
         </div>
       )}

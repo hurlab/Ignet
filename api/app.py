@@ -41,6 +41,7 @@ def create_app() -> Flask:
     from routes.auth import auth_bp
     from routes.admin import admin_bp
     from routes.enrichment import enrichment_bp
+    from routes.pathways import pathways_bp
     from routes.ino import ino_bp
     from routes.assistant import assistant_bp
     from routes.vaccine import vaccine_bp
@@ -54,6 +55,7 @@ def create_app() -> Flask:
     app.register_blueprint(auth_bp, url_prefix="/api/v1")
     app.register_blueprint(admin_bp, url_prefix="/api/v1")
     app.register_blueprint(enrichment_bp, url_prefix="/api/v1")
+    app.register_blueprint(pathways_bp, url_prefix="/api/v1")
     app.register_blueprint(ino_bp, url_prefix="/api/v1")
     app.register_blueprint(assistant_bp, url_prefix="/api/v1")
     app.register_blueprint(vaccine_bp, url_prefix="/api/v1")

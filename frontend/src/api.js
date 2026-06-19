@@ -105,6 +105,11 @@ export const api = {
     }),
 
   enrichment: (genes) => request('/enrichment/analyze', { method: 'POST', body: JSON.stringify({ genes }), timeout: 120000 }),
+  pathwaysAnalyze: (genes, libraries) => request('/pathways/analyze', {
+    method: 'POST',
+    body: JSON.stringify(libraries ? { genes, libraries } : { genes }),
+    timeout: 60000,
+  }),
 
   summarize: (genes) => request('/summarize', {
     method: 'POST',

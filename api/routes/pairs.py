@@ -38,7 +38,11 @@ def pair_trends(sym1, sym2):
         try:
             cached = redis_client.get(cache_key)
             if cached:
-                return jsonify(json.loads(cached))
+                payload = json.loads(cached)
+                # The cache key is order-independent and trends are symmetric, so
+                # relabel gene1/gene2 to the caller's order on a hit.
+                payload["gene1"], payload["gene2"] = s1, s2
+                return jsonify(payload)
         except Exception as exc:  # noqa: BLE001
             logger.warning("Pair trends cache read failed: %s", exc)
 

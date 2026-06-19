@@ -3,26 +3,7 @@ import { useGeneSet } from '../GeneSetContext.jsx'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
-
-function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
-
-function renderMarkdown(text) {
-  if (!text) return null
-  return escapeHtml(text).split('\n').map((line, i) => {
-    line = line.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    line = line.replace(/\*(.+?)\*/g, '<em>$1</em>')
-    line = line.replace(/`(.+?)`/g, '<code class="bg-gray-100 px-1 rounded text-sm">$1</code>')
-    if (line.startsWith('### ')) return <h4 key={i} className="font-semibold text-navy mt-3 mb-1 text-sm">{line.slice(4)}</h4>
-    if (line.startsWith('## ')) return <h3 key={i} className="font-bold text-navy mt-4 mb-1">{line.slice(3)}</h3>
-    const numMatch = line.match(/^(\d+)\.\s+(.*)/)
-    if (numMatch) return <p key={i} className="ml-4 mb-1" dangerouslySetInnerHTML={{ __html: `<span class="text-gray-400 mr-1">${numMatch[1]}.</span>${numMatch[2]}` }} />
-    if (line.startsWith('- ') || line.startsWith('* ')) return <p key={i} className="ml-4 mb-1" dangerouslySetInnerHTML={{ __html: `<span class="text-gray-400 mr-1">&bull;</span>${line.slice(2)}` }} />
-    if (!line.trim()) return <div key={i} className="h-2" />
-    return <p key={i} className="mb-1" dangerouslySetInnerHTML={{ __html: line }} />
-  })
-}
+import { renderMarkdown } from '../markdownUtils.jsx'
 
 function parseGeneInput(text) {
   return text.split(/[\n,\t ]+/).map(g => g.trim().toUpperCase()).filter(g => g.length > 0)

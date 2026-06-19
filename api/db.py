@@ -4,6 +4,7 @@ Provides MySQL connection pool and Redis client with graceful fallback.
 """
 
 import logging
+import time
 from contextlib import contextmanager
 
 import mysql.connector
@@ -83,20 +84,25 @@ def db_connection():
 
 _redis_client: redis_lib.Redis | None = None
 _redis_available: bool | None = None
+_redis_last_fail: float = 0.0
+# After a connection failure, wait this long before probing Redis again, so a
+# transient blip disables caching only briefly instead of for the whole process.
+_REDIS_RETRY_COOLDOWN = 60.0
 
 
 def get_redis() -> redis_lib.Redis | None:
     """
     Return a Redis client instance.
-    Returns None if Redis is unavailable (graceful fallback).
+    Returns None if Redis is unavailable (graceful fallback). After a failure the
+    client is re-probed at most once per _REDIS_RETRY_COOLDOWN seconds.
     """
-    global _redis_client, _redis_available
+    global _redis_client, _redis_available, _redis_last_fail
 
-    # Return cached result (None or client)
-    if _redis_available is False:
-        return None
     if _redis_client is not None:
         return _redis_client
+    # Recently failed → stay disabled until the cooldown elapses, then retry.
+    if _redis_available is False and (time.monotonic() - _redis_last_fail) < _REDIS_RETRY_COOLDOWN:
+        return None
 
     try:
         client = redis_lib.Redis(
@@ -111,6 +117,8 @@ def get_redis() -> redis_lib.Redis | None:
         _redis_available = True
         return _redis_client
     except Exception as exc:
-        logger.warning("Redis unavailable (%s); caching disabled.", exc)
+        if _redis_available is not False:  # log only on the first failure of a streak
+            logger.warning("Redis unavailable (%s); caching disabled, will retry.", exc)
         _redis_available = False
+        _redis_last_fail = time.monotonic()
         return None

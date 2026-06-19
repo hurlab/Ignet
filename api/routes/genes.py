@@ -8,6 +8,7 @@ GET /api/v1/genes/<symbol>/neighbors  - gene interaction neighbors
 GET /api/v1/genes/<symbol>/report     - aggregated gene report card
 """
 
+import hashlib
 import json
 import logging
 import re
@@ -15,6 +16,8 @@ import re
 from flask import Blueprint, jsonify, request
 
 from db import db_connection, get_redis
+from extensions import limiter
+from gene_function import classify_genes, legend as functional_legend
 from utils import sanitize_gene_symbol
 
 logger = logging.getLogger(__name__)
@@ -23,6 +26,50 @@ genes_bp = Blueprint("genes", __name__)
 
 # Co-occurrence evidence-trend cache 24h (data refreshes at most daily).
 _TRENDS_TTL = 86400
+# Functional-class responses derive from static bundled libraries (24h cache).
+_FUNC_CLASS_TTL = 86400
+
+
+@genes_bp.route("/genes/functional-classes", methods=["POST"])
+@limiter.limit("30 per minute")
+def functional_classes():
+    """SPEC-COHORT-001: map a gene list to coarse functional-class buckets.
+
+    Body: {"genes": [...]} (1..500 distinct valid symbols).
+    Returns: {"classes": {GENE: bucket}, "legend": [{bucket, color}, ...]}.
+    """
+    body = request.get_json(silent=True)
+    if not body or "genes" not in body or not isinstance(body["genes"], list):
+        return jsonify({"error": "MissingParameter", "message": "Provide 'genes' array."}), 400
+    raw = body["genes"]
+    if len(raw) > 500:
+        return jsonify({"error": "InvalidInput", "message": "Maximum 500 genes."}), 400
+    genes = [sanitize_gene_symbol(g) for g in raw if g]
+    genes = list(dict.fromkeys(g for g in genes if g))  # drop invalid + de-duplicate
+    if not genes:  # min 1 valid symbol (looser than enrichment's min 2)
+        return jsonify({"error": "InvalidInput", "message": "At least 1 valid gene symbol required."}), 400
+
+    redis_client = get_redis()
+    cache_key = None
+    if redis_client is not None:
+        digest = hashlib.sha1(",".join(sorted(genes)).encode("utf-8")).hexdigest()
+        cache_key = f"funcclass:v1:{digest}"
+        try:
+            cached = redis_client.get(cache_key)
+            if cached:
+                return jsonify(json.loads(cached))
+        except Exception:  # noqa: BLE001 - cache must never break the request
+            logger.warning("functional-classes cache read failed", exc_info=True)
+
+    payload = {"classes": classify_genes(genes), "legend": functional_legend()}
+
+    if redis_client is not None and cache_key:
+        try:
+            redis_client.setex(cache_key, _FUNC_CLASS_TTL, json.dumps(payload))
+        except Exception:  # noqa: BLE001
+            logger.warning("functional-classes cache write failed", exc_info=True)
+
+    return jsonify(payload)
 
 
 @genes_bp.route("/genes/<symbol>/trends", methods=["GET"])

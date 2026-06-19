@@ -61,6 +61,11 @@ def create_app() -> Flask:
     limiter.limit("5 per minute")(app.view_functions["auth.register"])
     limiter.limit("10 per minute")(app.view_functions["auth.login"])
 
+    # Enrichment is the heaviest endpoint (cold calls hold a DB connection for
+    # seconds); cap per-IP to prevent connection/thread-pool exhaustion.
+    limiter.limit("12 per minute")(app.view_functions["enrichment.analyze_gene_set"])
+    limiter.limit("12 per minute")(app.view_functions["enrichment.analyze_gene_set_stream"])
+
     # Health check (exempt from rate limiting)
     @app.route("/api/v1/health", methods=["GET"])
     @limiter.exempt

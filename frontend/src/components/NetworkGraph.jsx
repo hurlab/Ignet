@@ -348,7 +348,7 @@ ${edges.join('\n')}
 
       cyInstance.on('mouseout', 'node', () => setTooltip(null))
     },
-    [onNodeClick, onEdgeClick],
+    [onNodeClick, onEdgeClick, onCyReady],
   )
 
   if (!elements || elements.length === 0) {

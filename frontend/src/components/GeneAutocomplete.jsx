@@ -1,4 +1,4 @@
-import { useState, useRef, useId, useCallback } from 'react'
+import { useState, useRef, useId, useCallback, useEffect } from 'react'
 import { api } from '../api.js'
 
 // @MX:ANCHOR: [AUTO] WAI-ARIA combobox+listbox – consumed by Header, Gene, GenePair
@@ -47,6 +47,9 @@ export default function GeneAutocomplete({
 
   const debounceRef = useRef(null)
   const inputRef = useRef(null)
+
+  // Clear any pending debounce timer on unmount to prevent setState on unmounted component
+  useEffect(() => () => clearTimeout(debounceRef.current), [])
 
   // Stable unique IDs for ARIA relationships
   const uid = useId()

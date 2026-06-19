@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../AuthContext.jsx'
 import { useGeneSet } from '../GeneSetContext.jsx'
@@ -72,12 +72,23 @@ function Dropdown({ group }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   const triggerRef = useRef(null)
+  const menuRef = useRef(null)
   const closeTimer = useRef(null)
+  const openedByKeyboard = useRef(false)
   const location = useLocation()
   const isGroupActive = group.items.some(item => location.pathname.startsWith(item.to))
 
   // Close on navigation
   useEffect(() => { setOpen(false) }, [location.pathname])
+
+  // When menu opens via keyboard, move focus to the first menuitem
+  useEffect(() => {
+    if (open && openedByKeyboard.current) {
+      const firstItem = menuRef.current?.querySelector('[role="menuitem"]')
+      firstItem?.focus()
+      openedByKeyboard.current = false
+    }
+  }, [open])
 
   // Close when focus moves outside the entire dropdown widget
   useEffect(() => {
@@ -116,21 +127,48 @@ function Dropdown({ group }) {
   function handleTriggerKeyDown(e) {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault()
+      openedByKeyboard.current = true
       setOpen(prev => !prev)
     } else if (e.key === 'Escape') {
       setOpen(false)
       triggerRef.current?.focus()
-    } else if (e.key === 'ArrowDown' && !open) {
+    } else if (e.key === 'ArrowDown') {
       e.preventDefault()
+      openedByKeyboard.current = true
       setOpen(true)
     }
   }
+
+  const getMenuItems = useCallback(() => {
+    return Array.from(menuRef.current?.querySelectorAll('[role="menuitem"]') ?? [])
+  }, [])
 
   function handleMenuKeyDown(e) {
     if (e.key === 'Escape') {
       e.preventDefault()
       setOpen(false)
       triggerRef.current?.focus()
+      return
+    }
+    const items = getMenuItems()
+    if (!items.length) return
+    const focused = document.activeElement
+    const currentIndex = items.indexOf(focused)
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      const next = currentIndex < items.length - 1 ? currentIndex + 1 : 0
+      items[next]?.focus()
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      const prev = currentIndex > 0 ? currentIndex - 1 : items.length - 1
+      items[prev]?.focus()
+    } else if (e.key === 'Home') {
+      e.preventDefault()
+      items[0]?.focus()
+    } else if (e.key === 'End') {
+      e.preventDefault()
+      items[items.length - 1]?.focus()
     }
   }
 
@@ -140,7 +178,7 @@ function Dropdown({ group }) {
     <div ref={ref} className="relative" onMouseEnter={handleEnter} onMouseLeave={handleLeave}>
       <button
         ref={triggerRef}
-        aria-haspopup="true"
+        aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
         onClick={() => setOpen(prev => !prev)}
@@ -157,12 +195,20 @@ function Dropdown({ group }) {
         </svg>
       </button>
       {open && (
-        <div id={menuId} className="absolute top-full left-0 pt-1 z-50" onKeyDown={handleMenuKeyDown}>
+        <div
+          id={menuId}
+          role="menu"
+          ref={menuRef}
+          aria-label={group.label}
+          className="absolute top-full left-0 pt-1 z-50"
+          onKeyDown={handleMenuKeyDown}
+        >
           <div className="bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[200px]">
             {group.items.map(item => (
               <NavLink
                 key={item.to}
                 to={item.to}
+                role="menuitem"
                 className={({ isActive }) =>
                   `block px-4 py-2 text-sm transition-colors ${
                     isActive

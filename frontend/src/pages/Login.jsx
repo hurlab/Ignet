@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import { useAuth } from '../AuthContext.jsx'
@@ -11,6 +11,19 @@ export default function Login() {
   const [form, setForm] = useState({ email: '', password: '', username: '', confirm: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  // Refs to the first focusable input in each panel
+  const signinFirstRef = useRef(null)
+  const registerFirstRef = useRef(null)
+
+  // Move focus to the first input of the newly-active panel on tab switch
+  useEffect(() => {
+    if (tab === 'signin') {
+      signinFirstRef.current?.focus()
+    } else {
+      registerFirstRef.current?.focus()
+    }
+  }, [tab])
 
   // If already logged in, show profile info + logout button
   if (auth?.user) {
@@ -133,6 +146,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="signin-email" className={labelClass}>Email</label>
                   <input
+                    ref={signinFirstRef}
                     id="signin-email"
                     type="email"
                     value={form.email}
@@ -180,6 +194,7 @@ export default function Login() {
                 <div>
                   <label htmlFor="reg-username" className={labelClass}>Username</label>
                   <input
+                    ref={registerFirstRef}
                     id="reg-username"
                     type="text"
                     value={form.username}

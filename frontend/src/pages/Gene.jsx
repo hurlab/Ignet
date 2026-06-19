@@ -10,6 +10,7 @@ import EvidencePopup from '../components/EvidencePopup.jsx'
 import TrendChart from '../components/TrendChart.jsx'
 import { cleanTermLabel } from '../termUtils.js'
 import { getCollisionWarning, collisionTooltip } from '../speciesUtils.js'
+import { renderMarkdown } from '../markdownUtils.jsx'
 
 function buildMiniNetwork(gene, neighbors, reportData) {
   if (!gene || !neighbors?.length) return []
@@ -262,8 +263,8 @@ function AiSummarySection({ gene }) {
           {loading && <LoadingSpinner message="Generating AI summary..." />}
           {error && <ErrorMessage message={error} />}
           {summary && (
-            <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">
-              {summary}
+            <div className="text-sm text-gray-700 leading-relaxed">
+              {renderMarkdown(summary)}
             </div>
           )}
         </div>

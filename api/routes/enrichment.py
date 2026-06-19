@@ -2,6 +2,7 @@
 import hashlib
 import json
 import logging
+import threading
 
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
@@ -19,6 +20,13 @@ _CACHE_VERSION = "v1"
 
 # Ordered section names streamed to the client (drives the progress indicator).
 _STAGES = ["interactions", "ino_distribution", "drugs", "diseases"]
+
+# Cap concurrent COLD streams (each holds one pooled DB connection for its
+# lifetime). pool_size is 10; allowing at most 4 in-flight cold streams leaves
+# headroom for the rest of the API and prevents slow-reader pool starvation.
+# Cache hits return before opening a connection and are not gated.
+_MAX_CONCURRENT_STREAMS = 4
+_stream_semaphore = threading.BoundedSemaphore(_MAX_CONCURRENT_STREAMS)
 
 
 def _cache_key(genes):
@@ -45,6 +53,9 @@ def _extract_genes(body):
 
     genes = [sanitize_gene_symbol(g) for g in raw_genes if g]
     genes = [g for g in genes if g]
+    # De-duplicate (order-preserving): the coverage_pct denominator and the
+    # cache key must both use the distinct gene set.
+    genes = list(dict.fromkeys(genes))
     if len(genes) < 2:
         return None, ({"error": "InvalidInput", "message": "At least 2 valid gene symbols required."}, 400)
 
@@ -65,84 +76,90 @@ def _enrichment_sections(conn, genes):
     5.4M-row t_gene_pairs table instead of four). DROP IF EXISTS guards against a
     leftover table on a reused pooled connection.
     """
-    cursor = conn.cursor(dictionary=True)
     placeholders = ",".join(["%s"] * len(genes))
     params = tuple(genes) + tuple(genes)
+    cursor = conn.cursor(dictionary=True)
+    # try/finally guarantees the cursor is released even if a query raises or the
+    # generator is closed early (e.g. streaming client disconnects mid-response).
+    try:
+        cursor.execute("DROP TEMPORARY TABLE IF EXISTS tmp_enrich")
+        cursor.execute(f"""
+            CREATE TEMPORARY TABLE tmp_enrich (INDEX(pmid), INDEX(sentence_id)) AS
+            SELECT pmid, sentence_id, gene_symbol1, gene_symbol2, score
+            FROM t_gene_pairs
+            WHERE gene_symbol1 IN ({placeholders}) AND gene_symbol2 IN ({placeholders})
+        """, params)
 
-    cursor.execute("DROP TEMPORARY TABLE IF EXISTS tmp_enrich")
-    cursor.execute(f"""
-        CREATE TEMPORARY TABLE tmp_enrich (INDEX(pmid), INDEX(sentence_id)) AS
-        SELECT pmid, sentence_id, gene_symbol1, gene_symbol2, score
-        FROM t_gene_pairs
-        WHERE gene_symbol1 IN ({placeholders}) AND gene_symbol2 IN ({placeholders})
-    """, params)
+        # 1. Pairwise interactions among the input genes
+        cursor.execute("""
+            SELECT gene_symbol1 AS gene1, gene_symbol2 AS gene2,
+                   COUNT(*) AS evidence_count, COUNT(DISTINCT pmid) AS unique_pmids,
+                   CAST(MAX(score) AS DOUBLE) AS max_score
+            FROM tmp_enrich
+            GROUP BY gene_symbol1, gene_symbol2
+        """)
+        interactions = cursor.fetchall()
+        found_genes = set()
+        for i in interactions:
+            found_genes.add(i["gene1"])
+            found_genes.add(i["gene2"])
+        coverage = len(found_genes)
+        meta = {
+            "coverage": coverage,
+            "coverage_pct": round(coverage / len(genes) * 100, 1) if genes else 0,
+            "total_interactions": len(interactions),
+        }
+        yield ("section", "interactions", interactions, meta)
 
-    # 1. Pairwise interactions among the input genes
-    cursor.execute("""
-        SELECT gene_symbol1 AS gene1, gene_symbol2 AS gene2,
-               COUNT(*) AS evidence_count, COUNT(DISTINCT pmid) AS unique_pmids,
-               CAST(MAX(score) AS DOUBLE) AS max_score
-        FROM tmp_enrich
-        GROUP BY gene_symbol1, gene_symbol2
-    """)
-    interactions = cursor.fetchall()
-    found_genes = set()
-    for i in interactions:
-        found_genes.add(i["gene1"])
-        found_genes.add(i["gene2"])
-    coverage = len(found_genes)
-    meta = {
-        "coverage": coverage,
-        "coverage_pct": round(coverage / len(genes) * 100, 1) if genes else 0,
-        "total_interactions": len(interactions),
-    }
-    yield ("section", "interactions", interactions, meta)
+        # 2. INO distribution for these interactions
+        cursor.execute("""
+            SELECT ino.matching_phrase AS term, COUNT(*) AS cnt
+            FROM tmp_enrich h
+            JOIN t_ino ino ON ino.sentence_id = h.sentence_id
+            GROUP BY ino.matching_phrase ORDER BY cnt DESC LIMIT 20
+        """)
+        ino_distribution = [dict(r) for r in cursor.fetchall()]
+        yield ("section", "ino_distribution", ino_distribution, None)
 
-    # 2. INO distribution for these interactions
-    cursor.execute("""
-        SELECT ino.matching_phrase AS term, COUNT(*) AS cnt
-        FROM tmp_enrich h
-        JOIN t_ino ino ON ino.sentence_id = h.sentence_id
-        GROUP BY ino.matching_phrase ORDER BY cnt DESC LIMIT 20
-    """)
-    ino_distribution = [dict(r) for r in cursor.fetchall()]
-    yield ("section", "ino_distribution", ino_distribution, None)
+        # 3. Drug associations
+        cursor.execute("""
+            SELECT b.drug_term AS term, COUNT(*) AS cnt
+            FROM tmp_enrich h
+            JOIN t_biosummary b ON b.pmid = h.pmid
+            WHERE b.drug_term IS NOT NULL AND b.drug_term != ''
+            GROUP BY b.drug_term ORDER BY cnt DESC LIMIT 20
+        """)
+        drugs = [dict(r) for r in cursor.fetchall()]
+        yield ("section", "drugs", drugs, None)
 
-    # 3. Drug associations
-    cursor.execute("""
-        SELECT b.drug_term AS term, COUNT(*) AS cnt
-        FROM tmp_enrich h
-        JOIN t_biosummary b ON b.pmid = h.pmid
-        WHERE b.drug_term IS NOT NULL AND b.drug_term != ''
-        GROUP BY b.drug_term ORDER BY cnt DESC LIMIT 20
-    """)
-    drugs = [dict(r) for r in cursor.fetchall()]
-    yield ("section", "drugs", drugs, None)
+        # 4. Disease associations
+        cursor.execute("""
+            SELECT b.hdo_term AS term, COUNT(*) AS cnt
+            FROM tmp_enrich h
+            JOIN t_biosummary b ON b.pmid = h.pmid
+            WHERE b.hdo_term IS NOT NULL AND b.hdo_term != ''
+            GROUP BY b.hdo_term ORDER BY cnt DESC LIMIT 20
+        """)
+        diseases = [dict(r) for r in cursor.fetchall()]
+        yield ("section", "diseases", diseases, None)
 
-    # 4. Disease associations
-    cursor.execute("""
-        SELECT b.hdo_term AS term, COUNT(*) AS cnt
-        FROM tmp_enrich h
-        JOIN t_biosummary b ON b.pmid = h.pmid
-        WHERE b.hdo_term IS NOT NULL AND b.hdo_term != ''
-        GROUP BY b.hdo_term ORDER BY cnt DESC LIMIT 20
-    """)
-    diseases = [dict(r) for r in cursor.fetchall()]
-    yield ("section", "diseases", diseases, None)
+        cursor.execute("DROP TEMPORARY TABLE IF EXISTS tmp_enrich")
 
-    cursor.execute("DROP TEMPORARY TABLE IF EXISTS tmp_enrich")
-    cursor.close()
-
-    yield ("result", {
-        "input_genes": genes,
-        "coverage": meta["coverage"],
-        "coverage_pct": meta["coverage_pct"],
-        "interactions": interactions,
-        "total_interactions": meta["total_interactions"],
-        "ino_distribution": ino_distribution,
-        "drugs": drugs,
-        "diseases": diseases,
-    })
+        yield ("result", {
+            "input_genes": genes,
+            "coverage": meta["coverage"],
+            "coverage_pct": meta["coverage_pct"],
+            "interactions": interactions,
+            "total_interactions": meta["total_interactions"],
+            "ino_distribution": ino_distribution,
+            "drugs": drugs,
+            "diseases": diseases,
+        })
+    finally:
+        try:
+            cursor.close()
+        except Exception:  # noqa: BLE001 - cursor cleanup must never raise
+            pass
 
 
 def _section_event_from_result(result, name):
@@ -246,17 +263,28 @@ def analyze_gene_set_stream():
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Enrichment cache read failed: %s", exc)
 
+            # Cold path holds a pooled connection for the whole stream — bound
+            # how many can run at once so slow readers can't starve the pool.
+            if not _stream_semaphore.acquire(blocking=False):
+                yield event({"type": "error",
+                             "message": "Server is busy computing analyses. Please retry in a moment."})
+                return
+
             result = None
-            with db_connection() as conn:
-                for item in _enrichment_sections(conn, genes):
-                    if item[0] == "section":
-                        _, name, data, meta = item
-                        evt = {"type": "section", "name": name, "data": data}
-                        if meta:
-                            evt["meta"] = meta
-                        yield event(evt)
-                    else:
-                        result = item[1]
+            try:
+                with db_connection() as conn:
+                    for item in _enrichment_sections(conn, genes):
+                        if item[0] == "section":
+                            _, name, data, meta = item
+                            evt = {"type": "section", "name": name, "data": data}
+                            if meta:
+                                evt["meta"] = meta
+                            yield event(evt)
+                        else:
+                            result = item[1]
+            finally:
+                # Released even if the client disconnects mid-stream (GeneratorExit).
+                _stream_semaphore.release()
 
             if redis_client and result is not None:
                 try:

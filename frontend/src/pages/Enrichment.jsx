@@ -180,7 +180,7 @@ function StreamProgress({ stageStatus }) {
             <li key={key} className="flex items-center gap-1.5 text-xs">
               {status === 'done' && (
                 <span
-                  aria-label={`${label} complete`}
+                  aria-hidden="true"
                   className="flex-shrink-0 w-4 h-4 rounded-full bg-green-500 flex items-center justify-center"
                 >
                   {/* checkmark */}
@@ -191,16 +191,14 @@ function StreamProgress({ stageStatus }) {
               )}
               {status === 'loading' && (
                 <span
-                  aria-label={`${label} loading`}
+                  aria-hidden="true"
                   className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-blue-500 border-t-transparent animate-spin"
-                  aria-hidden="false"
                 />
               )}
               {status === 'pending' && (
                 <span
-                  aria-label={`${label} pending`}
+                  aria-hidden="true"
                   className="flex-shrink-0 w-4 h-4 rounded-full border-2 border-gray-300 bg-gray-50"
-                  aria-hidden="false"
                 />
               )}
               <span className={
@@ -379,12 +377,10 @@ export default function Enrichment() {
       didAutoAnalyze.current = true
       const geneText = genesParam.replace(/,/g, ', ')
       setInput(geneText)
-      setTimeout(() => {
-        const genes = parseGeneInput(geneText)
-        if (genes.length >= 2) {
-          runAnalysis(genes)
-        }
-      }, 0)
+      const genes = parseGeneInput(geneText)
+      if (genes.length >= 2) {
+        runAnalysis(genes)
+      }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

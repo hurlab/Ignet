@@ -3,6 +3,7 @@ import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import { renderMarkdown } from '../markdownUtils.jsx'
+import GeneAutocomplete from '../components/GeneAutocomplete.jsx'
 
 function GeneTag({ symbol, onRemove }) {
   return (
@@ -21,7 +22,6 @@ function GeneTag({ symbol, onRemove }) {
 
 export default function BioSummarAI() {
   const [geneInput, setGeneInput] = useState('')
-  const [suggestions, setSuggestions] = useState([])
   const [selectedGenes, setSelectedGenes] = useState([])
   const [summarizing, setSummarizing] = useState(false)
   const [summary, setSummary] = useState(null)
@@ -31,29 +31,10 @@ export default function BioSummarAI() {
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const chatEndRef = useRef(null)
-  const debounceRef = useRef(null)
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [chatMessages])
-
-  function handleGeneInputChange(e) {
-    const val = e.target.value
-    setGeneInput(val)
-    clearTimeout(debounceRef.current)
-    if (val.trim().length >= 2) {
-      debounceRef.current = setTimeout(async () => {
-        try {
-          const res = await api.searchGenes(val.trim())
-          setSuggestions(Array.isArray(res) ? res.slice(0, 8) : (res?.data ?? res?.genes ?? []))
-        } catch {
-          setSuggestions([])
-        }
-      }, 300)
-    } else {
-      setSuggestions([])
-    }
-  }
 
   function addGene(sym) {
     const s = (typeof sym === 'string' ? sym : sym?.Symbol ?? sym?.symbol ?? sym?.gene ?? String(sym)).toUpperCase()
@@ -61,18 +42,10 @@ export default function BioSummarAI() {
       setSelectedGenes((prev) => [...prev, s])
     }
     setGeneInput('')
-    setSuggestions([])
   }
 
   function removeGene(sym) {
     setSelectedGenes((prev) => prev.filter((g) => g !== sym))
-  }
-
-  function handleGeneKeyDown(e) {
-    if (e.key === 'Enter' && geneInput.trim()) {
-      e.preventDefault()
-      addGene(geneInput.trim())
-    }
   }
 
   async function handleSummarize(explicitGenes) {
@@ -153,34 +126,14 @@ export default function BioSummarAI() {
       <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-3">
         <h2 className="font-semibold text-gray-700 text-sm">Select Genes</h2>
 
-        <div className="relative">
-          <input
-            type="text"
-            value={geneInput}
-            onChange={handleGeneInputChange}
-            onKeyDown={handleGeneKeyDown}
-            placeholder="Type a gene symbol and press Enter..."
-            className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
-          />
-          {suggestions.length > 0 && (
-            <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg mt-0.5 max-h-48 overflow-y-auto">
-              {suggestions.map((s, i) => {
-                const sym = typeof s === 'string' ? s : s?.Symbol ?? s?.symbol ?? s?.gene ?? String(s)
-                return (
-                  <button
-                    key={i}
-                    onClick={() => addGene(s)}
-                    className="w-full text-left px-3 py-1.5 text-xs hover:bg-blue-50 transition-colors"
-                  >
-                    {typeof s === 'object' && s !== null
-                      ? <><span className="font-medium">{s.Symbol}</span>{s.description ? <span className="text-gray-500 ml-1">— {s.description}</span> : null}</>
-                      : sym}
-                  </button>
-                )
-              })}
-            </div>
-          )}
-        </div>
+        <GeneAutocomplete
+          value={geneInput}
+          onChange={(e) => setGeneInput(e.target.value)}
+          onSelect={(sym) => addGene(sym)}
+          placeholder="Type a gene symbol and press Enter..."
+          aria-label="Add a gene to the set"
+          inputClassName="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
+        />
 
         {selectedGenes.length > 0 && (
           <div className="flex flex-wrap gap-1.5">

@@ -37,13 +37,11 @@ export default function EvidencePopup({ gene1, gene2, onClose }) {
   const previousFocusRef = useRef(null)
   const dialogRef = useRef(null)
 
-  // Capture focus target on mount
+  // Capture previous focus, move focus into dialog, and restore on unmount.
+  // previousFocusRef is captured as the very first statement so it is always
+  // the element that was active when the popup mounted.
   useEffect(() => {
     previousFocusRef.current = document.activeElement
-  }, [])
-
-  // Move focus into dialog after mount; restore on unmount
-  useEffect(() => {
     const timer = setTimeout(() => {
       dialogRef.current?.focus()
     }, 0)
@@ -53,10 +51,35 @@ export default function EvidencePopup({ gene1, gene2, onClose }) {
     }
   }, [])
 
-  // Close on Escape key
+  // Close on Escape; trap Tab/Shift+Tab inside the dialog.
   useEffect(() => {
     function handleKey(e) {
-      if (e.key === 'Escape') onClose()
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
+      if (e.key !== 'Tab') return
+      const dialog = dialogRef.current
+      if (!dialog) return
+      const focusable = Array.from(
+        dialog.querySelectorAll(
+          'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => el.offsetParent !== null) // skip hidden elements
+      if (focusable.length === 0) { e.preventDefault(); return }
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (e.shiftKey) {
+        if (document.activeElement === first) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else {
+        if (document.activeElement === last) {
+          e.preventDefault()
+          first.focus()
+        }
+      }
     }
     document.addEventListener('keydown', handleKey)
     return () => document.removeEventListener('keydown', handleKey)
@@ -191,14 +214,18 @@ export default function EvidencePopup({ gene1, gene2, onClose }) {
                   <div className="flex items-center gap-2 flex-wrap">
                     <ScoreBadge score={row.score} />
                     {row.pmid && (
-                      <a
-                        href={`https://pubmed.ncbi.nlm.nih.gov/${row.pmid}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-blue-600 hover:underline font-mono"
-                      >
-                        PMID:{row.pmid}
-                      </a>
+                      Number.isInteger(Number(row.pmid)) ? (
+                        <a
+                          href={`https://pubmed.ncbi.nlm.nih.gov/${encodeURIComponent(row.pmid)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-blue-600 hover:underline font-mono"
+                        >
+                          PMID:{row.pmid}
+                        </a>
+                      ) : (
+                        <span className="font-mono text-gray-500">PMID:{row.pmid}</span>
+                      )
                     )}
                     {row.matching_phrase && (
                       <span className="bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded">

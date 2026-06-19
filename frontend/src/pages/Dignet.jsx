@@ -576,7 +576,7 @@ export default function Dignet() {
       <div>
         <h1 className="text-xl font-bold text-navy mb-1">Dignet</h1>
         <p className="text-gray-500 text-xs">
-          Build a gene co-occurrence network from PubMed — search by keywords, or paste/upload your own list of PMIDs. Toggle the CoV-protein overlay to see coronavirus proteins linked to host genes.
+          Build a gene co-occurrence network from PubMed — search by keywords, or paste/upload your own list of PMIDs. Toggle the CoV-protein overlay to see SARS-CoV-2 viral proteins connected to human host genes (two different organisms in one view).
         </p>
       </div>
 
@@ -801,7 +801,20 @@ export default function Dignet() {
                   {visibleCategories.drugs && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-green-500 rotate-45"></span> Drug</span>}
                   {visibleCategories.diseases && <span className="flex items-center gap-1"><span className="inline-block w-0 h-0 border-l-[6px] border-r-[6px] border-b-[10px] border-transparent border-b-red-500"></span> Disease</span>}
                   {visibleCategories.ino && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-purple-500 rounded-sm"></span> INO Type</span>}
-                  {visibleCategories.cov && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3" style={{ backgroundColor: '#0694a2', clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' }}></span> CoV protein</span>}
+                  {visibleCategories.cov && (
+                    <>
+                      <span className="flex items-center gap-1">
+                        <span
+                          className="inline-block w-3 h-3"
+                          style={{ backgroundColor: '#0694a2', clipPath: 'polygon(50% 0%, 100% 38%, 82% 100%, 18% 100%, 0% 38%)' }}
+                          aria-hidden="true"
+                        />
+                        SARS-CoV-2 protein (viral)
+                      </span>
+                      <span className="text-gray-300">|</span>
+                      <span className="text-gray-400 italic">Overlay mixes human (host) genes with viral proteins</span>
+                    </>
+                  )}
                   <span className="text-gray-300">|</span>
                   <span className="text-gray-400">Dashed edges = entity associations</span>
                 </div>

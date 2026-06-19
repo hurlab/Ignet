@@ -9,6 +9,7 @@ import GeneAutocomplete from '../components/GeneAutocomplete.jsx'
 import EvidencePopup from '../components/EvidencePopup.jsx'
 import TrendChart from '../components/TrendChart.jsx'
 import { cleanTermLabel } from '../termUtils.js'
+import { getCollisionWarning, collisionTooltip } from '../speciesUtils.js'
 
 function buildMiniNetwork(gene, neighbors, reportData) {
   if (!gene || !neighbors?.length) return []
@@ -275,6 +276,11 @@ function ReportCard({ reportData, gene }) {
   if (!reportData) return null
 
   const info = reportData.gene_info
+  // Species collision check — uses the viewed gene symbol (info.Symbol preferred, falls
+  // back to the query string) so it works even when gene_info is partial.
+  const symbol = info?.Symbol || gene || ''
+  const collision = getCollisionWarning(symbol)
+  const collisionMsg = collision ? collisionTooltip(symbol) : ''
 
   return (
     <div className="space-y-4">
@@ -289,12 +295,36 @@ function ReportCard({ reportData, gene }) {
             {info.chromosome && (
               <span className="text-[11px] bg-blue-50 text-navy px-2 py-0.5 rounded">Chr {info.chromosome}</span>
             )}
+            {/* Species tag — shown for every gene in the (human-only) gene table */}
+            <span
+              className="text-[11px] bg-green-50 text-green-700 border border-green-200 px-2 py-0.5 rounded"
+              aria-label="This gene is a human (host) gene"
+            >
+              Human (host)
+            </span>
+            {/* Collision warning — shown only for the 6 known symbol collisions */}
+            {collision && (
+              <span
+                className="text-[11px] bg-amber-50 text-amber-700 border border-amber-300 px-2 py-0.5 rounded font-medium cursor-help"
+                title={collisionMsg}
+                aria-label={`Pathogen name-collision warning: ${collisionMsg}`}
+                role="note"
+              >
+                &#9888; Pathogen name-collision
+              </span>
+            )}
           </div>
           {info.description && (
             <p className="text-sm text-gray-600 mt-1">{info.description}</p>
           )}
           {info.Synonyms && (
             <p className="text-xs text-gray-400 mt-1">Synonyms: {info.Synonyms}</p>
+          )}
+          {/* Inline collision explanation — visible without hover, keeps the warning unambiguous */}
+          {collision && (
+            <p className="text-[11px] text-amber-600 mt-2 leading-snug">
+              <strong>Note:</strong> {collisionMsg}
+            </p>
           )}
         </div>
       )}

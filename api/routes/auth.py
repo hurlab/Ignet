@@ -24,6 +24,7 @@ from auth_utils import (
     hash_password,
 )
 from db import db_connection
+from extensions import limiter
 from middleware import require_auth, track_usage
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 @auth_bp.route("/auth/register", methods=["POST"])
+@limiter.limit("5 per minute")
 def register():
     """Register a new user account and return a JWT."""
     body = request.get_json(silent=True)
@@ -91,6 +93,7 @@ def register():
 
 
 @auth_bp.route("/auth/login", methods=["POST"])
+@limiter.limit("10 per minute")
 def login():
     """Authenticate an existing user and return a JWT."""
     body = request.get_json(silent=True)

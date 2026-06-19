@@ -1,0 +1,7 @@
+# Development/test dependencies for the Ignet REST API.
+# Install alongside requirements.txt:  pip install -r requirements-dev.txt
+# Run tests from the api/ directory:    pytest
+
+-r requirements.txt
+
+pytest>=8.0

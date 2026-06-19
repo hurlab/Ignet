@@ -5,8 +5,9 @@ Flask application factory for the Ignet REST API.
 import logging
 from flask import Flask, jsonify
 from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
+
+from extensions import limiter
 
 
 def create_app() -> Flask:
@@ -14,13 +15,15 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.config["MAX_CONTENT_LENGTH"] = 10 * 1024 * 1024  # 10 MB
 
-    # Rate limiting — in-memory storage (resets on restart, fine for single-server)
-    limiter = Limiter(
-        get_remote_address,
-        app=app,
-        default_limits=["60 per minute"],
-        storage_uri="memory://",
-    )
+    # Behind Apache reverse proxy → waitress. Without this, get_remote_address
+    # sees 127.0.0.1 (the proxy) for every request, collapsing all clients into
+    # one rate-limit bucket. Trust exactly one proxy hop's X-Forwarded-For.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
+
+    # Rate limiting — in-memory storage (resets on restart, fine for single-server).
+    # The Limiter singleton lives in extensions.py so blueprint route modules can
+    # decorate endpoints directly with @limiter.limit(...).
+    limiter.init_app(app)
     app.limiter = limiter
 
     # Enable CORS for all /api/* routes — restricted to known origins
@@ -57,14 +60,10 @@ def create_app() -> Flask:
     app.register_blueprint(vaccine_bp, url_prefix="/api/v1")
     app.register_blueprint(mcp_bp, url_prefix="/api/v1")
 
-    # Stricter rate limits on auth endpoints
-    limiter.limit("5 per minute")(app.view_functions["auth.register"])
-    limiter.limit("10 per minute")(app.view_functions["auth.login"])
-
-    # Enrichment is the heaviest endpoint (cold calls hold a DB connection for
-    # seconds); cap per-IP to prevent connection/thread-pool exhaustion.
-    limiter.limit("12 per minute")(app.view_functions["enrichment.analyze_gene_set"])
-    limiter.limit("12 per minute")(app.view_functions["enrichment.analyze_gene_set_stream"])
+    # Per-endpoint rate limits are applied via @limiter.limit decorators at the
+    # route definitions (routes/auth.py, routes/enrichment.py). Applying them
+    # here against app.view_functions[...] does not take effect in
+    # flask-limiter 4.1.1.
 
     # Health check (exempt from rate limiting)
     @app.route("/api/v1/health", methods=["GET"])

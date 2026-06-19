@@ -7,6 +7,7 @@ import threading
 from flask import Blueprint, Response, jsonify, request, stream_with_context
 
 from db import db_connection, get_redis
+from extensions import limiter
 from utils import sanitize_gene_symbol
 
 logger = logging.getLogger(__name__)
@@ -178,6 +179,7 @@ def _section_event_from_result(result, name):
 
 
 @enrichment_bp.route("/enrichment/analyze", methods=["POST"])
+@limiter.limit("12 per minute")
 def analyze_gene_set():
     """
     Analyze a set of genes for pairwise interactions, INO distribution,
@@ -221,6 +223,7 @@ def analyze_gene_set():
 
 
 @enrichment_bp.route("/enrichment/analyze/stream", methods=["POST"])
+@limiter.limit("12 per minute")
 def analyze_gene_set_stream():
     """
     Streaming variant of /enrichment/analyze. Emits newline-delimited JSON

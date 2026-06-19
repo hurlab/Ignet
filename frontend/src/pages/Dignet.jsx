@@ -230,8 +230,20 @@ function parsePmids(rawText) {
 const MAX_UPLOAD_PMIDS = 50000
 const MAX_PMID_FILE_BYTES = 10 * 1024 * 1024 // 10 MB
 
+// Build a shareable query string for a keyword search; only non-default filters
+// are included so a plain search stays a clean ?q=... permalink.
+function dignetUrlParams(q, lim, filters) {
+  const p = { q }
+  if (lim && lim !== 100) p.limit = String(lim)
+  if (filters?.ino_type) p.ino = filters.ino_type
+  if (filters?.has_vaccine) p.vaccine = '1'
+  if (filters?.year_min && filters.year_min !== 1975) p.ymin = String(filters.year_min)
+  if (filters?.year_max && filters.year_max !== 2026) p.ymax = String(filters.year_max)
+  return p
+}
+
 export default function Dignet() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [query, setQuery] = useState(searchParams.get('q') ?? '')
   const [inputMode, setInputMode] = useState('keywords') // 'keywords' | 'pmids'
   const [pmidText, setPmidText] = useState('')
@@ -257,6 +269,10 @@ export default function Dignet() {
   const didAutoSearch = useRef(false)
   const abortRef = useRef(null)
   const yearDebounceRef = useRef(null)
+  // Latest filter state, read when syncing the URL (avoids stale closures in
+  // runSearch without widening its dependency list).
+  const filterStateRef = useRef({})
+  filterStateRef.current = { limit, inoFilter, vaccineOnly, yearMin, yearMax }
 
   // Apply highlight/fade to Cytoscape graph when entity is selected
   useEffect(() => {
@@ -343,6 +359,18 @@ export default function Dignet() {
       const data = raw?.data ?? raw
       setResult(data)
 
+      // Reflect this keyword search in the URL so it is shareable/bookmarkable
+      // (replace: filter tweaks refine the same search, not new history entries).
+      const fs = filterStateRef.current
+      const urlFilters = {
+        ino_type: activeFilters.ino_type ?? fs.inoFilter,
+        has_vaccine: activeFilters.has_vaccine ?? fs.vaccineOnly,
+        year_min: activeFilters.year_min ?? fs.yearMin,
+        year_max: activeFilters.year_max ?? fs.yearMax,
+      }
+      didAutoSearch.current = q // keep the auto-search guard in sync with the URL
+      setSearchParams(dignetUrlParams(q, searchLimit ?? fs.limit, urlFilters), { replace: true })
+
       // Fetch entities only for new queries (not filter changes)
       const queryId = data.query_id
       if (queryId && isNewQuery) {
@@ -358,7 +386,7 @@ export default function Dignet() {
     } finally {
       setLoading(false)
     }
-  }, [query, limit, inoFilter, vaccineOnly])
+  }, [query, limit, inoFilter, vaccineOnly, setSearchParams])
 
   const runPmidSearch = useCallback(async () => {
     const pmids = parsePmids(pmidText)
@@ -443,13 +471,24 @@ export default function Dignet() {
     }
   }, [inoFilter, vaccineOnly]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Auto-search when URL contains ?q= (on mount or when query param changes)
+  // Auto-search when URL contains ?q= (on mount, shared link, or back/forward),
+  // restoring any persisted filters so a shared URL reproduces the same view.
   useEffect(() => {
     const q = searchParams.get('q')
     if (q && q !== didAutoSearch.current) {
       didAutoSearch.current = q
+      const lim = Number(searchParams.get('limit')) || 100
+      const ino = searchParams.get('ino') || ''
+      const vac = searchParams.get('vaccine') === '1'
+      const ymin = Number(searchParams.get('ymin')) || 1975
+      const ymax = Number(searchParams.get('ymax')) || 2026
       setQuery(q)
-      runSearch(q, limit, { ino_type: '', has_vaccine: false })
+      setLimit(lim)
+      setInoFilter(ino)
+      setVaccineOnly(vac)
+      setYearMin(ymin)
+      setYearMax(ymax)
+      runSearch(q, lim, { ino_type: ino, has_vaccine: vac, year_min: ymin, year_max: ymax })
     }
   }, [searchParams]) // eslint-disable-line react-hooks/exhaustive-deps
 

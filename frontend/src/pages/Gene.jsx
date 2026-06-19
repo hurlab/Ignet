@@ -420,27 +420,40 @@ export default function Gene() {
       .finally(() => setTrendsLoading(false))
   }
 
-  // Auto-search if query param provided
-  useEffect(() => {
-    if (searchParams.get('q')) {
-      const sym = searchParams.get('q').trim().toUpperCase()
-      if (sym) {
-        setQuery(sym)
-        fetchGeneData(sym)
-      }
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // The ?q= URL param is the single source of truth for which gene is shown.
+  const qParam = (searchParams.get('q') ?? '').trim().toUpperCase()
 
-  async function handleSearch(e) {
-    e?.preventDefault()
-    const sym = query.trim().toUpperCase()
-    if (!sym) return
-    await fetchGeneData(sym)
+  // Fetch whenever ?q= changes — covers first load, in-page navigation, AND
+  // browser back/forward (which only change the URL). Makes every report a
+  // shareable permalink.
+  useEffect(() => {
+    if (qParam) {
+      setQuery(qParam)
+      fetchGeneData(qParam)
+    } else {
+      // Navigated back to bare /gene — clear the report.
+      setQuery('')
+      setGene(null)
+      setReportData(null)
+      setNeighbors([])
+      setError(null)
+    }
+  }, [qParam]) // fetchGeneData is intentionally not a dep; qParam drives it
+
+  // Navigate to a gene by pushing ?q= (records a history entry so Back works).
+  function goToGene(sym) {
+    const s = (sym ?? '').trim().toUpperCase()
+    if (!s) return
+    if (s === qParam) {
+      fetchGeneData(s) // same gene → manual refresh (URL unchanged, effect won't fire)
+      return
+    }
+    navigate(`/gene?q=${encodeURIComponent(s)}`)
   }
 
-  function searchGene(sym) {
-    setQuery(sym)
-    fetchGeneData(sym)
+  function handleSearch(e) {
+    e?.preventDefault()
+    goToGene(query)
   }
 
   const miniNetworkElements = useMemo(
@@ -463,7 +476,7 @@ export default function Gene() {
             label="Gene Symbol"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            onSelect={(sym) => { setQuery(sym); searchGene(sym) }}
+            onSelect={(sym) => { setQuery(sym); goToGene(sym) }}
             placeholder="e.g. IFNG, TP53, BRCA1"
             inputClassName="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
             debounceMs={300}
@@ -489,7 +502,7 @@ export default function Gene() {
             {['BRCA1', 'TP53', 'IFNG', 'TNF', 'IL6'].map((g) => (
               <button
                 key={g}
-                onClick={() => { setQuery(g); searchGene(g) }}
+                onClick={() => goToGene(g)}
                 className="bg-blue-50 text-navy text-xs font-medium px-3 py-1.5 rounded-full hover:bg-blue-100 transition-colors"
               >
                 {g}
@@ -534,8 +547,7 @@ export default function Gene() {
             onNodeClick={(nodeData) => {
               const nodeId = typeof nodeData === 'string' ? nodeData : nodeData?.id
               if (nodeId && nodeId !== gene) {
-                setQuery(nodeId)
-                fetchGeneData(nodeId)
+                goToGene(nodeId)
               }
             }}
             onEdgeClick={setEvidencePair}
@@ -601,7 +613,7 @@ export default function Gene() {
                       </td>
                       <td className="px-3 py-1.5 flex gap-2">
                         <button
-                          onClick={() => searchGene(sym)}
+                          onClick={() => goToGene(sym)}
                           className="text-blue-600 hover:underline text-[11px]"
                         >
                           View

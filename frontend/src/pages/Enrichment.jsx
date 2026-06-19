@@ -5,6 +5,7 @@ import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
 import EvidencePopup from '../components/EvidencePopup.jsx'
+import AddToSetButton from '../components/AddToSetButton.jsx'
 import { useGeneSet } from '../GeneSetContext.jsx'
 
 const EXAMPLE_GENES = 'TNF, IL6, IFNG, IL1B, IL10'
@@ -623,7 +624,10 @@ export default function Enrichment() {
           {/* Gene list with links — shown once inputGenes is known (from 'start' event or fallback) */}
           {((inputGenes.length > 0) || hasFallbackResult) && (
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <h3 className="text-sm font-semibold text-navy mb-3">Input Genes</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-navy">Input Genes</h3>
+                <AddToSetButton genes={hasFallbackResult ? data.input_genes : inputGenes} label="Add all to Gene Set" />
+              </div>
               <div className="flex flex-wrap gap-1.5">
                 {(hasFallbackResult ? data.input_genes : inputGenes).map((gene) => (
                   <Link

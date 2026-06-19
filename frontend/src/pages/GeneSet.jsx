@@ -2,8 +2,16 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useGeneSet } from '../GeneSetContext.jsx'
 
+const MAX_IMPORT_BYTES = 5 * 1024 * 1024 // 5 MB
+
+// Common header/label tokens to drop when importing a CSV/TSV column.
+const IMPORT_STOPWORDS = new Set(['SYMBOL', 'GENE', 'GENES', 'GENE_SYMBOL', 'NAME', 'ID'])
+
 function parseGeneInput(text) {
-  return text.split(/[\n,\t ]+/).map(g => g.trim().toUpperCase()).filter(g => g.length > 0)
+  return text
+    .split(/[\n,\t ]+/)
+    .map(g => g.trim().toUpperCase())
+    .filter(g => g.length > 0 && !IMPORT_STOPWORDS.has(g))
 }
 
 export default function GeneSet() {
@@ -20,13 +28,35 @@ export default function GeneSet() {
     ? gs.genes.filter(g => g.toLowerCase().includes(filter.toLowerCase()))
     : gs.genes
 
-  function handleAdd() {
-    const parsed = parseGeneInput(input)
-    if (parsed.length > 0) {
-      const added = gs.addGenes(parsed)
-      setInput('')
-      if (added === 0) alert(`No new genes added. ${gs.genes.length >= gs.MAX_GENES ? 'Set is full (500 max).' : 'All genes already in set.'}`)
+  function addParsed(parsed) {
+    if (parsed.length === 0) {
+      alert('No gene symbols found in the input.')
+      return
     }
+    const added = gs.addGenes(parsed)
+    if (added === 0) {
+      alert(`No new genes added. ${gs.genes.length >= gs.MAX_GENES ? `Set is full (${gs.MAX_GENES} max).` : 'All genes already in set.'}`)
+    }
+  }
+
+  function handleAdd() {
+    addParsed(parseGeneInput(input))
+    setInput('')
+  }
+
+  function handleImportFile(e) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (file.size > MAX_IMPORT_BYTES) {
+      alert(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 5 MB.`)
+      e.target.value = ''
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => addParsed(parseGeneInput(String(reader.result || '')))
+    reader.onerror = () => alert('Failed to read the file.')
+    reader.readAsText(file)
+    e.target.value = '' // allow re-importing the same file
   }
 
   function handleSave() {
@@ -105,9 +135,21 @@ export default function GeneSet() {
 
       {/* Add genes input */}
       <div className="bg-white border border-gray-200 rounded-lg p-4 space-y-2">
-        <label className="text-xs font-medium text-gray-600">Add Genes</label>
+        <div className="flex items-center justify-between">
+          <label htmlFor="geneset-add" className="text-xs font-medium text-gray-600">Add Genes</label>
+          <label className="text-xs text-blue-600 hover:text-blue-800 font-medium cursor-pointer">
+            Import from file
+            <input
+              type="file"
+              accept=".txt,.csv,.tsv,.list,text/plain,text/csv"
+              onChange={handleImportFile}
+              className="sr-only"
+            />
+          </label>
+        </div>
         <div className="flex gap-2">
           <textarea
+            id="geneset-add"
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAdd() }}}

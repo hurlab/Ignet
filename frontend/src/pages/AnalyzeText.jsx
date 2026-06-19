@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
+import AddToSetButton from '../components/AddToSetButton.jsx'
 
 // @MX:NOTE: Gene symbol regex targets uppercase tokens 2-10 chars like TP53, BRCA1, EGFR
 // Deliberately conservative to avoid false positives from common English words
@@ -350,7 +351,7 @@ export default function AnalyzeText() {
                 Click a gene to toggle inclusion. You need at least 2 confirmed genes that appear
                 together in a sentence.
               </p>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5 items-center">
                 {detectedGenes.map((g) => (
                   <GeneTag
                     key={g}
@@ -360,6 +361,9 @@ export default function AnalyzeText() {
                     onRemove={removeGene}
                   />
                 ))}
+                {activeGenes.length > 0 && (
+                  <AddToSetButton genes={activeGenes} label={`Add ${activeGenes.length} to Gene Set`} />
+                )}
               </div>
               {activeGenes.length < 2 && (
                 <p className="text-amber-600 text-xs">

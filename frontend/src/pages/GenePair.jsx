@@ -1,10 +1,23 @@
 import { useState, useEffect, useRef } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useSearchParams, useNavigate } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
 import GeneAutocomplete from '../components/GeneAutocomplete.jsx'
 import TrendChart from '../components/TrendChart.jsx'
+import NetworkGraph from '../components/NetworkGraph.jsx'
+
+// A focused two-node graph for the queried pair: both genes plus a single edge
+// whose thickness encodes the evidence count. Matches the element shape the
+// other network views use so NetworkGraph styles it consistently.
+function buildPairElements(g1, g2, total) {
+  if (!g1 || !g2) return []
+  return [
+    { data: { id: g1, label: g1, degree: 1, centrality_d: 1, isCenter: true } },
+    { data: { id: g2, label: g2, degree: 1, centrality_d: 1, isCenter: true } },
+    { data: { id: `e-${g1}-${g2}`, source: g1, target: g2, weight: total || 1, ino_color: '#7c3aed' } },
+  ]
+}
 
 function downloadCSV(interactions, gene1, gene2) {
   if (!interactions?.length) return
@@ -34,7 +47,8 @@ export default function GenePair() {
   const [showCount, setShowCount] = useState(20)
   const [pairTrends, setPairTrends] = useState(null)   // null = not yet fetched, [] = empty
   const [pairTrendsLoading, setPairTrendsLoading] = useState(false)
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   // Guard against stale pair-trends responses when the user quickly switches pairs
   const trendsRequestRef = useRef({ g1: '', g2: '' })
 
@@ -99,6 +113,9 @@ export default function GenePair() {
     setPairData(null)
     setPredictResult(null)
 
+    // Reflect the pair in the URL so it is shareable and swap is bookmarkable.
+    setSearchParams({ gene1: g1, gene2: g2 }, { replace: true })
+
     // Kick off trends fetch immediately (non-blocking)
     fetchPairTrends(g1, g2)
 
@@ -114,6 +131,17 @@ export default function GenePair() {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Swap gene 1 and gene 2, re-running the search if a result is already shown.
+  function handleSwap() {
+    const g1 = gene2
+    const g2 = gene1
+    setGene1(g1)
+    setGene2(g2)
+    if (pairData || (g1.trim() && g2.trim())) {
+      handleSubmit(null, g1, g2)
     }
   }
 
@@ -161,6 +189,15 @@ export default function GenePair() {
             debounceMs={300}
           />
         </div>
+        <button
+          type="button"
+          onClick={handleSwap}
+          title="Swap gene 1 and gene 2"
+          aria-label="Swap gene 1 and gene 2"
+          className="shrink-0 mb-0.5 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded px-2.5 py-1.5 text-sm transition-colors"
+        >
+          &#8644;
+        </button>
         <div className="flex-1 min-w-28">
           <GeneAutocomplete
             label="Gene 2"
@@ -224,6 +261,21 @@ export default function GenePair() {
                 <div className="text-xs text-gray-500">Gene Pair</div>
               </div>
             </div>
+
+            {/* Focused two-node interaction graph */}
+            <section className="bg-white border border-gray-200 rounded-lg p-4">
+              <h3 className="font-semibold text-navy text-sm mb-2">Interaction</h3>
+              <p className="text-xs text-gray-400 mb-2">
+                Edge thickness reflects the amount of co-occurrence evidence. Click a node to open its gene report.
+              </p>
+              <NetworkGraph
+                elements={buildPairElements(pairData.gene1, pairData.gene2, pairData.total)}
+                onNodeClick={(nodeData) => {
+                  const id = typeof nodeData === 'string' ? nodeData : nodeData?.id
+                  if (id) navigate(`/gene?q=${encodeURIComponent(id)}`)
+                }}
+              />
+            </section>
 
             {/* Evidence over time trend chart (non-blocking) */}
             {pairTrendsLoading

@@ -213,6 +213,83 @@ function buildAggregatedElements(result) {
   return [...nodes, ...edges]
 }
 
+// --- Two-cohort differential network (SPEC-COHORT-003) ------------------------
+// Edge membership colors: unique to cohort A, unique to B, or shared by both.
+const COHORT_COLORS = { 'A-only': '#2563eb', 'B-only': '#dc2626', shared: '#7c3aed' }
+
+function pairKey(g1, g2) {
+  return g1 < g2 ? `${g1}|${g2}` : `${g2}|${g1}`
+}
+
+// Merge two server-aggregated edge sets into one differential edge list, tagging
+// each unordered gene pair A-only / B-only / shared. Pure (testable in isolation).
+function mergeCohortEdges(edgesA, edgesB) {
+  const map = new Map()
+  for (const e of edgesA || []) {
+    map.set(pairKey(e.gene1, e.gene2),
+      { gene1: e.gene1, gene2: e.gene2, weightA: e.evidence_count ?? 1, weightB: 0 })
+  }
+  for (const e of edgesB || []) {
+    const k = pairKey(e.gene1, e.gene2)
+    const ex = map.get(k)
+    if (ex) ex.weightB = e.evidence_count ?? 1
+    else map.set(k, { gene1: e.gene1, gene2: e.gene2, weightA: 0, weightB: e.evidence_count ?? 1 })
+  }
+  const out = []
+  for (const v of map.values()) {
+    const membership = v.weightA > 0 && v.weightB > 0 ? 'shared' : v.weightA > 0 ? 'A-only' : 'B-only'
+    out.push({ ...v, membership, weight: Math.max(v.weightA, v.weightB) })
+  }
+  return out
+}
+
+// Build cytoscape elements from differential edges. Edge color = membership color
+// (carried in ino_color so NetworkGraph's existing edge styling renders it; node
+// color schemes from SPEC-COHORT-002 still operate on the gene nodes).
+function buildCohortDiffElements(diffEdges) {
+  if (!diffEdges || diffEdges.length === 0) return []
+  const genes = new Set()
+  const edges = diffEdges.map((e) => {
+    genes.add(e.gene1)
+    genes.add(e.gene2)
+    return {
+      data: {
+        id: `e_${pairKey(e.gene1, e.gene2)}`,
+        source: e.gene1,
+        target: e.gene2,
+        weight: e.weight,
+        ino_category: e.membership,
+        ino_color: COHORT_COLORS[e.membership],
+      },
+    }
+  })
+  const degrees = {}
+  edges.forEach(({ data: { source, target } }) => {
+    degrees[source] = (degrees[source] ?? 0) + 1
+    degrees[target] = (degrees[target] ?? 0) + 1
+  })
+  const maxDeg = Math.max(1, ...Object.values(degrees))
+  const nodes = [...genes].map((g) => ({
+    data: { id: g, label: g, degree: degrees[g] ?? 1, highDegree: (degrees[g] ?? 1) > maxDeg * 0.6, centrality_d: 0 },
+  }))
+  return [...nodes, ...edges]
+}
+
+function downloadCohortCSV(diffEdges, nameA, nameB) {
+  if (!diffEdges?.length) return
+  const header = 'Gene1,Gene2,Membership,Weight_A,Weight_B\n'
+  const rows = diffEdges.map((e) =>
+    [e.gene1, e.gene2, e.membership, e.weightA, e.weightB].join(',')).join('\n')
+  const comment = `# Ignet cohort comparison: A="${nameA}" vs B="${nameB}" - https://ignet.org/ignet/dignet\n`
+  const blob = new Blob([comment + header + rows], { type: 'text/csv' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'ignet-cohort-compare.csv'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 // Parse a free-form PMID list (whitespace/comma/semicolon separated). Returns
 // a deduped array of valid integer PMIDs. Run on submit only (one-shot), not
 // per keystroke.
@@ -266,6 +343,11 @@ export default function Dignet() {
   const [covLoading, setCovLoading] = useState(false)
   const [evidencePair, setEvidencePair] = useState(null)
   const [colorScheme, setColorScheme] = useState('none') // node color scheme (SPEC-COHORT-002)
+  // Two-cohort differential mode (SPEC-COHORT-003)
+  const [cohortAName, setCohortAName] = useState('Cohort A')
+  const [cohortAText, setCohortAText] = useState('')
+  const [cohortBName, setCohortBName] = useState('Cohort B')
+  const [cohortBText, setCohortBText] = useState('')
   const cyInstanceRef = useRef(null)
   const didAutoSearch = useRef(false)
   const abortRef = useRef(null)
@@ -432,10 +514,74 @@ export default function Dignet() {
     }
   }, [pmidText, vaccineOnly])
 
+  async function runCohortCompare() {
+    const pmidsA = parsePmids(cohortAText)
+    const pmidsB = parsePmids(cohortBText)
+    if (!pmidsA.length || !pmidsB.length) {
+      setError('Provide PMIDs for both cohorts before comparing.')
+      return
+    }
+    if (pmidsA.length > MAX_UPLOAD_PMIDS || pmidsB.length > MAX_UPLOAD_PMIDS) {
+      setError(`Each cohort is capped at ${MAX_UPLOAD_PMIDS.toLocaleString()} PMIDs.`)
+      return
+    }
+    if (abortRef.current) abortRef.current.abort()
+    setLoading(true)
+    setError(null)
+    setResult(null)
+    setSelectedNode(null)
+    setEntities(null)
+    setCovData(null)
+    try {
+      // Reuse the existing aggregation endpoint once per cohort (no new backend).
+      const [rawA, rawB] = await Promise.all([
+        api.dignetSearchPmids(pmidsA, { has_vaccine: vaccineOnly }),
+        api.dignetSearchPmids(pmidsB, { has_vaccine: vaccineOnly }),
+      ])
+      const dataA = rawA?.data ?? rawA
+      const dataB = rawB?.data ?? rawB
+      const diff = mergeCohortEdges(dataA.aggregated_edges, dataB.aggregated_edges)
+      setResult({
+        mode: 'compare',
+        diff_edges: diff,
+        cohortA: { name: cohortAName || 'Cohort A', submitted: dataA.pmid_count, in_db: dataA.pmid_count_in_db, coverage_pct: dataA.coverage_pct },
+        cohortB: { name: cohortBName || 'Cohort B', submitted: dataB.pmid_count, in_db: dataB.pmid_count_in_db, coverage_pct: dataB.coverage_pct },
+        counts: {
+          aOnly: diff.filter(e => e.membership === 'A-only').length,
+          bOnly: diff.filter(e => e.membership === 'B-only').length,
+          shared: diff.filter(e => e.membership === 'shared').length,
+        },
+      })
+    } catch (err) {
+      setError(err.message || 'Cohort comparison failed.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleCohortFile(setter) {
+    return (e) => {
+      const file = e.target.files?.[0]
+      if (!file) return
+      if (file.size > MAX_PMID_FILE_BYTES) {
+        setError(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 10 MB.`)
+        e.target.value = ''
+        return
+      }
+      const reader = new FileReader()
+      reader.onload = () => setter(String(reader.result || ''))
+      reader.onerror = () => setError('Failed to read the file.')
+      reader.readAsText(file)
+      e.target.value = ''
+    }
+  }
+
   async function handleSearch(e) {
     e?.preventDefault()
     if (inputMode === 'pmids') {
       await runPmidSearch()
+    } else if (inputMode === 'compare') {
+      await runCohortCompare()
     } else {
       await runSearch()
     }
@@ -508,9 +654,11 @@ export default function Dignet() {
   const parsedPmidCount = useMemo(() => parsePmids(pmidText).length, [pmidText])
 
   const geneElements = useMemo(
-    () => result
-      ? (result.mode === 'pmids' ? buildAggregatedElements(result) : buildElements(result))
-      : [],
+    () => {
+      if (!result) return []
+      if (result.mode === 'compare') return buildCohortDiffElements(result.diff_edges)
+      return result.mode === 'pmids' ? buildAggregatedElements(result) : buildElements(result)
+    },
     [result]
   )
 
@@ -625,7 +773,7 @@ export default function Dignet() {
         {/* Input mode toggle */}
         <div className="w-full">
           <div className="inline-flex text-xs border border-gray-200 rounded overflow-hidden">
-            {['keywords', 'pmids'].map((m) => (
+            {['keywords', 'pmids', 'compare'].map((m) => (
               <button
                 key={m}
                 type="button"
@@ -634,7 +782,7 @@ export default function Dignet() {
                   inputMode === m ? 'bg-navy text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
                 }`}
               >
-                {m === 'keywords' ? 'Keywords' : 'PMID list'}
+                {m === 'keywords' ? 'Keywords' : m === 'pmids' ? 'PMID list' : 'Compare cohorts'}
               </button>
             ))}
           </div>
@@ -665,7 +813,7 @@ export default function Dignet() {
               </select>
             </div>
           </>
-        ) : (
+        ) : inputMode === 'pmids' ? (
           <div className="flex-1 min-w-48">
             <label className="block text-xs font-medium text-gray-600 mb-1">
               PMID list <span className="text-gray-400 font-normal">— paste or upload, separated by spaces/commas/new lines (max 50,000)</span>
@@ -690,6 +838,39 @@ export default function Dignet() {
               )}
             </div>
           </div>
+        ) : (
+          <div className="w-full grid md:grid-cols-2 gap-3">
+            {[
+              { label: 'A', name: cohortAName, setName: setCohortAName, text: cohortAText, setText: setCohortAText, accent: 'text-blue-700' },
+              { label: 'B', name: cohortBName, setName: setCohortBName, text: cohortBText, setText: setCohortBText, accent: 'text-red-700' },
+            ].map((c) => (
+              <div key={c.label} className="border border-gray-200 rounded p-3 space-y-2">
+                <input
+                  type="text"
+                  value={c.name}
+                  onChange={(e) => c.setName(e.target.value)}
+                  aria-label={`Cohort ${c.label} name`}
+                  className={`w-full border border-gray-300 rounded px-2 py-1 text-xs font-semibold ${c.accent} focus:outline-none focus:border-blue-500`}
+                />
+                <textarea
+                  value={c.text}
+                  onChange={(e) => c.setText(e.target.value)}
+                  rows={3}
+                  placeholder="PMIDs — paste or upload (max 50,000)"
+                  className="w-full border border-gray-300 rounded px-2 py-1 text-xs font-mono focus:outline-none focus:border-blue-500 resize-y"
+                />
+                <div className="flex items-center gap-3">
+                  <label className="text-xs text-blue-600 hover:underline cursor-pointer">
+                    Upload file
+                    <input type="file" accept=".txt,.csv,.tsv" onChange={handleCohortFile(c.setText)} className="hidden" />
+                  </label>
+                  {c.text.trim() && (
+                    <span className="text-[11px] text-gray-400">{parsePmids(c.text).length.toLocaleString()} valid PMIDs</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
 
         <button
@@ -697,7 +878,7 @@ export default function Dignet() {
           disabled={loading}
           className="bg-navy hover:bg-navy-dark disabled:opacity-50 text-white font-semibold px-5 py-1.5 rounded text-sm transition-colors"
         >
-          {loading ? 'Building…' : 'Search'}
+          {loading ? 'Building…' : inputMode === 'compare' ? 'Compare' : 'Search'}
         </button>
       </form>
 
@@ -724,7 +905,38 @@ export default function Dignet() {
 
       {result && (
         <div className="space-y-4">
+          {/* Two-cohort differential header: per-cohort coverage + edge legend + CSV */}
+          {result.mode === 'compare' && (
+            <div className="space-y-2">
+              <div className="flex gap-3 flex-wrap">
+                {[result.cohortA, result.cohortB].map((c, i) => (
+                  <div key={i} className="bg-white border border-gray-200 rounded px-3 py-1.5 text-xs">
+                    <span className="font-semibold" style={{ color: i === 0 ? COHORT_COLORS['A-only'] : COHORT_COLORS['B-only'] }}>{c.name}</span>
+                    <span className="text-gray-500 ml-2">
+                      {(c.in_db ?? 0).toLocaleString()}/{(c.submitted ?? 0).toLocaleString()} PMIDs in corpus ({c.coverage_pct ?? 0}%)
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center gap-x-3 gap-y-1 flex-wrap text-[11px] text-gray-600 bg-white border border-gray-200 rounded px-3 py-1.5">
+                <span className="text-gray-500">Edges:</span>
+                {[['A-only', `${result.cohortA.name} only`, result.counts.aOnly], ['shared', 'Shared', result.counts.shared], ['B-only', `${result.cohortB.name} only`, result.counts.bOnly]].map(([key, label, count]) => (
+                  <span key={key} className="inline-flex items-center gap-1">
+                    <span className="inline-block w-4 h-[3px] rounded-sm" style={{ backgroundColor: COHORT_COLORS[key] }} aria-hidden="true" />
+                    {label} ({count})
+                  </span>
+                ))}
+                <button
+                  onClick={() => downloadCohortCSV(result.diff_edges, result.cohortA.name, result.cohortB.name)}
+                  className="ml-auto text-blue-600 hover:underline"
+                >
+                  Download CSV
+                </button>
+              </div>
+            </div>
+          )}
           {/* Stats */}
+          {result.mode !== 'compare' && (
           <div className="flex gap-4 flex-wrap">
             {[
               { label: 'PMIDs', value: result.pmid_count?.toLocaleString() },
@@ -751,6 +963,7 @@ export default function Dignet() {
               </div>
             ))}
           </div>
+          )}
 
           {result.mode === 'pmids' ? (
             result.total_edges > result.returned_edges && (

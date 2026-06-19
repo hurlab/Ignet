@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
@@ -391,8 +391,12 @@ export default function Gene() {
   const [trends, setTrends] = useState(null)       // null = not yet fetched, [] = empty
   const [trendsLoading, setTrendsLoading] = useState(false)
   const navigate = useNavigate()
+  // Tracks the most recently requested gene so out-of-order responses from fast
+  // back/forward navigation can't overwrite the current report with stale data.
+  const latestReqRef = useRef('')
 
   async function fetchGeneData(sym) {
+    latestReqRef.current = sym
     setLoading(true)
     setError(null)
     setGene(null)
@@ -405,19 +409,20 @@ export default function Gene() {
         api.geneNeighbors(sym),
         api.geneReport(sym).catch(() => null),
       ])
+      if (latestReqRef.current !== sym) return // a newer gene was requested; drop this
       setGene(sym)
       setNeighbors(neighborsRes?.data ?? (Array.isArray(neighborsRes) ? neighborsRes : (neighborsRes?.neighbors ?? [])))
       setReportData(reportRes)
     } catch (err) {
-      setError(err.message)
+      if (latestReqRef.current === sym) setError(err.message)
     } finally {
-      setLoading(false)
+      if (latestReqRef.current === sym) setLoading(false)
     }
     // Fetch trends independently — failure never crashes the report
     api.geneTrends(sym)
-      .then((res) => setTrends(res?.trends ?? []))
-      .catch(() => setTrends([]))
-      .finally(() => setTrendsLoading(false))
+      .then((res) => { if (latestReqRef.current === sym) setTrends(res?.trends ?? []) })
+      .catch(() => { if (latestReqRef.current === sym) setTrends([]) })
+      .finally(() => { if (latestReqRef.current === sym) setTrendsLoading(false) })
   }
 
   // The ?q= URL param is the single source of truth for which gene is shown.

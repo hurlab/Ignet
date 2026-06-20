@@ -891,8 +891,8 @@ def network_cov_genes(query_id: int):
     Source: t_cooccurrence_cov_gene (cov_id <-> host gene_symbol, weighted by
     shared_pmids). CoV nodes are viral PROTEINS (spike, nucleocapsid, nsp1-16,
     ORFs, RdRp), labelled from cov_term. NER name-collision artifacts are
-    excluded: the SARS/SERS row, and each gene paired with its own viral-NSP
-    alias (SH2D3A=NSP1, BCAR3=NSP2, SH2D3C=NSP3).
+    excluded: the SARS/SERS row, and the human genes aliased NSP1/NSP2/NSP3
+    (SH2D3A/BCAR3/SH2D3C), whose CoV-overlay edges are spurious.
 
     Query params:
         min_shared - minimum shared_pmids per CoV-gene edge (default
@@ -935,13 +935,12 @@ def network_cov_genes(query_id: int):
                         WHERE gene_symbol IN ({placeholders})
                           AND shared_pmids >= %s
                           AND NOT (gene_symbol = 'SARS' AND gene_term = 'SERS')
-                          -- NER name-collision artifacts: these human genes share an
-                          -- alias with a viral NSP (SH2D3A=NSP1, BCAR3=NSP2, SH2D3C=NSP3),
-                          -- so the gene<->its-own-alias edge is spurious. Other NSP
-                          -- co-occurrences for these genes are legitimate CoV literature.
-                          AND NOT (gene_symbol = 'SH2D3A' AND LOWER(cov_term) = 'nsp1')
-                          AND NOT (gene_symbol = 'BCAR3'  AND LOWER(cov_term) = 'nsp2')
-                          AND NOT (gene_symbol = 'SH2D3C' AND LOWER(cov_term) = 'nsp3')
+                          -- NER name-collision artifacts: these human genes are aliased
+                          -- NSP1/NSP2/NSP3 (SH2D3A/BCAR3/SH2D3C). When a CoV paper's viral
+                          -- "NSP1/2/3" text is mis-tagged as the human gene, the gene gets
+                          -- spuriously linked to the OTHER viral proteins in that paper, so
+                          -- all of its CoV-overlay edges are unreliable. Exclude the genes.
+                          AND gene_symbol NOT IN ('SH2D3A', 'BCAR3', 'SH2D3C')
                         ORDER BY shared_pmids DESC""",
                     tuple(chunk) + (min_shared,),
                 )

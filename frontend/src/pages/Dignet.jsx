@@ -295,11 +295,13 @@ export default function Dignet() {
   const [highlightType, setHighlightType] = useState(null)
   // INO defaults off and loads on demand (its aggregation is ~250x costlier
   // per PMID chunk than the other categories), following the CoV pattern.
-  const [visibleCategories, setVisibleCategories] = useState({ drugs: true, diseases: true, vaccines: true, ino: false, cov: false })
+  const [visibleCategories, setVisibleCategories] = useState({ drugs: true, diseases: true, vaccines: true, ino: false, cov: false, ontology: false })
   const [covData, setCovData] = useState(null)
   const [covLoading, setCovLoading] = useState(false)
   const [inoData, setInoData] = useState(null)
   const [inoLoading, setInoLoading] = useState(false)
+  const [entnetData, setEntnetData] = useState(null)
+  const [entnetLoading, setEntnetLoading] = useState(false)
   const [evidencePair, setEvidencePair] = useState(null)
   const [colorScheme, setColorScheme] = useState('none') // node color scheme (SPEC-COHORT-002)
   // Two-cohort differential mode (SPEC-COHORT-003)
@@ -392,6 +394,7 @@ export default function Dignet() {
       setEntities(null)
       setCovData(null)
       setInoData(null)
+      setEntnetData(null)
       setActiveHighlight(null)
       setHighlightType(null)
     }
@@ -453,6 +456,7 @@ export default function Dignet() {
     setEntities(null)
     setCovData(null)
     setInoData(null)
+    setEntnetData(null)
     setActiveHighlight(null)
     setHighlightType(null)
     try {
@@ -504,6 +508,7 @@ export default function Dignet() {
     setEntities(null)
     setCovData(null)
     setInoData(null)
+    setEntnetData(null)
     try {
       // Reuse the existing aggregation endpoint once per cohort (no new backend).
       const raws = await Promise.all(parsed.map(pmids => api.dignetSearchPmids(pmids, { has_vaccine: vaccineOnly })))
@@ -640,6 +645,18 @@ export default function Dignet() {
     }
   }, [visibleCategories.ino, result]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Lazily fetch the gene<->ontology network the first time it is toggled on.
+  useEffect(() => {
+    const qid = result?.query_id
+    if (visibleCategories.ontology && qid && !entnetData && !entnetLoading) {
+      setEntnetLoading(true)
+      api.dignetEntityNetwork(qid)
+        .then((d) => setEntnetData(d || { edges: [], terms: [] }))
+        .catch(() => setEntnetData({ edges: [], terms: [] }))
+        .finally(() => setEntnetLoading(false))
+    }
+  }, [visibleCategories.ontology, result]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const parsedPmidCount = useMemo(() => parsePmids(pmidText).length, [pmidText])
 
   const geneElements = useMemo(
@@ -659,6 +676,41 @@ export default function Dignet() {
   const entityElements = useMemo(() => {
     if (!result) return []
     const extra = []
+
+    // Gene<->ontology model: real per-cohort co-occurrence edges. When enabled
+    // this REPLACES the decorative drug/disease nodes below, whose edges attach
+    // terms to the top-degree genes regardless of whether they co-occur.
+    if (visibleCategories.ontology && entnetData?.edges?.length) {
+      const geneIds = new Set(geneElements.filter(e => !e.data.source).map(e => e.data.id))
+      const kindsOn = new Set([
+        ...(visibleCategories.diseases ? ['disease'] : []),
+        ...(visibleCategories.drugs ? ['drug'] : []),
+      ])
+      const drawn = new Set()
+      entnetData.edges.forEach((ed) => {
+        if (!kindsOn.has(ed.kind) || !geneIds.has(ed.gene)) return
+        const termId = `${ed.kind}_ont_${ed.term}`
+        if (!drawn.has(termId)) {
+          drawn.add(termId)
+          extra.push({
+            data: {
+              id: termId, label: ed.term,
+              nodeType: ed.kind === 'disease' ? 'disease' : 'drug',
+              degree: 1, centrality_d: 0,
+            }
+          })
+        }
+        extra.push({
+          data: {
+            id: `oe_${termId}_${ed.gene}`,
+            source: termId, target: ed.gene,
+            weight: ed.papers, papers: ed.papers,
+            edgeType: 'entity', ino_color: '#cbd5e0',
+          }
+        })
+      })
+      return extra
+    }
 
     if (visibleCategories.drugs && entities?.drugs?.length) {
       entities.drugs.slice(0, 10).forEach((drug, i) => {
@@ -762,7 +814,7 @@ export default function Dignet() {
     }
 
     return extra
-  }, [result, geneElements, entities, visibleCategories, covData, inoData])
+  }, [result, geneElements, entities, visibleCategories, covData, inoData, entnetData])
 
   const elements = useMemo(() => [...geneElements, ...entityElements], [geneElements, entityElements])
   const geneNodeCount = geneElements.filter(e => !e.data.source).length
@@ -1189,6 +1241,8 @@ export default function Dignet() {
                     covLoading={covLoading}
                     inoItems={inoData?.ino_distribution || []}
                     inoLoading={inoLoading}
+                    ontologyLoading={entnetLoading}
+                    ontologyStats={entnetData}
                   />
                 )}
               </div>

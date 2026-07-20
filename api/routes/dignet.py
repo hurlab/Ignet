@@ -57,6 +57,13 @@ _ENTITY_CACHE_TTL = 24 * 60 * 60
 # bare "vaccine" qualifies (245,819 PMIDs corpus-wide); every other VO term is a
 # specific vaccine, so the list is deliberately minimal.
 _VO_GENERIC_TERMS = frozenset({"vaccine"})
+# Disease terms that are pure classifiers and carry no cohort-specific signal.
+# Kept deliberately small: "cancer", "infection" etc. ARE informative and stay.
+_HDO_GENERIC_TERMS = frozenset({"disease", "syndrome", "disorder"})
+# Bounds for the gene<->ontology network: top genes by cohort mention frequency,
+# and top terms per category. The edge ceiling is the product of the two.
+_ENTNET_TOP_GENES = 40
+_ENTNET_TOP_TERMS = 20
 
 # ---------------------------------------------------------------------------
 # Input sanitisation
@@ -911,6 +918,87 @@ def _aggregate_entities(
     )
 
 
+def _aggregate_entity_network(conn, pmids: list[int]) -> dict:
+    """Build cohort-scoped gene<->ontology edges at PAPER level.
+
+    This is the gene<->ontology network model. Unlike the gene-gene network
+    (t_gene_pairs), which requires two gene names in the SAME SENTENCE, this
+    reads t_biosummary, where one row is one paper listing every gene, drug and
+    disease mentioned anywhere in it. A paper naming one gene and one disease
+    contributes here but cannot contribute a gene-gene edge at all — that is
+    the coverage this model recovers.
+
+    Edge weight = number of papers in the cohort co-mentioning the gene and the
+    term. Distinct from the decorative entity edges the sidebar draws today,
+    which attach a term to the top-degree genes regardless of co-occurrence.
+
+    Bounded in one pass: genes are capped to the most-mentioned
+    _ENTNET_TOP_GENES, so the pair space can never exceed that times the number
+    of distinct terms, and is trimmed to _ENTNET_TOP_TERMS per category before
+    returning.
+    """
+    gene_counts: Counter = Counter()
+    rows: list[tuple[list[str], list[str], list[str]]] = []
+
+    for placeholders, params in _chunk_params(pmids):
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""SELECT gene_symbols, hdo_term, drug_term
+                FROM t_biosummary
+                WHERE pmid IN ({placeholders})""",
+            params,
+        )
+        for gene_symbols, hdo_term, drug_term in cursor.fetchall():
+            genes = _split_terms(gene_symbols)
+            if not genes:
+                continue
+            gene_counts.update(genes)
+            rows.append((genes, _split_terms(hdo_term), _split_terms(drug_term)))
+        cursor.close()
+
+    top_genes = {g for g, _ in gene_counts.most_common(_ENTNET_TOP_GENES)}
+
+    disease_edges: Counter = Counter()
+    drug_edges: Counter = Counter()
+    for genes, diseases, drugs in rows:
+        present = [g for g in genes if g in top_genes]
+        if not present:
+            continue
+        for term in diseases:
+            if term.strip().lower() in _HDO_GENERIC_TERMS:
+                continue
+            for gene in present:
+                disease_edges[(gene, term)] += 1
+        for term in drugs:
+            for gene in present:
+                drug_edges[(gene, term)] += 1
+
+    def _edges(counter: Counter, kind: str) -> list[dict]:
+        # Trim to the most-connected terms, then emit their edges.
+        term_totals: Counter = Counter()
+        for (_, term), cnt in counter.items():
+            term_totals[term] += cnt
+        keep = {t for t, _ in term_totals.most_common(_ENTNET_TOP_TERMS)}
+        return [
+            {"gene": gene, "term": term, "kind": kind, "papers": cnt}
+            for (gene, term), cnt in counter.most_common()
+            if term in keep
+        ]
+
+    edges = _edges(disease_edges, "disease") + _edges(drug_edges, "drug")
+    terms = sorted(
+        {(e["term"], e["kind"]) for e in edges},
+        key=lambda t: t[0],
+    )
+
+    return {
+        "edges": edges,
+        "terms": [{"term": t, "kind": k} for t, k in terms],
+        "papers_with_entities": len(rows),
+        "gene_count": len(top_genes),
+    }
+
+
 def _aggregate_ino(conn, pmids: list[int]) -> list[dict]:
     """Count INO interaction types across the full PMID cohort.
 
@@ -1007,6 +1095,67 @@ def network_entities(query_id: int):
             redis_client.set(cache_key, json.dumps(result), ex=_ENTITY_CACHE_TTL)
         except Exception:
             logger.warning("Entity cache write failed", exc_info=True)
+
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/dignet/<query_id>/entity-network  (gene <-> ontology, on-demand)
+# ---------------------------------------------------------------------------
+
+
+@dignet_bp.route("/dignet/<int:query_id>/entity-network", methods=["GET"])
+def network_entity_network(query_id: int):
+    """
+    Cohort-scoped gene <-> ontology (disease / drug) network.
+
+    The gene-gene network requires two gene names in one sentence; this model
+    works at paper level from t_biosummary, so papers naming a single gene
+    alongside a disease or drug contribute evidence they previously could not.
+    Edge weight is the number of papers in the cohort co-mentioning the pair.
+
+    Loaded on demand and cached 24h, like the CoV and INO overlays.
+    """
+    redis_client = None
+    try:
+        with db_connection() as conn:
+            row = _load_query(conn, query_id)
+            if not row:
+                return jsonify({"error": "NotFound"}), 404
+
+            pmids = [int(p) for p in row["pmid_list"].split(",") if p.strip().isdigit()]
+            if not pmids:
+                return jsonify({
+                    "edges": [],
+                    "terms": [],
+                    "papers_with_entities": 0,
+                    "gene_count": 0,
+                    "pmid_count": 0,
+                })
+
+            cache_key = _entity_cache_key(pmids, "entnet")
+            redis_client = get_redis()
+            if redis_client:
+                try:
+                    cached = redis_client.get(cache_key)
+                    if cached:
+                        return jsonify(json.loads(cached))
+                except Exception:
+                    logger.warning("Entity-network cache read failed", exc_info=True)
+
+            result = _aggregate_entity_network(conn, pmids)
+
+    except Exception as exc:
+        logger.exception("Error in network_entity_network: %s", exc)
+        return jsonify({"error": "DatabaseError"}), 500
+
+    result["pmid_count"] = len(pmids)
+
+    if redis_client:
+        try:
+            redis_client.set(cache_key, json.dumps(result), ex=_ENTITY_CACHE_TTL)
+        except Exception:
+            logger.warning("Entity-network cache write failed", exc_info=True)
 
     return jsonify(result)
 

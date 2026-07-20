@@ -9,8 +9,10 @@ Covers the two correctness properties the entities endpoint depends on:
    per-chunk DISTINCT-pmid counts sum across chunks.
 """
 from routes.dignet import (
+    _ENTNET_TOP_GENES,
     _PMID_CHUNK,
     _aggregate_entities,
+    _aggregate_entity_network,
     _aggregate_ino,
     _entity_cache_key,
     _split_terms,
@@ -207,4 +209,97 @@ def test_aggregate_ino_empty_cohort_runs_no_queries():
     conn = FakeConn([])
 
     assert _aggregate_ino(conn, []) == []
+    assert conn.executed == []
+
+
+# ---------------------------------------------------------------------------
+# _aggregate_entity_network  (gene <-> ontology model)
+# ---------------------------------------------------------------------------
+
+
+def _edge(result, gene, term):
+    for e in result["edges"]:
+        if e["gene"] == gene and e["term"] == term:
+            return e
+    return None
+
+
+def test_entity_network_counts_papers_per_gene_term_pair():
+    """Edge weight is the number of papers co-mentioning the gene and term."""
+    conn = FakeConn([[
+        ("TP53, BRCA1", "breast cancer", None),
+        ("TP53", "breast cancer", "cisplatin"),
+    ]])
+
+    result = _aggregate_entity_network(conn, [1, 2])
+
+    assert _edge(result, "TP53", "breast cancer")["papers"] == 2
+    assert _edge(result, "BRCA1", "breast cancer")["papers"] == 1
+    assert _edge(result, "TP53", "cisplatin")["papers"] == 1
+    assert result["papers_with_entities"] == 2
+
+
+def test_entity_network_includes_single_gene_papers():
+    """The whole point: a one-gene paper yields no gene-gene edge but does
+    yield gene<->ontology evidence."""
+    conn = FakeConn([[("PTEN", "glioma", None)]])
+
+    result = _aggregate_entity_network(conn, [1])
+
+    assert _edge(result, "PTEN", "glioma")["papers"] == 1
+
+
+def test_entity_network_tags_edge_kind():
+    conn = FakeConn([[("TP53", "breast cancer", "cisplatin")]])
+
+    result = _aggregate_entity_network(conn, [1])
+
+    assert _edge(result, "TP53", "breast cancer")["kind"] == "disease"
+    assert _edge(result, "TP53", "cisplatin")["kind"] == "drug"
+
+
+def test_entity_network_drops_generic_disease_terms():
+    """"disease"/"syndrome" are classifiers, not findings; "cancer" is kept."""
+    conn = FakeConn([[("TP53", "disease, syndrome, disorder, cancer", None)]])
+
+    result = _aggregate_entity_network(conn, [1])
+
+    terms = {e["term"] for e in result["edges"]}
+    assert terms == {"cancer"}
+
+
+def test_entity_network_skips_rows_without_genes():
+    conn = FakeConn([[(None, "cancer", "aspirin"), ("", "cancer", None)]])
+
+    result = _aggregate_entity_network(conn, [1])
+
+    assert result["edges"] == []
+    assert result["papers_with_entities"] == 0
+
+
+def test_entity_network_caps_gene_count():
+    """Gene space is bounded so the pair space cannot blow up on big cohorts."""
+    many = ", ".join(f"GENE{i}" for i in range(_ENTNET_TOP_GENES + 25))
+    conn = FakeConn([[(many, "cancer", None)]])
+
+    result = _aggregate_entity_network(conn, [1])
+
+    assert result["gene_count"] == _ENTNET_TOP_GENES
+    assert len(result["edges"]) == _ENTNET_TOP_GENES
+
+
+def test_entity_network_terms_match_edges():
+    conn = FakeConn([[("TP53", "breast cancer", "cisplatin")]])
+
+    result = _aggregate_entity_network(conn, [1])
+
+    assert {t["term"] for t in result["terms"]} == {e["term"] for e in result["edges"]}
+
+
+def test_entity_network_empty_cohort_runs_no_queries():
+    conn = FakeConn([])
+
+    result = _aggregate_entity_network(conn, [])
+
+    assert result["edges"] == [] and result["terms"] == []
     assert conn.executed == []

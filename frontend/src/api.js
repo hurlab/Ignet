@@ -98,6 +98,8 @@ export const api = {
   // INO is served separately and fetched only on demand: aggregating it costs
   // ~250x more per PMID chunk than the drug/disease/vaccine categories.
   dignetEntitiesIno: (queryId) => request(`/dignet/${queryId}/entities/ino`),
+  // Cohort-scoped gene<->ontology network (paper-level, no two-gene rule).
+  dignetEntityNetwork: (queryId) => request(`/dignet/${queryId}/entity-network`),
   dignetCovGenes: (queryId, minShared) =>
     request(`/dignet/${queryId}/cov-genes${minShared != null ? `?min_shared=${minShared}` : ''}`),
 

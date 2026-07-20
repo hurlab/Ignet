@@ -44,7 +44,7 @@ function Section({ title, color, items, onItemClick, activeItem }) {
   )
 }
 
-export default function EntitySidebar({ entities, loading, onHighlight, activeHighlight, onClearHighlight, visibleCategories, onToggleCategory, covCount = 0, covLoading = false, inoItems = [], inoLoading = false }) {
+export default function EntitySidebar({ entities, loading, onHighlight, activeHighlight, onClearHighlight, visibleCategories, onToggleCategory, covCount = 0, covLoading = false, inoItems = [], inoLoading = false, ontologyLoading = false, ontologyStats = null }) {
   if (loading) {
     return (
       <div className="text-xs text-gray-400 py-4 text-center">
@@ -113,6 +113,38 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
             </div>
           )
         })}
+      </div>
+
+      {/* Gene-ontology model: real per-cohort co-occurrence instead of the
+          default decorative term-to-top-gene edges. */}
+      <div className="border-t border-gray-100 pt-2">
+        <div className="flex items-center gap-2 text-xs text-gray-600">
+          <button
+            id="toggle-ontology"
+            role="switch"
+            aria-checked={!!visibleCategories?.ontology}
+            aria-labelledby="label-ontology"
+            onClick={() => onToggleCategory?.('ontology')}
+            className={`relative shrink-0 w-8 h-4 rounded-full transition-colors focus:outline-2 focus:outline-offset-1 focus:outline-blue-500 ${
+              visibleCategories?.ontology ? 'bg-navy' : 'bg-gray-300'
+            }`}
+          >
+            <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${
+              visibleCategories?.ontology ? 'translate-x-4' : 'translate-x-0.5'
+            }`} />
+          </button>
+          <span id="label-ontology" className="cursor-default select-none font-medium" onClick={() => onToggleCategory?.('ontology')}>
+            Gene–ontology links
+          </span>
+          {ontologyLoading && <span className="text-gray-400">…</span>}
+        </div>
+        <p className="text-[11px] text-gray-400 mt-1">
+          {visibleCategories?.ontology
+            ? (ontologyStats
+                ? `Drug and disease nodes are linked to genes they actually co-occur with in this cohort (${ontologyStats.papers_with_entities ?? 0} annotated papers). Edge weight = papers.`
+                : 'Loading co-occurrence links…')
+            : 'Off: drug/disease nodes attach to the top-degree genes for layout only. Turn on to link them by real per-paper co-occurrence, including papers with only one gene.'}
+        </p>
       </div>
 
       {activeHighlight && (

@@ -94,7 +94,7 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
                 aria-checked={isOn}
                 aria-labelledby={labelId}
                 onClick={() => onToggleCategory?.(key)}
-                className={`relative w-8 h-4 rounded-full transition-colors focus:outline-2 focus:outline-offset-1 focus:outline-blue-500 ${
+                className={`relative shrink-0 w-8 h-4 rounded-full transition-colors focus:outline-2 focus:outline-offset-1 focus:outline-blue-500 ${
                   isOn ? color : 'bg-gray-300'
                 }`}
               >

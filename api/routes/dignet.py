@@ -7,6 +7,7 @@ GET  /api/v1/dignet/<query_id>/export/graphml - export graph as GraphML
 """
 
 import hashlib
+import json
 import logging
 import re
 import time
@@ -48,6 +49,10 @@ _PMID_MAX = 99999999
 _AGG_TOP_N_DEFAULT = 5000
 # Default minimum CoV<->gene shared-PMID count for the CoV overlay
 _COV_MIN_SHARED_DEFAULT = 2
+# Number of top entity terms returned per category by the entities endpoint
+_ENTITY_TOP_N = 20
+# Cache TTL for aggregated entity counts: 24 hours
+_ENTITY_CACHE_TTL = 24 * 60 * 60
 
 # ---------------------------------------------------------------------------
 # Input sanitisation
@@ -806,17 +811,105 @@ def network_graph(query_id: int):
 
 
 # ---------------------------------------------------------------------------
-# GET /api/v1/dignet/<query_id>/entities  (fast, PMID-based)
+# Entity aggregation helpers
+# ---------------------------------------------------------------------------
+
+
+def _split_terms(value: str | None) -> list[str]:
+    """Split a mined term field into individual terms.
+
+    t_biosummary stores drug_term / hdo_term as comma-joined lists (e.g.
+    "cancer, lung cancer, pneumonia"), so grouping on the raw column treats a
+    whole list as a single term. Splitting yields per-term counts.
+    """
+    if not value:
+        return []
+    return [term.strip() for term in value.split(",") if term.strip()]
+
+
+def _entity_cache_key(pmids: list[int]) -> str:
+    """Cache key for a PMID cohort's entity aggregation (order-independent)."""
+    digest = hashlib.sha256(",".join(str(p) for p in sorted(pmids)).encode()).hexdigest()
+    return f"dignet:entities:{digest}"
+
+
+def _aggregate_entities(
+    conn, pmids: list[int]
+) -> tuple[list[dict], list[dict], list[dict]]:
+    """Count drug / disease / INO terms across the full PMID cohort.
+
+    Chunked over _PMID_CHUNK so a 50k-PMID upload is fully counted rather than
+    sampled. t_biosummary holds one row per PMID, so a term's count is the
+    number of papers in the cohort mentioning it.
+
+    INO is read from t_ino.pmid directly rather than joined through
+    t_gene_pairs: interaction types are annotated per sentence and do not
+    require that sentence to contain two genes, so the join would drop
+    interaction evidence from single-gene papers.
+    """
+    drug_counts: Counter = Counter()
+    disease_counts: Counter = Counter()
+    ino_counts: Counter = Counter()
+
+    for i in range(0, len(pmids), _PMID_CHUNK):
+        chunk = pmids[i : i + _PMID_CHUNK]
+        placeholders = ",".join(["%s"] * len(chunk))
+        params = tuple(chunk)
+
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""SELECT drug_term, hdo_term
+                FROM t_biosummary
+                WHERE pmid IN ({placeholders})""",
+            params,
+        )
+        for drug_term, hdo_term in cursor.fetchall():
+            drug_counts.update(_split_terms(drug_term))
+            disease_counts.update(_split_terms(hdo_term))
+        cursor.close()
+
+        # Chunks partition the PMID space, so per-chunk DISTINCT-pmid counts
+        # sum to the true cohort-wide count per term.
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""SELECT matching_phrase, COUNT(DISTINCT pmid) AS cnt
+                FROM t_ino
+                WHERE pmid IN ({placeholders})
+                  AND matching_phrase IS NOT NULL AND matching_phrase != ''
+                GROUP BY matching_phrase""",
+            params,
+        )
+        for phrase, cnt in cursor.fetchall():
+            ino_counts[phrase] += int(cnt)
+        cursor.close()
+
+    def _top(counter: Counter) -> list[dict]:
+        return [
+            {"term": term, "cnt": cnt}
+            for term, cnt in counter.most_common(_ENTITY_TOP_N)
+        ]
+
+    return _top(drug_counts), _top(disease_counts), _top(ino_counts)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/dignet/<query_id>/entities  (full-cohort, PMID-based)
 # ---------------------------------------------------------------------------
 
 
 @dignet_bp.route("/dignet/<int:query_id>/entities", methods=["GET"])
 def network_entities(query_id: int):
     """
-    Fast entity lookup for a Dignet query's PMIDs.
-    Queries t_biosummary and t_ino directly using cached PMIDs.
-    Much faster than the full enrichment endpoint for sidebar use.
+    Entity term frequencies for a Dignet query's PMIDs.
+
+    Counts are aggregated over the query's FULL PMID cohort (chunked), not a
+    leading subset, so the ranking describes the whole cohort the user
+    uploaded. Results are Redis-cached for 24h since the PMID set for a given
+    query_id is stable.
+
+    Response adds `pmid_count` so the client can state what the counts cover.
     """
+    redis_client = None
     try:
         with db_connection() as conn:
             row = _load_query(conn, query_id)
@@ -825,56 +918,43 @@ def network_entities(query_id: int):
 
             pmids = [int(p) for p in row["pmid_list"].split(",") if p.strip().isdigit()]
             if not pmids:
-                return jsonify({"drugs": [], "diseases": [], "ino_distribution": []})
+                return jsonify({
+                    "drugs": [],
+                    "diseases": [],
+                    "ino_distribution": [],
+                    "pmid_count": 0,
+                })
 
-            cursor = conn.cursor(dictionary=True)
-            placeholders = ",".join(["%s"] * min(len(pmids), 500))
-            pmid_subset = tuple(pmids[:500])
+            cache_key = _entity_cache_key(pmids)
+            redis_client = get_redis()
+            if redis_client:
+                try:
+                    cached = redis_client.get(cache_key)
+                    if cached:
+                        return jsonify(json.loads(cached))
+                except Exception:
+                    logger.warning("Entity cache read failed", exc_info=True)
 
-            # Drugs from t_biosummary (direct PMID lookup, no gene JOIN)
-            cursor.execute(
-                f"""SELECT drug_term AS term, COUNT(*) AS cnt
-                    FROM t_biosummary
-                    WHERE pmid IN ({placeholders})
-                      AND drug_term IS NOT NULL AND drug_term != ''
-                    GROUP BY drug_term ORDER BY cnt DESC LIMIT 20""",
-                pmid_subset,
-            )
-            drugs = [dict(r) for r in cursor.fetchall()]
-
-            # Diseases
-            cursor.execute(
-                f"""SELECT hdo_term AS term, COUNT(*) AS cnt
-                    FROM t_biosummary
-                    WHERE pmid IN ({placeholders})
-                      AND hdo_term IS NOT NULL AND hdo_term != ''
-                    GROUP BY hdo_term ORDER BY cnt DESC LIMIT 20""",
-                pmid_subset,
-            )
-            diseases = [dict(r) for r in cursor.fetchall()]
-
-            # INO types (from the network's sentence IDs)
-            cursor.execute(
-                f"""SELECT ino.matching_phrase AS term, COUNT(*) AS cnt
-                    FROM t_gene_pairs h
-                    JOIN t_ino ino ON ino.sentence_id = h.sentence_id
-                    WHERE h.pmid IN ({placeholders})
-                    GROUP BY ino.matching_phrase ORDER BY cnt DESC LIMIT 20""",
-                pmid_subset,
-            )
-            ino_distribution = [dict(r) for r in cursor.fetchall()]
-
-            cursor.close()
+            drugs, diseases, ino_distribution = _aggregate_entities(conn, pmids)
 
     except Exception as exc:
         logger.exception("Error in network_entities: %s", exc)
         return jsonify({"error": "DatabaseError"}), 500
 
-    return jsonify({
+    result = {
         "drugs": drugs,
         "diseases": diseases,
         "ino_distribution": ino_distribution,
-    })
+        "pmid_count": len(pmids),
+    }
+
+    if redis_client:
+        try:
+            redis_client.set(cache_key, json.dumps(result), ex=_ENTITY_CACHE_TTL)
+        except Exception:
+            logger.warning("Entity cache write failed", exc_info=True)
+
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------
@@ -997,10 +1077,10 @@ def network_export_graphml(query_id: int):
     root = ET.Element(f"{{{ns}}}graphml")
 
     # Attribute declarations
-    key_score = ET.SubElement(root, f"{{{ns}}}key", {
+    ET.SubElement(root, f"{{{ns}}}key", {
         "id": "d0", "for": "edge", "attr.name": "score", "attr.type": "double"
     })
-    key_pmid = ET.SubElement(root, f"{{{ns}}}key", {
+    ET.SubElement(root, f"{{{ns}}}key", {
         "id": "d1", "for": "edge", "attr.name": "pmid", "attr.type": "int"
     })
 

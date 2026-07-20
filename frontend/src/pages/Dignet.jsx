@@ -682,6 +682,8 @@ export default function Dignet() {
     // terms to the top-degree genes regardless of whether they co-occur.
     if (visibleCategories.ontology && entnetData?.edges?.length) {
       const geneIds = new Set(geneElements.filter(e => !e.data.source).map(e => e.data.id))
+      // Disease and drug only: the API emits no vaccine edges, because the
+      // VO-annotated and gene-annotated corpora are near-disjoint per paper.
       const kindsOn = new Set([
         ...(visibleCategories.diseases ? ['disease'] : []),
         ...(visibleCategories.drugs ? ['drug'] : []),
@@ -695,7 +697,7 @@ export default function Dignet() {
           extra.push({
             data: {
               id: termId, label: ed.term,
-              nodeType: ed.kind === 'disease' ? 'disease' : 'drug',
+              nodeType: ed.kind, // 'disease' | 'drug' | 'vaccine'
               degree: 1, centrality_d: 0,
             }
           })

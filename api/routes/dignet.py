@@ -985,6 +985,14 @@ def _aggregate_entity_network(conn, pmids: list[int]) -> dict:
             if term in keep
         ]
 
+    # NOTE: vaccine (VO) edges are deliberately NOT built here. Measured on the
+    # live DB, the VO corpus and the gene-annotation corpus are near-disjoint:
+    # of 3,000 sampled t_vo PMIDs, only 22 appear in t_biosummary and 3 in
+    # t_gene_pairs. A per-paper gene<->vaccine join therefore yields an almost
+    # always empty category. Vaccine TERM FREQUENCIES (the /entities payload)
+    # are unaffected — they need no gene join. Corpus-wide vaccine<->gene
+    # associations live in t_cooccurrence_vo_gene and are served by
+    # routes/vaccine.py, which is what VacNet already uses.
     edges = _edges(disease_edges, "disease") + _edges(drug_edges, "drug")
     terms = sorted(
         {(e["term"], e["kind"]) for e in edges},

@@ -296,6 +296,24 @@ def test_entity_network_terms_match_edges():
     assert {t["term"] for t in result["terms"]} == {e["term"] for e in result["edges"]}
 
 
+def test_entity_network_emits_no_vaccine_edges():
+    """Vaccine edges are deliberately excluded from this model.
+
+    Measured on the live DB: of 3,000 sampled t_vo PMIDs only 22 appear in
+    t_biosummary and 3 in t_gene_pairs, so the VO corpus and the gene-annotation
+    corpus are near-disjoint. A per-paper gene<->vaccine join would render an
+    almost always empty category. Vaccine term FREQUENCIES are unaffected (they
+    need no gene join) and corpus-wide vaccine<->gene links are served from
+    t_cooccurrence_vo_gene by routes/vaccine.py.
+    """
+    conn = FakeConn([[("IFNG", "influenza", "adjuvant")]])
+
+    result = _aggregate_entity_network(conn, [1])
+
+    assert {e["kind"] for e in result["edges"]} <= {"disease", "drug"}
+    assert not any("t_vo" in sql for sql, _ in conn.executed)
+
+
 def test_entity_network_empty_cohort_runs_no_queries():
     conn = FakeConn([])
 

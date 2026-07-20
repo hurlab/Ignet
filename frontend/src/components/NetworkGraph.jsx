@@ -195,6 +195,18 @@ function buildStylesheet(elements) {
       },
     },
     {
+      selector: 'node[nodeType="vaccine"]',
+      style: {
+        'background-color': '#dd6b20',
+        'shape': 'star',
+        width: 22, height: 22,
+        'border-color': '#9c4221',
+        'border-width': 1.5,
+        'font-size': '8px',
+        color: '#9c4221',
+      },
+    },
+    {
       selector: 'edge[edgeType="entity"]',
       style: {
         'line-style': 'dashed',

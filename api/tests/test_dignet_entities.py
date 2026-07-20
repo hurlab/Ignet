@@ -11,6 +11,7 @@ Covers the two correctness properties the entities endpoint depends on:
 from routes.dignet import (
     _PMID_CHUNK,
     _aggregate_entities,
+    _aggregate_ino,
     _entity_cache_key,
     _split_terms,
 )
@@ -84,6 +85,11 @@ def test_cache_key_differs_for_different_cohorts():
     assert _entity_cache_key([1, 2, 3]) != _entity_cache_key([1, 2, 4])
 
 
+def test_cache_key_separates_main_from_ino_scope():
+    """The eager payload and the on-demand INO payload cache independently."""
+    assert _entity_cache_key([1, 2], "main") != _entity_cache_key([1, 2], "ino")
+
+
 # ---------------------------------------------------------------------------
 # _aggregate_entities
 # ---------------------------------------------------------------------------
@@ -98,53 +104,59 @@ def test_aggregate_splits_terms_and_counts_papers():
             ("aspirin, ibuprofen", "cancer"),
             (None, None),
         ],
-        # t_ino rows: (matching_phrase, distinct-pmid count)
-        [("binding", 2)],
+        # t_vo rows: (matching_phrase, distinct-pmid count)
+        [("covid-19 vaccine", 2)],
     ])
 
-    drugs, diseases, ino = _aggregate_entities(conn, [1, 2, 3])
+    drugs, diseases, vaccines = _aggregate_entities(conn, [1, 2, 3])
 
     assert drugs == [{"term": "aspirin", "cnt": 2}, {"term": "ibuprofen", "cnt": 1}]
     assert diseases == [
         {"term": "cancer", "cnt": 2},
         {"term": "lung cancer", "cnt": 1},
     ]
-    assert ino == [{"term": "binding", "cnt": 2}]
+    assert vaccines == [{"term": "covid-19 vaccine", "cnt": 2}]
+
+
+def test_aggregate_drops_the_generic_vaccine_term():
+    """The bare "vaccine" catch-all carries no cohort-specific signal."""
+    conn = FakeConn([
+        [],
+        [("vaccine", 900), ("Vaccine", 50), ("malaria vaccine", 7)],
+    ])
+
+    _, _, vaccines = _aggregate_entities(conn, [1])
+
+    assert vaccines == [{"term": "malaria vaccine", "cnt": 7}]
 
 
 def test_aggregate_covers_every_chunk_not_just_the_first():
     """Regression: counts must span the whole cohort, not a leading subset."""
     pmids = list(range(1, _PMID_CHUNK * 2 + 1))  # exactly two chunks
     conn = FakeConn([
-        [("aspirin", "cancer")],   # chunk 1 biosummary
-        [("binding", 5)],          # chunk 1 ino
-        [("aspirin", "cancer")],   # chunk 2 biosummary
-        [("binding", 7)],          # chunk 2 ino
+        [("aspirin", "cancer")],        # chunk 1 biosummary
+        [("bcg vaccine", 5)],           # chunk 1 vo
+        [("aspirin", "cancer")],        # chunk 2 biosummary
+        [("bcg vaccine", 7)],           # chunk 2 vo
     ])
 
-    drugs, diseases, ino = _aggregate_entities(conn, pmids)
+    drugs, diseases, vaccines = _aggregate_entities(conn, pmids)
 
     # Both chunks contributed, so counts are summed across the full cohort.
     assert drugs == [{"term": "aspirin", "cnt": 2}]
     assert diseases == [{"term": "cancer", "cnt": 2}]
-    assert ino == [{"term": "binding", "cnt": 12}]
-    # 2 chunks x 2 queries (biosummary + ino)
+    assert vaccines == [{"term": "bcg vaccine", "cnt": 12}]
+    # 2 chunks x 2 queries (biosummary + vo)
     assert len(conn.executed) == 4
 
 
-def test_aggregate_ino_does_not_join_gene_pairs():
-    """INO must read t_ino by pmid, not through t_gene_pairs.
-
-    Joining through t_gene_pairs would silently require two genes in one
-    sentence, dropping interaction evidence from single-gene papers.
-    """
-    conn = FakeConn([[], [("binding", 1)]])
+def test_aggregate_entities_does_not_touch_ino():
+    """INO is expensive and must not ride along on the eager payload."""
+    conn = FakeConn([[], []])
 
     _aggregate_entities(conn, [1, 2])
 
-    ino_sql = conn.executed[1][0]
-    assert "t_ino" in ino_sql
-    assert "t_gene_pairs" not in ino_sql
+    assert not any("t_ino" in sql for sql, _ in conn.executed)
 
 
 def test_aggregate_closes_every_cursor():
@@ -158,7 +170,41 @@ def test_aggregate_closes_every_cursor():
 def test_aggregate_empty_cohort_runs_no_queries():
     conn = FakeConn([])
 
-    drugs, diseases, ino = _aggregate_entities(conn, [])
+    drugs, diseases, vaccines = _aggregate_entities(conn, [])
 
-    assert (drugs, diseases, ino) == ([], [], [])
+    assert (drugs, diseases, vaccines) == ([], [], [])
+    assert conn.executed == []
+
+
+# ---------------------------------------------------------------------------
+# _aggregate_ino
+# ---------------------------------------------------------------------------
+
+
+def test_aggregate_ino_does_not_join_gene_pairs():
+    """INO must read t_ino by pmid, not through t_gene_pairs.
+
+    Joining through t_gene_pairs would silently require two genes in one
+    sentence, dropping interaction evidence from single-gene papers.
+    """
+    conn = FakeConn([[("binding", 1)]])
+
+    _aggregate_ino(conn, [1, 2])
+
+    sql = conn.executed[0][0]
+    assert "t_ino" in sql
+    assert "t_gene_pairs" not in sql
+
+
+def test_aggregate_ino_sums_across_chunks():
+    pmids = list(range(1, _PMID_CHUNK * 2 + 1))
+    conn = FakeConn([[("binding", 5)], [("binding", 7)]])
+
+    assert _aggregate_ino(conn, pmids) == [{"term": "binding", "cnt": 12}]
+
+
+def test_aggregate_ino_empty_cohort_runs_no_queries():
+    conn = FakeConn([])
+
+    assert _aggregate_ino(conn, []) == []
     assert conn.executed == []

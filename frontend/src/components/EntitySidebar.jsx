@@ -8,6 +8,7 @@ function Section({ title, color, items, onItemClick, activeItem }) {
     green: { bg: 'bg-green-50', text: 'text-green-800', active: 'bg-green-200', hover: 'hover:bg-green-100' },
     red: { bg: 'bg-red-50', text: 'text-red-800', active: 'bg-red-200', hover: 'hover:bg-red-100' },
     purple: { bg: 'bg-purple-50', text: 'text-purple-800', active: 'bg-purple-200', hover: 'hover:bg-purple-100' },
+    orange: { bg: 'bg-orange-50', text: 'text-orange-800', active: 'bg-orange-200', hover: 'hover:bg-orange-100' },
   }
   const c = colorMap[color] || colorMap.green
 
@@ -43,7 +44,7 @@ function Section({ title, color, items, onItemClick, activeItem }) {
   )
 }
 
-export default function EntitySidebar({ entities, loading, onHighlight, activeHighlight, onClearHighlight, visibleCategories, onToggleCategory, covCount = 0, covLoading = false }) {
+export default function EntitySidebar({ entities, loading, onHighlight, activeHighlight, onClearHighlight, visibleCategories, onToggleCategory, covCount = 0, covLoading = false, inoItems = [], inoLoading = false }) {
   if (loading) {
     return (
       <div className="text-xs text-gray-400 py-4 text-center">
@@ -54,7 +55,7 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
 
   // Render the toggle controls even when there are no drug/disease/INO entities,
   // so the CoV-protein overlay toggle stays reachable.
-  const safeEntities = entities || { drugs: [], diseases: [], ino_distribution: [] }
+  const safeEntities = entities || { drugs: [], diseases: [], vaccines: [] }
   entities = safeEntities
 
   return (
@@ -76,14 +77,17 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
         {[
           { key: 'drugs', label: 'Drugs', color: 'bg-green-500' },
           { key: 'diseases', label: 'Diseases', color: 'bg-red-500' },
+          { key: 'vaccines', label: 'Vaccines', color: 'bg-orange-500' },
           { key: 'ino', label: 'INO Types', color: 'bg-purple-500' },
           { key: 'cov', label: 'CoV proteins', color: 'bg-teal-500' },
         ].map(({ key, label, color }) => {
           const isOn = !!visibleCategories?.[key]
           const count = key === 'drugs' ? entities?.drugs?.length || 0
             : key === 'diseases' ? entities?.diseases?.length || 0
+            : key === 'vaccines' ? entities?.vaccines?.length || 0
             : key === 'cov' ? (covLoading ? '…' : covCount)
-            : entities?.ino_distribution?.length || 0
+            // INO loads on demand, so show nothing until it has been requested.
+            : (inoLoading ? '…' : (isOn ? inoItems.length : '–'))
           const switchId = `toggle-${key}`
           const labelId = `label-${key}`
           return (
@@ -134,9 +138,29 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
       />
 
       <Section
+        title="Vaccines"
+        color="orange"
+        items={entities.vaccines}
+        onItemClick={(term) => onHighlight?.('vaccine', term)}
+        activeItem={activeHighlight}
+      />
+
+      {/* INO is fetched only when its toggle is switched on — aggregating it
+          costs far more than the other categories. */}
+      {inoLoading && (
+        <div className="text-xs text-gray-400 py-1" role="status">
+          Loading INO types…
+        </div>
+      )}
+      {!inoLoading && !visibleCategories?.ino && (
+        <p className="text-[11px] text-gray-400">
+          Turn on <strong>INO Types</strong> above to load interaction types for this network.
+        </p>
+      )}
+      <Section
         title="INO Types"
         color="purple"
-        items={entities.ino_distribution}
+        items={inoItems}
         onItemClick={(term) => onHighlight?.('ino', term)}
         activeItem={activeHighlight}
       />

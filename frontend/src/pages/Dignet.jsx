@@ -293,9 +293,13 @@ export default function Dignet() {
   const [entitiesLoading, setEntitiesLoading] = useState(false)
   const [activeHighlight, setActiveHighlight] = useState(null)
   const [highlightType, setHighlightType] = useState(null)
-  const [visibleCategories, setVisibleCategories] = useState({ drugs: true, diseases: true, ino: true, cov: false })
+  // INO defaults off and loads on demand (its aggregation is ~250x costlier
+  // per PMID chunk than the other categories), following the CoV pattern.
+  const [visibleCategories, setVisibleCategories] = useState({ drugs: true, diseases: true, vaccines: true, ino: false, cov: false })
   const [covData, setCovData] = useState(null)
   const [covLoading, setCovLoading] = useState(false)
+  const [inoData, setInoData] = useState(null)
+  const [inoLoading, setInoLoading] = useState(false)
   const [evidencePair, setEvidencePair] = useState(null)
   const [colorScheme, setColorScheme] = useState('none') // node color scheme (SPEC-COHORT-002)
   // Two-cohort differential mode (SPEC-COHORT-003)
@@ -387,6 +391,7 @@ export default function Dignet() {
     if (isNewQuery) {
       setEntities(null)
       setCovData(null)
+      setInoData(null)
       setActiveHighlight(null)
       setHighlightType(null)
     }
@@ -447,6 +452,7 @@ export default function Dignet() {
     setSelectedNode(null)
     setEntities(null)
     setCovData(null)
+    setInoData(null)
     setActiveHighlight(null)
     setHighlightType(null)
     try {
@@ -497,6 +503,7 @@ export default function Dignet() {
     setSelectedNode(null)
     setEntities(null)
     setCovData(null)
+    setInoData(null)
     try {
       // Reuse the existing aggregation endpoint once per cohort (no new backend).
       const raws = await Promise.all(parsed.map(pmids => api.dignetSearchPmids(pmids, { has_vaccine: vaccineOnly })))
@@ -619,6 +626,20 @@ export default function Dignet() {
     }
   }, [visibleCategories.cov, result]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Lazily fetch INO the first time it is toggled on — same pattern as CoV.
+  // Aggregating t_ino costs ~503ms per 500-PMID chunk (vs ~2ms for the other
+  // categories), so it is never paid unless the user asks for it.
+  useEffect(() => {
+    const qid = result?.query_id
+    if (visibleCategories.ino && qid && !inoData && !inoLoading) {
+      setInoLoading(true)
+      api.dignetEntitiesIno(qid)
+        .then((d) => setInoData(d || { ino_distribution: [] }))
+        .catch(() => setInoData({ ino_distribution: [] }))
+        .finally(() => setInoLoading(false))
+    }
+  }, [visibleCategories.ino, result]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const parsedPmidCount = useMemo(() => parsePmids(pmidText).length, [pmidText])
 
   const geneElements = useMemo(
@@ -675,8 +696,26 @@ export default function Dignet() {
       })
     }
 
-    if (visibleCategories.ino && entities?.ino_distribution?.length) {
-      entities.ino_distribution.slice(0, 8).forEach((ino, i) => {
+    if (visibleCategories.vaccines && entities?.vaccines?.length) {
+      entities.vaccines.slice(0, 10).forEach((vac, i) => {
+        const vacId = `vaccine_${i}`
+        extra.push({
+          data: { id: vacId, label: vac.term, nodeType: 'vaccine', degree: 1, centrality_d: 0 }
+        })
+        const topGenes = geneElements
+          .filter(e => !e.data.source)
+          .sort((a, b) => (b.data.degree || 0) - (a.data.degree || 0))
+          .slice(0, 3)
+        topGenes.forEach(g => {
+          extra.push({
+            data: { id: `de_${vacId}_${g.data.id}`, source: vacId, target: g.data.id, weight: 1, edgeType: 'entity', ino_color: '#cbd5e0' }
+          })
+        })
+      })
+    }
+
+    if (visibleCategories.ino && inoData?.ino_distribution?.length) {
+      inoData.ino_distribution.slice(0, 8).forEach((ino, i) => {
         const inoId = `ino_${i}`
         extra.push({
           data: { id: inoId, label: ino.term, nodeType: 'ino', degree: 1, centrality_d: 0 }
@@ -723,7 +762,7 @@ export default function Dignet() {
     }
 
     return extra
-  }, [result, geneElements, entities, visibleCategories, covData])
+  }, [result, geneElements, entities, visibleCategories, covData, inoData])
 
   const elements = useMemo(() => [...geneElements, ...entityElements], [geneElements, entityElements])
   const geneNodeCount = geneElements.filter(e => !e.data.source).length
@@ -1068,10 +1107,11 @@ export default function Dignet() {
                 <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-full bg-[#1e3a5f]"></span> High centrality</span>
                 <span className="flex items-center gap-1.5"><span className="inline-block w-3 h-3 rounded-full bg-[#93c5fd]"></span> Low centrality</span>
               </div>
-              {(visibleCategories.drugs || visibleCategories.diseases || visibleCategories.ino || visibleCategories.cov) && (
+              {(visibleCategories.drugs || visibleCategories.diseases || visibleCategories.vaccines || visibleCategories.ino || visibleCategories.cov) && (
                 <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
                   {visibleCategories.drugs && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-green-500 rotate-45"></span> Drug</span>}
                   {visibleCategories.diseases && <span className="flex items-center gap-1"><span className="inline-block w-0 h-0 border-l-[6px] border-r-[6px] border-b-[10px] border-transparent border-b-red-500"></span> Disease</span>}
+                  {visibleCategories.vaccines && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-[#dd6b20]" style={{ clipPath: 'polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%)' }}></span> Vaccine</span>}
                   {visibleCategories.ino && <span className="flex items-center gap-1"><span className="inline-block w-3 h-3 bg-purple-500 rounded-sm"></span> INO Type</span>}
                   {visibleCategories.cov && (
                     <>
@@ -1147,6 +1187,8 @@ export default function Dignet() {
                     onToggleCategory={(key) => setVisibleCategories(prev => ({ ...prev, [key]: !prev[key] }))}
                     covCount={covData?.cov_nodes?.length || 0}
                     covLoading={covLoading}
+                    inoItems={inoData?.ino_distribution || []}
+                    inoLoading={inoLoading}
                   />
                 )}
               </div>

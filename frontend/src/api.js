@@ -95,6 +95,9 @@ export const api = {
 
   dignetYearRange: () => request('/dignet/year-range'),
   dignetEntities: (queryId) => request(`/dignet/${queryId}/entities`),
+  // INO is served separately and fetched only on demand: aggregating it costs
+  // ~250x more per PMID chunk than the drug/disease/vaccine categories.
+  dignetEntitiesIno: (queryId) => request(`/dignet/${queryId}/entities/ino`),
   dignetCovGenes: (queryId, minShared) =>
     request(`/dignet/${queryId}/cov-genes${minShared != null ? `?min_shared=${minShared}` : ''}`),
 

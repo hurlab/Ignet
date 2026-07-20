@@ -53,6 +53,10 @@ _COV_MIN_SHARED_DEFAULT = 2
 _ENTITY_TOP_N = 20
 # Cache TTL for aggregated entity counts: 24 hours
 _ENTITY_CACHE_TTL = 24 * 60 * 60
+# Vaccine-ontology catch-all terms carrying no cohort-specific signal. Only the
+# bare "vaccine" qualifies (245,819 PMIDs corpus-wide); every other VO term is a
+# specific vaccine, so the list is deliberately minimal.
+_VO_GENERIC_TERMS = frozenset({"vaccine"})
 
 # ---------------------------------------------------------------------------
 # Input sanitisation
@@ -827,35 +831,48 @@ def _split_terms(value: str | None) -> list[str]:
     return [term.strip() for term in value.split(",") if term.strip()]
 
 
-def _entity_cache_key(pmids: list[int]) -> str:
-    """Cache key for a PMID cohort's entity aggregation (order-independent)."""
+def _entity_cache_key(pmids: list[int], scope: str = "main") -> str:
+    """Cache key for a PMID cohort's entity aggregation (order-independent).
+
+    `scope` separates the fast categories from the on-demand INO aggregation so
+    the two are cached and invalidated independently.
+    """
     digest = hashlib.sha256(",".join(str(p) for p in sorted(pmids)).encode()).hexdigest()
-    return f"dignet:entities:{digest}"
+    return f"dignet:entities:{scope}:{digest}"
+
+
+def _top_terms(counter: Counter) -> list[dict]:
+    """Render a term counter as the API's ranked [{term, cnt}] list."""
+    return [
+        {"term": term, "cnt": cnt}
+        for term, cnt in counter.most_common(_ENTITY_TOP_N)
+    ]
+
+
+def _chunk_params(pmids: list[int]):
+    """Yield (placeholders, params) for each PMID chunk of a cohort."""
+    for i in range(0, len(pmids), _PMID_CHUNK):
+        chunk = pmids[i : i + _PMID_CHUNK]
+        yield ",".join(["%s"] * len(chunk)), tuple(chunk)
 
 
 def _aggregate_entities(
     conn, pmids: list[int]
 ) -> tuple[list[dict], list[dict], list[dict]]:
-    """Count drug / disease / INO terms across the full PMID cohort.
+    """Count drug / disease / vaccine terms across the full PMID cohort.
 
     Chunked over _PMID_CHUNK so a 50k-PMID upload is fully counted rather than
     sampled. t_biosummary holds one row per PMID, so a term's count is the
     number of papers in the cohort mentioning it.
 
-    INO is read from t_ino.pmid directly rather than joined through
-    t_gene_pairs: interaction types are annotated per sentence and do not
-    require that sentence to contain two genes, so the join would drop
-    interaction evidence from single-gene papers.
+    These three categories are cheap (~2ms per chunk each), so they load
+    eagerly. INO is 250x more expensive and lives in _aggregate_ino.
     """
     drug_counts: Counter = Counter()
     disease_counts: Counter = Counter()
-    ino_counts: Counter = Counter()
+    vaccine_counts: Counter = Counter()
 
-    for i in range(0, len(pmids), _PMID_CHUNK):
-        chunk = pmids[i : i + _PMID_CHUNK]
-        placeholders = ",".join(["%s"] * len(chunk))
-        params = tuple(chunk)
-
+    for placeholders, params in _chunk_params(pmids):
         cursor = conn.cursor()
         cursor.execute(
             f"""SELECT drug_term, hdo_term
@@ -873,6 +890,45 @@ def _aggregate_entities(
         cursor = conn.cursor()
         cursor.execute(
             f"""SELECT matching_phrase, COUNT(DISTINCT pmid) AS cnt
+                FROM t_vo
+                WHERE pmid IN ({placeholders})
+                  AND matching_phrase IS NOT NULL AND matching_phrase != ''
+                GROUP BY matching_phrase""",
+            params,
+        )
+        for phrase, cnt in cursor.fetchall():
+            # The bare "vaccine" term matches a quarter-million papers and says
+            # nothing about a specific cohort; every other VO term is specific.
+            if phrase.strip().lower() in _VO_GENERIC_TERMS:
+                continue
+            vaccine_counts[phrase] += int(cnt)
+        cursor.close()
+
+    return (
+        _top_terms(drug_counts),
+        _top_terms(disease_counts),
+        _top_terms(vaccine_counts),
+    )
+
+
+def _aggregate_ino(conn, pmids: list[int]) -> list[dict]:
+    """Count INO interaction types across the full PMID cohort.
+
+    Split out of _aggregate_entities and loaded on demand: t_ino returns ~9k
+    rows per 500-PMID chunk against t_biosummary's ~440, measured at ~503ms vs
+    ~2ms per chunk cold, so eager loading cost every cold cohort 5-15s.
+
+    Read from t_ino.pmid directly rather than joined through t_gene_pairs:
+    interaction types are annotated per sentence and do not require that
+    sentence to contain two genes, so the join would drop interaction evidence
+    from single-gene papers.
+    """
+    ino_counts: Counter = Counter()
+
+    for placeholders, params in _chunk_params(pmids):
+        cursor = conn.cursor()
+        cursor.execute(
+            f"""SELECT matching_phrase, COUNT(DISTINCT pmid) AS cnt
                 FROM t_ino
                 WHERE pmid IN ({placeholders})
                   AND matching_phrase IS NOT NULL AND matching_phrase != ''
@@ -883,13 +939,7 @@ def _aggregate_entities(
             ino_counts[phrase] += int(cnt)
         cursor.close()
 
-    def _top(counter: Counter) -> list[dict]:
-        return [
-            {"term": term, "cnt": cnt}
-            for term, cnt in counter.most_common(_ENTITY_TOP_N)
-        ]
-
-    return _top(drug_counts), _top(disease_counts), _top(ino_counts)
+    return _top_terms(ino_counts)
 
 
 # ---------------------------------------------------------------------------
@@ -907,7 +957,11 @@ def network_entities(query_id: int):
     uploaded. Results are Redis-cached for 24h since the PMID set for a given
     query_id is stable.
 
-    Response adds `pmid_count` so the client can state what the counts cover.
+    Returns the cheap categories only (drugs, diseases, vaccines). INO is
+    served separately by /entities/ino because it costs ~250x more per chunk.
+
+    Response includes `pmid_count` so the client can state what the counts
+    cover.
     """
     redis_client = None
     try:
@@ -921,11 +975,11 @@ def network_entities(query_id: int):
                 return jsonify({
                     "drugs": [],
                     "diseases": [],
-                    "ino_distribution": [],
+                    "vaccines": [],
                     "pmid_count": 0,
                 })
 
-            cache_key = _entity_cache_key(pmids)
+            cache_key = _entity_cache_key(pmids, "main")
             redis_client = get_redis()
             if redis_client:
                 try:
@@ -935,7 +989,7 @@ def network_entities(query_id: int):
                 except Exception:
                     logger.warning("Entity cache read failed", exc_info=True)
 
-            drugs, diseases, ino_distribution = _aggregate_entities(conn, pmids)
+            drugs, diseases, vaccines = _aggregate_entities(conn, pmids)
 
     except Exception as exc:
         logger.exception("Error in network_entities: %s", exc)
@@ -944,7 +998,7 @@ def network_entities(query_id: int):
     result = {
         "drugs": drugs,
         "diseases": diseases,
-        "ino_distribution": ino_distribution,
+        "vaccines": vaccines,
         "pmid_count": len(pmids),
     }
 
@@ -953,6 +1007,59 @@ def network_entities(query_id: int):
             redis_client.set(cache_key, json.dumps(result), ex=_ENTITY_CACHE_TTL)
         except Exception:
             logger.warning("Entity cache write failed", exc_info=True)
+
+    return jsonify(result)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/dignet/<query_id>/entities/ino  (on-demand, expensive)
+# ---------------------------------------------------------------------------
+
+
+@dignet_bp.route("/dignet/<int:query_id>/entities/ino", methods=["GET"])
+def network_entities_ino(query_id: int):
+    """
+    INO interaction-type frequencies for a Dignet query's PMIDs.
+
+    Served separately from /entities and fetched only when the client actually
+    asks for it: t_ino aggregation measured ~503ms per 500-PMID chunk cold
+    (vs ~2ms for the other categories), so loading it eagerly cost every cold
+    cohort 5-15s. Cached 24h independently of the main entity payload.
+    """
+    redis_client = None
+    try:
+        with db_connection() as conn:
+            row = _load_query(conn, query_id)
+            if not row:
+                return jsonify({"error": "NotFound"}), 404
+
+            pmids = [int(p) for p in row["pmid_list"].split(",") if p.strip().isdigit()]
+            if not pmids:
+                return jsonify({"ino_distribution": [], "pmid_count": 0})
+
+            cache_key = _entity_cache_key(pmids, "ino")
+            redis_client = get_redis()
+            if redis_client:
+                try:
+                    cached = redis_client.get(cache_key)
+                    if cached:
+                        return jsonify(json.loads(cached))
+                except Exception:
+                    logger.warning("INO cache read failed", exc_info=True)
+
+            ino_distribution = _aggregate_ino(conn, pmids)
+
+    except Exception as exc:
+        logger.exception("Error in network_entities_ino: %s", exc)
+        return jsonify({"error": "DatabaseError"}), 500
+
+    result = {"ino_distribution": ino_distribution, "pmid_count": len(pmids)}
+
+    if redis_client:
+        try:
+            redis_client.set(cache_key, json.dumps(result), ex=_ENTITY_CACHE_TTL)
+        except Exception:
+            logger.warning("INO cache write failed", exc_info=True)
 
     return jsonify(result)
 

@@ -102,8 +102,13 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
                   isOn ? color : 'bg-gray-300'
                 }`}
               >
-                <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${
-                  isOn ? 'translate-x-4' : 'translate-x-0.5'
+                {/* Pinned to the track's own edges. Do NOT position this with
+                    translate-x-*: the span is absolute with no `left`, so its
+                    static origin is the button's CENTER (buttons center their
+                    content), and translating from there pushes the knob out of
+                    the track and over the label's first character. */}
+                <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all ${
+                  isOn ? 'right-0.5 left-auto' : 'left-0.5 right-auto'
                 }`} />
               </button>
               <span id={labelId} className="cursor-default select-none" onClick={() => onToggleCategory?.(key)}>
@@ -129,8 +134,8 @@ export default function EntitySidebar({ entities, loading, onHighlight, activeHi
               visibleCategories?.ontology ? 'bg-navy' : 'bg-gray-300'
             }`}
           >
-            <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-transform ${
-              visibleCategories?.ontology ? 'translate-x-4' : 'translate-x-0.5'
+            <span className={`absolute top-0.5 w-3 h-3 bg-white rounded-full shadow transition-all ${
+              visibleCategories?.ontology ? 'right-0.5 left-auto' : 'left-0.5 right-auto'
             }`} />
           </button>
           <span id="label-ontology" className="cursor-default select-none font-medium" onClick={() => onToggleCategory?.('ontology')}>

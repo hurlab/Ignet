@@ -309,3 +309,9 @@ dignet/condl*/exportFiles*.tgz
 biomert/
 ignet-*.service
 !deploy/systemd/ignet-*.service
+
+# Playwright e2e artifacts (frontend/e2e specs + config ARE tracked)
+frontend/test-results/
+frontend/playwright-report/
+frontend/blob-report/
+frontend/.playwright/

@@ -73,21 +73,25 @@ async function edgeCount(page) {
   return m ? Number(m[1]) : null
 }
 
-test('gene-ontology overlay loads on demand and adds real co-occurrence edges', async ({ page }) => {
+test('gene-ontology overlay is on by default and toggling it changes the edges', async ({ page }) => {
   const errors = await buildNetwork(page)
+  const toggle = page.locator('#toggle-ontology')
 
-  const before = await edgeCount(page)
-  expect(before, 'edge count is a number before overlay').toBeGreaterThan(0)
-
-  await page.locator('#toggle-ontology').click()
-  await expect(page.locator('#toggle-ontology')).toHaveAttribute('aria-checked', 'true')
-  // Sidebar reports the annotated-paper denominator once the overlay resolves.
+  // Ships ON: real co-occurrence edges are the default view.
+  await expect(toggle).toHaveAttribute('aria-checked', 'true')
   await expect(page.locator('#label-ontology').locator('xpath=../..'))
     .toContainText(/annotated papers/i, { timeout: 30_000 })
 
+  const before = await edgeCount(page)
+  expect(before, 'edge count is a number').toBeGreaterThan(0)
+
+  // Toggling flips state and swaps the edge model (real <-> decorative).
+  await toggle.click()
+  await expect(toggle).toHaveAttribute('aria-checked', 'false')
   await page.waitForTimeout(4000)
   const after = await edgeCount(page)
-  expect(after, `edge count changed after overlay (${before} -> ${after})`).not.toEqual(before)
+  expect(after, `edge count changed after toggling (${before} -> ${after})`).not.toEqual(before)
+
   expect(errors, 'no console errors').toEqual([])
 })
 

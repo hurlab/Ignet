@@ -295,7 +295,10 @@ export default function Dignet() {
   const [highlightType, setHighlightType] = useState(null)
   // INO defaults off and loads on demand (its aggregation is ~250x costlier
   // per PMID chunk than the other categories), following the CoV pattern.
-  const [visibleCategories, setVisibleCategories] = useState({ drugs: true, diseases: true, vaccines: true, ino: false, cov: false, ontology: false })
+  // ontology defaults ON: drug/disease nodes link to genes by real per-paper
+  // co-occurrence. The toggle stays so a user can revert to the decorative
+  // (top-degree) layout. INO/CoV stay off (expensive / niche).
+  const [visibleCategories, setVisibleCategories] = useState({ drugs: true, diseases: true, vaccines: true, ino: false, cov: false, ontology: true })
   const [covData, setCovData] = useState(null)
   const [covLoading, setCovLoading] = useState(false)
   const [inoData, setInoData] = useState(null)
@@ -677,10 +680,14 @@ export default function Dignet() {
     if (!result) return []
     const extra = []
 
-    // Gene<->ontology model: real per-cohort co-occurrence edges. When enabled
-    // this REPLACES the decorative drug/disease nodes below, whose edges attach
-    // terms to the top-degree genes regardless of whether they co-occur.
-    if (visibleCategories.ontology && entnetData?.edges?.length) {
+    // Gene<->ontology model: real per-cohort co-occurrence edges. When on (the
+    // default) this REPLACES the decorative drug/disease nodes below (guarded by
+    // !ontologyMode), whose edges attach terms to the top-degree genes
+    // regardless of co-occurrence. INO and CoV overlays still coexist further
+    // down. While ontology is on but entnetData is still loading, neither this
+    // nor the decorative blocks draw, so the misleading edges never flash in.
+    const ontologyMode = visibleCategories.ontology
+    if (ontologyMode && entnetData?.edges?.length) {
       const geneIds = new Set(geneElements.filter(e => !e.data.source).map(e => e.data.id))
       // Disease and drug only: the API emits no vaccine edges, because the
       // VO-annotated and gene-annotated corpora are near-disjoint per paper.
@@ -711,10 +718,9 @@ export default function Dignet() {
           }
         })
       })
-      return extra
     }
 
-    if (visibleCategories.drugs && entities?.drugs?.length) {
+    if (!ontologyMode && visibleCategories.drugs && entities?.drugs?.length) {
       entities.drugs.slice(0, 10).forEach((drug, i) => {
         const drugId = `drug_${i}`
         extra.push({
@@ -732,7 +738,7 @@ export default function Dignet() {
       })
     }
 
-    if (visibleCategories.diseases && entities?.diseases?.length) {
+    if (!ontologyMode && visibleCategories.diseases && entities?.diseases?.length) {
       entities.diseases.slice(0, 10).forEach((disease, i) => {
         const diseaseId = `disease_${i}`
         extra.push({
@@ -750,7 +756,7 @@ export default function Dignet() {
       })
     }
 
-    if (visibleCategories.vaccines && entities?.vaccines?.length) {
+    if (!ontologyMode && visibleCategories.vaccines && entities?.vaccines?.length) {
       entities.vaccines.slice(0, 10).forEach((vac, i) => {
         const vacId = `vaccine_${i}`
         extra.push({

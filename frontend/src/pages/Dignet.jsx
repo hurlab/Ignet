@@ -695,20 +695,26 @@ export default function Dignet() {
         ...(visibleCategories.diseases ? ['disease'] : []),
         ...(visibleCategories.drugs ? ['drug'] : []),
       ])
-      const drawn = new Set()
+      const termNodes = new Map() // termId -> node object, mutated in place to accumulate weight
       entnetData.edges.forEach((ed) => {
         if (!kindsOn.has(ed.kind) || !geneIds.has(ed.gene)) return
         const termId = `${ed.kind}_ont_${ed.term}`
-        if (!drawn.has(termId)) {
-          drawn.add(termId)
-          extra.push({
+        let termNode = termNodes.get(termId)
+        if (!termNode) {
+          termNode = {
             data: {
               id: termId, label: ed.term,
               nodeType: ed.kind, // 'disease' | 'drug' | 'vaccine'
-              degree: 1, centrality_d: 0,
+              degree: 0, centrality_d: 0,
             }
-          })
+          }
+          termNodes.set(termId, termNode)
+          extra.push(termNode)
         }
+        // Aggregate the term's total co-mentioning papers across all its gene
+        // edges, so node size can reflect real evidence strength (see
+        // NetworkGraph's drug/disease size mapping) instead of a flat placeholder.
+        termNode.data.degree += ed.papers
         extra.push({
           data: {
             id: `oe_${termId}_${ed.gene}`,

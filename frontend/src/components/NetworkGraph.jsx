@@ -84,6 +84,16 @@ function buildStylesheet(elements) {
   const maxWeight = Math.max(...weights, 1)
   const minWeight = Math.min(...weights, 1)
 
+  // drug/disease term nodes carry a real aggregate weight (total co-mentioning
+  // papers) in `degree` when built from the gene<->ontology model; scope the
+  // size range to just these nodes so it isn't washed out by gene-node degrees.
+  const ddWeights = nodes
+    .filter(n => n.data.nodeType === 'drug' || n.data.nodeType === 'disease')
+    .map(n => n.data.degree || 1)
+  const maxDD = Math.max(...ddWeights, 1)
+  const minDD = Math.min(...ddWeights, 1)
+  const ddSize = `mapData(degree, ${minDD}, ${Math.max(maxDD, minDD + 1)}, 16, 34)`
+
   return [
     {
       selector: 'node',
@@ -151,7 +161,7 @@ function buildStylesheet(elements) {
       style: {
         'background-color': '#38a169',
         'shape': 'diamond',
-        width: 20, height: 20,
+        width: ddSize, height: ddSize,
         'border-color': '#276749',
         'border-width': 1.5,
         'font-size': '8px',
@@ -163,7 +173,7 @@ function buildStylesheet(elements) {
       style: {
         'background-color': '#e53e3e',
         'shape': 'triangle',
-        width: 20, height: 20,
+        width: ddSize, height: ddSize,
         'border-color': '#9b2c2c',
         'border-width': 1.5,
         'font-size': '8px',
@@ -225,7 +235,22 @@ function buildStylesheet(elements) {
   ]
 }
 
-function buildLayout(nodeCount) {
+function buildLayout(nodeCount, hasEntityNodes) {
+  if (hasEntityNodes) {
+    // Entity/term overlays (gene<->ontology, CoV, INO, etc.): keep gene nodes
+    // in an inner ring and entity nodes in an outer ring instead of letting
+    // them force-simulate into one dense mass — a term connected to many
+    // genes otherwise crowds into the same hairball as the genes themselves.
+    return {
+      name: 'concentric',
+      concentric: (node) => (node.data('nodeType') ? 1 : 2),
+      levelWidth: () => 1,
+      minNodeSpacing: nodeCount > 50 ? 20 : 30,
+      animate: false,
+      padding: 30,
+      nodeDimensionsIncludeLabels: true,
+    }
+  }
   if (nodeCount > 100) {
     // fcose is significantly faster and produces better quality on large graphs
     return {
@@ -279,7 +304,11 @@ export default function NetworkGraph({ elements, onNodeClick, onEdgeClick, onCyR
   const nodeCount = useMemo(() => elements?.filter(e => !e.data.source).length || 0, [elements])
   const edgeCount = useMemo(() => elements?.filter(e => e.data.source).length || 0, [elements])
   const stylesheet = useMemo(() => buildStylesheet(elements || []), [elements])
-  const layout = useMemo(() => buildLayout(nodeCount), [nodeCount])
+  const hasEntityNodes = useMemo(
+    () => (elements || []).some(e => !e.data.source && e.data.nodeType),
+    [elements]
+  )
+  const layout = useMemo(() => buildLayout(nodeCount, hasEntityNodes), [nodeCount, hasEntityNodes])
 
   // Top edges for screen-reader alternative table (up to 10, sorted by weight desc)
   const TOP_EDGE_LIMIT = 10

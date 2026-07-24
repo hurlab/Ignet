@@ -237,18 +237,24 @@ function buildStylesheet(elements) {
 
 function buildLayout(nodeCount, hasEntityNodes) {
   if (hasEntityNodes) {
-    // Entity/term overlays (gene<->ontology, CoV, INO, etc.): keep gene nodes
-    // in an inner ring and entity nodes in an outer ring instead of letting
-    // them force-simulate into one dense mass — a term connected to many
-    // genes otherwise crowds into the same hairball as the genes themselves.
+    // Entity/term overlays (gene<->ontology, CoV, INO, etc.) add many extra
+    // nodes hanging off a handful of high-degree genes. A rigid concentric
+    // ring (tried first) over-corrected: it cramped the genes into an
+    // unreadable blob and flung sparse term nodes out to the canvas edges
+    // with a huge empty gap. Giving the same force layout more repulsion and
+    // longer ideal edges instead lets terms spread out from their connected
+    // genes without losing the genes' own readable arrangement.
     return {
-      name: 'concentric',
-      concentric: (node) => (node.data('nodeType') ? 1 : 2),
-      levelWidth: () => 1,
-      minNodeSpacing: nodeCount > 50 ? 20 : 30,
-      animate: false,
+      name: nodeCount > 100 ? 'fcose' : 'cose',
+      animate: nodeCount < 100,
+      animationDuration: 400,
       padding: 30,
       nodeDimensionsIncludeLabels: true,
+      idealEdgeLength: 100,
+      nodeRepulsion: nodeCount > 100 ? 12000 : 6000,
+      gravity: 0.35,
+      numIter: nodeCount > 100 ? 2500 : 300,
+      ...(nodeCount > 100 ? { tile: true, tilingPaddingVertical: 10, tilingPaddingHorizontal: 10 } : {}),
     }
   }
   if (nodeCount > 100) {

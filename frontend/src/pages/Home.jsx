@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api.js'
+import { formatLong } from '../hooks/useDataLastUpdated.js'
 
 const coreTools = [
   {
@@ -92,16 +93,13 @@ function StatCard({ label, value, loading }) {
   )
 }
 
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
-
+// Same exact-date format Footer already shows ("Data through July 22, 2026"),
+// so the two dates on the page agree instead of one being month-only.
 function dataThroughLabel(isoDate) {
-  if (!isoDate) return '2026'
+  if (!isoDate) return null
   const d = new Date(isoDate + 'T00:00:00Z')
-  if (Number.isNaN(d.getTime())) return '2026'
-  return `${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`
+  if (Number.isNaN(d.getTime())) return null
+  return formatLong(d)
 }
 
 export default function Home() {
@@ -148,7 +146,9 @@ export default function Home() {
       {/* Live stats */}
       <section>
         <h2 className="text-base font-semibold text-gray-700 mb-0">Database Statistics</h2>
-        <p className="text-xs text-gray-400 mt-0.5 mb-3">Based on PubMed literature through {dataThrough}</p>
+        <p className="text-xs text-gray-400 mt-0.5 mb-3">
+          {dataThrough ? `Based on PubMed literature through ${dataThrough}` : 'Based on PubMed literature'}
+        </p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <StatCard label="Genes" value={stats?.total_genes} loading={statsLoading} />
           <StatCard label="Gene Pairs" value={stats?.total_interactions} loading={statsLoading} />

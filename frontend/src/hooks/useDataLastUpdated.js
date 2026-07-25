@@ -5,7 +5,9 @@ const MONTHS = [
   'July', 'August', 'September', 'October', 'November', 'December',
 ]
 
-function formatLong(d) {
+// Named export so callers that already have data_last_updated from their own
+// fetch (e.g. Home's stats call) can format it without a second network round trip.
+export function formatLong(d) {
   return d.toLocaleDateString('en-US', {
     year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC',
   })

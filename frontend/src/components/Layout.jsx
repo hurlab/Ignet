@@ -23,7 +23,10 @@ export default function Layout() {
         Skip to main content
       </a>
       <Header />
-      <main id="main-content" ref={mainRef} tabIndex={-1} className="flex-1 outline-none">
+      {/* scroll-mt-14 matches Header's h-14: without it, focusing main on
+          route change scrolls it flush to the viewport top, hiding the first
+          ~56px of content behind the sticky header. */}
+      <main id="main-content" ref={mainRef} tabIndex={-1} className="flex-1 outline-none scroll-mt-14">
         <Outlet />
       </main>
       <Footer />

@@ -1,12 +1,19 @@
 """INO (Interaction Network Ontology) browsing endpoints."""
+import json
 import logging
 
 from flask import Blueprint, jsonify, request
 
-from db import db_connection
+from db import db_connection, get_redis
 
 logger = logging.getLogger(__name__)
 ino_bp = Blueprint("ino", __name__)
+
+# The term listing GROUPs over the whole 54.7M-row t_ino table, which costs
+# ~16 s cold — long enough to stall a live demo. The result only changes when
+# the nightly loader adds rows, so cache it for a day.
+_TERMS_CACHE_TTL = 24 * 60 * 60
+_TERMS_CACHE_KEY = "ignet:ino:terms:limit:{limit}"
 
 
 @ino_bp.route("/ino/terms", methods=["GET"])
@@ -16,6 +23,17 @@ def list_ino_terms():
         limit = min(int(request.args.get("limit", 50)), 100)
     except (ValueError, TypeError):
         return jsonify({"error": "BadRequest", "message": "Invalid limit parameter."}), 400
+
+    cache_key = _TERMS_CACHE_KEY.format(limit=limit)
+    redis_client = get_redis()
+    if redis_client:
+        try:
+            cached = redis_client.get(cache_key)
+            if cached:
+                return jsonify(json.loads(cached))
+        except Exception:
+            logger.warning("INO terms cache read failed", exc_info=True)
+
     try:
         with db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
@@ -36,7 +54,15 @@ def list_ino_terms():
         logger.exception("Error listing INO terms: %s", exc)
         return jsonify({"error": "DatabaseError"}), 500
 
-    return jsonify({"data": terms, "total": len(terms)})
+    result = {"data": terms, "total": len(terms)}
+
+    if redis_client:
+        try:
+            redis_client.set(cache_key, json.dumps(result), ex=_TERMS_CACHE_TTL)
+        except Exception:
+            logger.warning("INO terms cache write failed", exc_info=True)
+
+    return jsonify(result)
 
 
 @ino_bp.route("/ino/terms/<term>/genes", methods=["GET"])

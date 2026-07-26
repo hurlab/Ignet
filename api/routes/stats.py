@@ -23,6 +23,16 @@ _KEY_SENTENCES = "ignet:stats:total_sentences"
 _KEY_INTERACTIONS = "ignet:stats:total_interactions"
 _CACHE_TTL = 86400  # 24 hours
 
+# Collapse guard. The nightly loader deletes-then-reloads rows, so a COUNT(*)
+# issued mid-load can observe a partially populated table; caching that snapshot
+# pins a badly wrong number for the whole TTL. Observed 2026-07-25: the landing
+# page served 573,167 gene pairs against an actual 6,151,660 for ~7 h.
+# A fresh count below this fraction of the last known good value is rejected.
+_COLLAPSE_RATIO = 0.5
+# Suffix for the companion "last known good" key. Stored WITHOUT a TTL so it
+# outlives the cache entry and can still vet the next recompute.
+_LAST_GOOD_SUFFIX = ":last_good"
+
 _PIPELINE_TRACKER = os.getenv(
     "IGNET_PIPELINE_TRACKER",
     "/var/lib/ignet/last_processed_number.txt",
@@ -77,6 +87,40 @@ def _set_cache(redis_client, key: str, value: int) -> None:
         pass
 
 
+def _set_last_good(redis_client, key: str, value: int) -> None:
+    """Record the last plausible value for `key`, with no TTL."""
+    if redis_client is None:
+        return
+    try:
+        redis_client.set(key + _LAST_GOOD_SUFFIX, str(value))
+    except Exception:
+        pass
+
+
+def _accept_count(redis_client, key: str, value: int) -> int:
+    """Vet a freshly computed count, cache it when plausible, and return what to serve.
+
+    Guards against caching a partial-table read (see _COLLAPSE_RATIO). A count
+    that collapses below the ratio is neither cached nor served: the last known
+    good value is served instead, and the next request retries the query.
+
+    A genuine large deletion (e.g. a false-positive cleanup) will trip this
+    guard by design. To accept the smaller number, drop the companion key:
+        redis-cli DEL <key>:last_good
+    """
+    last_good = _get_from_cache(redis_client, key + _LAST_GOOD_SUFFIX)
+    if last_good is not None and value < last_good * _COLLAPSE_RATIO:
+        logger.warning(
+            "stats: rejected implausible count for %s (%d, below %.0f%% of last good %d); "
+            "serving last good value. Likely a mid-reload partial read.",
+            key, value, _COLLAPSE_RATIO * 100, last_good,
+        )
+        return last_good
+    _set_cache(redis_client, key, value)
+    _set_last_good(redis_client, key, value)
+    return value
+
+
 @stats_bp.route("/stats", methods=["GET"])
 def get_stats():
     """
@@ -103,22 +147,28 @@ def get_stats():
 
                 if total_interactions is None:
                     cursor.execute("SELECT COUNT(*) AS n FROM t_gene_pairs")
-                    total_interactions = int((cursor.fetchone() or {}).get("n", 0))
-                    _set_cache(redis_client, _KEY_INTERACTIONS, total_interactions)
+                    total_interactions = _accept_count(
+                        redis_client, _KEY_INTERACTIONS,
+                        int((cursor.fetchone() or {}).get("n", 0)),
+                    )
 
                 if total_sentences is None:
                     cursor.execute(
                         "SELECT COUNT(DISTINCT sentence_id) AS n FROM t_gene_pairs"
                     )
-                    total_sentences = int((cursor.fetchone() or {}).get("n", 0))
-                    _set_cache(redis_client, _KEY_SENTENCES, total_sentences)
+                    total_sentences = _accept_count(
+                        redis_client, _KEY_SENTENCES,
+                        int((cursor.fetchone() or {}).get("n", 0)),
+                    )
 
                 if total_pmids is None:
                     cursor.execute(
                         "SELECT COUNT(DISTINCT pmid) AS n FROM t_gene_pairs"
                     )
-                    total_pmids = int((cursor.fetchone() or {}).get("n", 0))
-                    _set_cache(redis_client, _KEY_PMIDS, total_pmids)
+                    total_pmids = _accept_count(
+                        redis_client, _KEY_PMIDS,
+                        int((cursor.fetchone() or {}).get("n", 0)),
+                    )
 
                 if total_genes is None:
                     cursor.execute(
@@ -132,8 +182,10 @@ def get_stats():
                         WHERE gene IS NOT NULL
                         """
                     )
-                    total_genes = int((cursor.fetchone() or {}).get("n", 0))
-                    _set_cache(redis_client, _KEY_GENES, total_genes)
+                    total_genes = _accept_count(
+                        redis_client, _KEY_GENES,
+                        int((cursor.fetchone() or {}).get("n", 0)),
+                    )
 
                 cursor.close()
 

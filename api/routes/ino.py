@@ -20,6 +20,10 @@ _TERMS_CACHE_KEY = "ignet:ino:terms:limit:{limit}"
 # (plus INO_T* template artifacts). Validate before use.
 _INO_ID_RE = re.compile(r"[A-Za-z]+_[A-Za-z0-9]+")
 
+# Per-class gene-pair pages. Keyed by selector + pagination.
+_GENES_CACHE_TTL = 24 * 60 * 60
+_GENES_CACHE_KEY = "ignet:ino:genes:{sel}:{page}:{per_page}"
+
 
 @ino_bp.route("/ino/terms", methods=["GET"])
 def list_ino_terms():
@@ -130,6 +134,21 @@ def genes_by_ino_term(term: str):
         selector_sql = "ino.matching_phrase = %s"
         selector_val = term
 
+    # Even with idx_ino_id_sentence the class join spans millions of rows
+    # (~19 s for a mid-size class, ~26 s for INO_0000157). Cache per selector +
+    # page so a demo click is paid once; scripts/warm_ino_cache.sh pre-warms it.
+    genes_cache_key = _GENES_CACHE_KEY.format(
+        sel=ino_id or f"phrase:{term}", page=page, per_page=per_page
+    )
+    genes_redis = get_redis()
+    if genes_redis:
+        try:
+            cached = genes_redis.get(genes_cache_key)
+            if cached:
+                return jsonify(json.loads(cached))
+        except Exception:
+            logger.warning("INO genes cache read failed", exc_info=True)
+
     try:
         with db_connection() as conn:
             cursor = conn.cursor(dictionary=True)
@@ -183,7 +202,7 @@ def genes_by_ino_term(term: str):
         logger.exception("Error fetching genes by INO term: %s", exc)
         return jsonify({"error": "DatabaseError"}), 500
 
-    return jsonify({
+    payload = {
         "term": term,
         "ino_id": ino_id or None,
         "data": pairs,
@@ -191,4 +210,12 @@ def genes_by_ino_term(term: str):
         "total": total,
         "page": page,
         "per_page": per_page,
-    })
+    }
+
+    if genes_redis:
+        try:
+            genes_redis.set(genes_cache_key, json.dumps(payload), ex=_GENES_CACHE_TTL)
+        except Exception:
+            logger.warning("INO genes cache write failed", exc_info=True)
+
+    return jsonify(payload)

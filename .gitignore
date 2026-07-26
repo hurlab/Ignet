@@ -157,6 +157,14 @@ secret-*.*
 .aws/config
 .aws/credentials
 
+# MoAI git-credential runtime files (defense-in-depth). The reconfigure wizard
+# delegates git provider credentials to the gh/glab CLI and never writes an
+# access token to a tracked config; these patterns ensure that if a
+# credential-bearing runtime file is ever introduced under .moai/, it is not
+# committed.
+.moai/**/credentials.yaml
+.moai/**/*.credentials
+
 # MINK agent credentials (plaintext API keys, per AC-CR-026).
 # Ignored anywhere in the tree so per-project auth dirs are never committed.
 **/.mink/auth/
@@ -232,7 +240,6 @@ dist-ssr/
 .vercel/
 .netlify/
 .firebase/
-
 # User Custom Patterns (preserved by moai update)
 *.env
 inc/adodb5/t1.php
@@ -315,3 +322,6 @@ frontend/test-results/
 frontend/playwright-report/
 frontend/blob-report/
 frontend/.playwright/
+
+# Presentation material (local-only; main is deployed to the web root)
+presentations/

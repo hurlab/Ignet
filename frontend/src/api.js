@@ -146,7 +146,13 @@ export const api = {
   profile: () => request('/user/profile'),
 
   inoTerms: (limit = 50) => request(`/ino/terms?limit=${limit}`),
-  inoTermGenes: (term, page = 1) => request(`/ino/terms/${encodeURIComponent(term)}/genes?page=${page}`),
+  // inoId selects a whole ontology class (every phrase mapped to it); without
+  // it the API falls back to the legacy exact-phrase lookup.
+  inoTermGenes: (term, page = 1, inoId = null) =>
+    request(
+      `/ino/terms/${encodeURIComponent(term)}/genes?page=${page}` +
+      (inoId ? `&ino_id=${encodeURIComponent(inoId)}` : '')
+    ),
 
   assistantAsk: (question, history = []) => request('/assistant/ask', {
     method: 'POST',

@@ -23,6 +23,13 @@ export default function InoExplorer() {
   const [termsError, setTermsError] = useState(null)
 
   const [selectedTerm, setSelectedTerm] = useState(null)
+  // Ontology class id for the selection. Drives class-level retrieval;
+  // null falls back to the legacy exact-phrase lookup.
+  const [selectedInoId, setSelectedInoId] = useState(null)
+  // The full class row for the current selection, for ontology provenance.
+  const selectedClass = selectedInoId
+    ? terms.find((t) => t.ino_id === selectedInoId) || null
+    : null
   const [termData, setTermData] = useState(null)
   const [termLoading, setTermLoading] = useState(false)
   const [termError, setTermError] = useState(null)
@@ -47,10 +54,10 @@ export default function InoExplorer() {
   }, [])
 
   // Load gene pairs when a term is selected or page changes
-  const loadTermGenes = useCallback((term, pg) => {
+  const loadTermGenes = useCallback((term, pg, inoId = null) => {
     setTermLoading(true)
     setTermError(null)
-    api.inoTermGenes(term, pg)
+    api.inoTermGenes(term, pg, inoId)
       .then((res) => {
         setTermData(res)
       })
@@ -71,15 +78,16 @@ export default function InoExplorer() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function selectTerm(term) {
+  function selectTerm(term, inoId = null) {
     setSelectedTerm(term)
+    setSelectedInoId(inoId)
     setPage(1)
-    loadTermGenes(term, 1)
+    loadTermGenes(term, 1, inoId)
   }
 
   function changePage(newPage) {
     setPage(newPage)
-    loadTermGenes(selectedTerm, newPage)
+    loadTermGenes(selectedTerm, newPage, selectedInoId)
   }
 
   const totalPages = termData ? Math.ceil(termData.total / termData.per_page) : 0
@@ -118,8 +126,8 @@ export default function InoExplorer() {
             const size = Math.max(12, Math.min(24, 12 + Math.log2(t.count) * 2))
             return (
               <button
-                key={t.term}
-                onClick={() => selectTerm(t.term)}
+                key={t.ino_id ?? t.term}
+                onClick={() => selectTerm(t.term, t.ino_id ?? null)}
                 style={{ fontSize: `${size}px` }}
                 className={`px-2 py-1 rounded-full transition-colors ${
                   selectedTerm === t.term
@@ -141,6 +149,23 @@ export default function InoExplorer() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div>
               <h3 className="text-lg font-bold text-navy">{selectedTerm}</h3>
+              {/* Ontology provenance: which class this is, which ontology it
+                  came from, and what it is a subclass of. */}
+              {selectedClass && (
+                <p className="text-xs text-gray-500 mt-0.5">
+                  <span className="font-mono">{selectedClass.ino_id}</span>
+                  {selectedClass.ontology && (
+                    <span className="ml-1.5 px-1.5 py-0.5 rounded bg-blue-50 text-navy">
+                      {selectedClass.ontology}
+                    </span>
+                  )}
+                  {selectedClass.parent && (
+                    <span className="ml-1.5">
+                      subclass of <span className="text-navy">{selectedClass.parent}</span>
+                    </span>
+                  )}
+                </p>
+              )}
               {termData && (
                 <p className="text-sm text-gray-500">
                   {termData.total} gene pair{termData.total !== 1 ? 's' : ''} with this interaction type

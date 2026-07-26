@@ -4,8 +4,8 @@ Working plan for deepening ontology use in Ignet 2.0 / Vignet, written for the
 ICIBM 2026 Ontology Applications talk: *"From Biomedical Ontologies to Knowledge
 Discovery: Ontology-Driven Applications in Ignet 2.0 and Vignet."*
 
-Status: **E and A complete and live-verified. B specified (verified feasible).
-C found to be largely already implemented — see the correction in its section.**
+Status: **E, A and C complete. B in progress (2026-07-26).**
+C required no work — it was already shipped; see the correction in its section.
 Rollback point for all of this work: tag `pre-icibm-baseline`.
 
 ---
@@ -183,12 +183,14 @@ it.** If it holds, B is not only a semantics upgrade but a coverage one.
 `feat/doid-hierarchy`. **Risk: medium** — 19.5M rows, an index build, and the
 Dignet entity endpoints are on the critical demo path.
 
-## C — VO class-level reasoning (LARGELY ALREADY IMPLEMENTED)
+## C — VO class-level reasoning (COMPLETE — already shipped)
 
-**This section was wrong in the first draft. Corrected 2026-07-26 after reading
-the code.** The earlier claim — that the VO tree is "browse/selection only" with
-"no subtree rollup" and that parent classes "look empty" — is false on both
-counts.
+**Status: complete.** This section was wrong in its first draft; corrected
+2026-07-26 after reading the code. The earlier claim — that the VO tree is
+"browse/selection only" with "no subtree rollup" and that parent classes "look
+empty" — is false on both counts. No engineering work was required: Vignet
+already performs class-level (subsumption) reasoning over the Vaccine Ontology,
+on by default.
 
 **What actually exists**
 - `api/routes/vaccine.py:363` already performs descendant expansion via
@@ -208,7 +210,7 @@ So subsumption over the Vaccine Ontology is a shipped, default-on capability.
 For the talk this is better news than the original plan: it is an existing
 strength to demonstrate, not work to schedule.
 
-**What is genuinely left (small, mostly framing)**
+**Residuals (not blocking; recorded for future polish)**
 1. **API/UI default mismatch.** `implicit` defaults to **false** server-side
    (`vaccine.py:618`, absent param → false) while Vignet's UI defaults to
    **true**. API consumers and MCP clients therefore get different semantics
@@ -221,9 +223,11 @@ strength to demonstrate, not work to schedule.
 3. Optional: a before/after toggle in the demo (implicit off → on) to make
    subsumption visible live.
 
-**Sequencing:** isolated (`vaccine.py` + Vignet frontend). **Risk: low** — but
-note Vignet is a separate repo with a different deploy path (git for source,
-`rsync` for `dist-react`, no npm on the server).
+**Talk framing.** C is the strongest *existing* ontology-reasoning asset:
+selecting "viral vaccine" already aggregates evidence across its 239
+data-bearing descendant classes via `is_a`. Demonstrate it live by toggling
+`implicit` off and on — the edge/node counts change visibly, which is
+subsumption doing measurable work. No code change needed for the demo.
 
 ## Operating rules for this work
 

@@ -4,7 +4,8 @@ Working plan for deepening ontology use in Ignet 2.0 / Vignet, written for the
 ICIBM 2026 Ontology Applications talk: *"From Biomedical Ontologies to Knowledge
 Discovery: Ontology-Driven Applications in Ignet 2.0 and Vignet."*
 
-Status: **E and A complete and live-verified; B and C specified, not started.**
+Status: **E and A complete and live-verified. B specified (verified feasible).
+C found to be largely already implemented — see the correction in its section.**
 Rollback point for all of this work: tag `pre-icibm-baseline`.
 
 ---
@@ -129,64 +130,100 @@ disclosing — and a natural argument for ontology-versioned annotation.
 ## B — DOID hierarchy for disease-centered exploration (specified, not started)
 
 The abstract promises "disease-centered exploration". Today disease handling is
-free text.
+free text. **Verified 2026-07-26.**
 
-**Verified current state**
-- `t_hdo` exists with **19,581,731 rows** and the API **never queries it** —
-  zero references in `api/`.
-- Disease terms instead come from `t_biosummary.hdo_term`, a comma-joined
-  varchar split at query time by `_split_terms()`.
-- `api/routes/dignet.py` `_aggregate_entity_network` drops "generic disease
-  classifiers" via an ad-hoc rule — the symptom of having no hierarchy.
-- Real `hdo_id` values exist, but only in `t_cooccurrence_vo_hdo`.
+**`t_hdo` carries real DOID identifiers.** Schema: `id`, `pmid`, `hdo_id`
+varchar(255), `hdo_term` varchar(255). 19,581,731 rows, **7,213 distinct
+`hdo_id`**, **12,564,118 distinct PMIDs**. The API queries it **nowhere** —
+zero references in `api/`.
 
-**Plan**
-1. Verify `t_hdo`'s schema and confirm it carries a DOID identifier column.
-   *(Not yet verified — do this first; it decides the whole approach.)*
-2. Download the Human Disease Ontology (`doid.obo` / `doid.owl`).
-3. Build `t_doid_hierarchy` reusing the `build_ino_hierarchy.py` pattern
-   (id, label, parent, level, obsolete flag).
-4. Switch disease aggregation from `hdo_term` free text to `t_hdo` ids joined
-   to the hierarchy.
-5. Enable roll-up: "lung cancer" + "breast cancer" aggregate under "cancer" at
-   a chosen level; retire the generic-classifier hack in favour of principled
-   level-based filtering.
+Disease terms instead come from `t_biosummary.hdo_term`, a comma-joined varchar
+split at query time by `_split_terms()`. So the platform reads disease
+annotation as text while a fully identified, paper-level DOID table sits unused.
 
-**Sequencing:** touches the same `dignet.py` aggregation functions as A →
-**run after A**, on branch `feat/doid-hierarchy`.
+**The hack this replaces.** `api/routes/dignet.py:62`:
 
-**Risk:** medium. `t_hdo` at 19.5M rows needs the same materialised-summary
-treatment as A, and the entity endpoints are on the Dignet critical path.
+    _HDO_GENERIC_TERMS = frozenset({"disease", "syndrome", "disorder"})
 
----
+Those are not arbitrary stopwords — they are ontology classes:
 
-## C — VO class-level reasoning in Vignet (specified, not started)
+| hdo_id | term | rows | note |
+|---|---|---|---|
+| `DOID:4` | disease | 2,409,098 | **the root of the Disease Ontology** |
+| `DOID:162` | cancer | 1,323,162 | broad, and NOT in the stopword list |
+| `DOID:225` | syndrome | 661,293 | |
+| `DOID:1612` | breast cancer | 335,027 | specific — genuinely useful |
+| `DOID:0080600` | covid-19 | 333,145 | specific |
 
-The cheapest *real* ontology-reasoning demo, because the hierarchy already exists.
-
-**Verified current state**
-- `t_vo_hierarchy` and `GET /api/v1/vaccine/hierarchy` work and return a nested
-  tree with `vo_id`, `name`, `level`, `has_data`, `children`.
-- But the tree is **browse/selection only**: selecting a VO class does not roll
-  descendant evidence up. Many nodes report `has_data: false` even when their
-  subtree carries evidence, so broad classes look empty.
+The list filters the ontology *root* by name. A depth rule ("exclude classes
+above depth N") is both principled and strictly more complete: it also catches
+`DOID:162` cancer, which the hand-written list misses. This is the same
+before/after argument as INO, on a second ontology.
 
 **Plan**
-1. Expand a selected `vo_id` to its `is_a` descendant closure and aggregate
-   evidence across the subtree.
-2. Redefine `has_data` as "has data anywhere in subtree", making parent classes
-   meaningfully selectable.
-3. Demo: select a broad class (e.g. a viral-vaccine parent) and show evidence
-   aggregated over all descendant vaccines — subsumption doing real work.
+1. Download the Human Disease Ontology (`doid.obo` / `doid.owl`).
+2. Build `t_doid_hierarchy` reusing `scripts/build_ino_hierarchy.py` (id, label,
+   parent, level, obsolete flag). The generator is already ontology-agnostic
+   apart from its OWL source and namespace handling.
+3. Materialise `t_doid_class_summary` (per-DOID counts) — 19.5M rows is the same
+   scale as `t_ino`, so the same offline-aggregation approach applies.
+4. **Add `idx_hdo_id` on `t_hdo`.** It currently indexes only `id` and `pmid` —
+   exactly the gap that made the INO drill-down a full scan. Assume this is
+   required, not optional.
+5. Switch disease aggregation from `hdo_term` free text to `hdo_id` joined to
+   the hierarchy; replace `_HDO_GENERIC_TERMS` with a depth rule; enable roll-up
+   ("lung cancer" + "breast cancer" under "cancer").
 
-**Sequencing:** isolated from A and B (`api/routes/vaccine.py` + Vignet
-frontend) → safely parallel, branch `feat/vo-class-rollup`.
+**Possible coverage win (unverified).** `t_hdo` spans 12.5M PMIDs versus
+`t_biosummary`'s 2.65M. How much of that is reachable for gene-disease work
+depends on the overlap with gene-annotated papers — **measure before claiming
+it.** If it holds, B is not only a semantics upgrade but a coverage one.
 
-**Risk:** low technically, but **spans two repos** — Vignet is separate with a
-different deploy path (git for source, `rsync` for `dist-react`, no npm on the
-server). Budget for the second deploy.
+**Sequencing:** touches the same `dignet.py` aggregation as A → branch
+`feat/doid-hierarchy`. **Risk: medium** — 19.5M rows, an index build, and the
+Dignet entity endpoints are on the critical demo path.
 
----
+## C — VO class-level reasoning (LARGELY ALREADY IMPLEMENTED)
+
+**This section was wrong in the first draft. Corrected 2026-07-26 after reading
+the code.** The earlier claim — that the VO tree is "browse/selection only" with
+"no subtree rollup" and that parent classes "look empty" — is false on both
+counts.
+
+**What actually exists**
+- `api/routes/vaccine.py:363` already performs descendant expansion via
+  `WITH RECURSIVE descendants` under an `implicit` flag: selecting a class
+  pulls in its `is_a` descendants.
+- `vaccine.py:271` already prunes with `data_only`: "no data and no descendants
+  with data".
+- `t_vo_has_gene_data` is **already subtree-closed**. Computed over all 6,796
+  nodes: of the 665 data-bearing nodes present in the hierarchy, the number of
+  ancestors NOT already flagged is **0**. Parent classes such as *viral vaccine*
+  (239 data-bearing descendants) and *cancer vaccine* (66) already report
+  `has_data: true`.
+- Vignet's `VacNet.jsx:20` sets `useState(true)` — **implicit expansion is ON by
+  default in the UI**, with a checkbox at line 775.
+
+So subsumption over the Vaccine Ontology is a shipped, default-on capability.
+For the talk this is better news than the original plan: it is an existing
+strength to demonstrate, not work to schedule.
+
+**What is genuinely left (small, mostly framing)**
+1. **API/UI default mismatch.** `implicit` defaults to **false** server-side
+   (`vaccine.py:618`, absent param → false) while Vignet's UI defaults to
+   **true**. API consumers and MCP clients therefore get different semantics
+   than the web UI — an interoperability wrinkle worth resolving or documenting.
+2. **It is not surfaced as ontology reasoning.** The control reads "Include
+   child vaccine associations (implicit)" — implementation jargon. Naming it as
+   class-level/subsumption reasoning, and showing what it did ("rolled up from N
+   descendant classes"), converts an invisible feature into the talk's clearest
+   demonstration of an ontology doing real work.
+3. Optional: a before/after toggle in the demo (implicit off → on) to make
+   subsumption visible live.
+
+**Sequencing:** isolated (`vaccine.py` + Vignet frontend). **Risk: low** — but
+note Vignet is a separate repo with a different deploy path (git for source,
+`rsync` for `dist-react`, no npm on the server).
 
 ## Operating rules for this work
 

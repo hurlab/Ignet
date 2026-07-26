@@ -140,16 +140,19 @@ def test_aggregate_covers_every_chunk_not_just_the_first():
         [("bcg vaccine", 5)],           # chunk 1 vo
         [("aspirin", "cancer")],        # chunk 2 biosummary
         [("bcg vaccine", 7)],           # chunk 2 vo
+        [("lung cancer", 3)],           # chunk 1 DOID
+        [("lung cancer", 4)],           # chunk 2 DOID
     ])
 
     drugs, diseases, vaccines = _aggregate_entities(conn, pmids)
 
     # Both chunks contributed, so counts are summed across the full cohort.
     assert drugs == [{"term": "aspirin", "cnt": 2}]
-    assert diseases == [{"term": "cancer", "cnt": 2}]
     assert vaccines == [{"term": "bcg vaccine", "cnt": 12}]
-    # 2 chunks x 2 queries (biosummary + vo)
-    assert len(conn.executed) == 4
+    # Diseases come from the DOID path when it resolves, summed across chunks.
+    assert diseases == [{"term": "lung cancer", "cnt": 7}]
+    # 2 chunks x 3 queries (biosummary + vo + DOID)
+    assert len(conn.executed) == 6
 
 
 def test_aggregate_entities_does_not_touch_ino():
@@ -321,3 +324,56 @@ def test_entity_network_empty_cohort_runs_no_queries():
 
     assert result["edges"] == [] and result["terms"] == []
     assert conn.executed == []
+
+
+# --- DOID-backed disease aggregation -----------------------------------------
+
+
+def test_diseases_prefer_the_doid_path_over_free_text():
+    """t_hdo carries real DOIDs; t_biosummary.hdo_term is comma-joined text."""
+    conn = FakeConn([
+        [("aspirin", "cancer, lung cancer")],  # biosummary free text
+        [],                                    # vo
+        [("lung cancer", 9)],                  # DOID classes
+    ])
+
+    _, diseases, _ = _aggregate_entities(conn, [1, 2])
+
+    # The ontology-derived result wins; the free-text terms are discarded.
+    assert diseases == [{"term": "lung cancer", "cnt": 9}]
+
+
+def test_classifier_terms_are_filtered_structurally_not_by_name():
+    """The filter must be descendant_count, not the _HDO_GENERIC_TERMS list.
+
+    A name list caught "disease" and "syndrome" but missed DOID:162 "cancer"
+    (1.3M annotations) and "carcinoma" (244k). Depth cannot do it either --
+    "fibromyalgia" is level 2, the same depth as "cancer".
+    """
+    conn = FakeConn([[("aspirin", "cancer")], [], [("lung cancer", 1)]])
+
+    _aggregate_entities(conn, [1, 2])
+
+    doid_sql = [sql for sql, _ in conn.executed if "t_doid_hierarchy" in sql]
+    assert doid_sql, "disease aggregation must consult the DOID hierarchy"
+    assert "descendant_count" in doid_sql[0]
+
+
+def test_falls_back_to_free_text_when_doid_tables_absent():
+    """The DOID tables load separately from this code, so a deploy can precede
+    them. Diseases must still be served, not error."""
+    # Only two result sets: the DOID query runs out and raises.
+    conn = FakeConn([[("aspirin", "cancer")], []])
+
+    _, diseases, _ = _aggregate_entities(conn, [1, 2])
+
+    assert diseases == [{"term": "cancer", "cnt": 1}]
+
+
+def test_doid_fallback_does_not_leak_a_cursor():
+    """Regression: the failure path skipped close(), leaking a cursor per call."""
+    conn = FakeConn([[("aspirin", "cancer")], []])
+
+    _aggregate_entities(conn, [1, 2])
+
+    assert conn.cursors and all(c.closed for c in conn.cursors)

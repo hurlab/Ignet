@@ -60,6 +60,12 @@ _VO_GENERIC_TERMS = frozenset({"vaccine"})
 # Disease terms that are pure classifiers and carry no cohort-specific signal.
 # Kept deliberately small: "cancer", "infection" etc. ARE informative and stay.
 _HDO_GENERIC_TERMS = frozenset({"disease", "syndrome", "disorder"})
+# Structural replacement for _HDO_GENERIC_TERMS: a DOID class with at least this
+# many transitive descendants is a classifier, not a diagnosis. Measured on the
+# annotated classes the split is unambiguous -- disease 12,220 / cancer 2,160 /
+# syndrome 1,043 / carcinoma 622, then heart disease 269 / breast cancer 86.
+# Used when t_doid_hierarchy is present; the name list remains the fallback.
+_DOID_CLASSIFIER_MIN_DESCENDANTS = 500
 # Bounds for the gene<->ontology network: top genes by cohort mention frequency,
 # and top terms per category. The edge ceiling is the product of the two.
 _ENTNET_TOP_GENES = 40
@@ -856,6 +862,57 @@ def _top_terms(counter: Counter) -> list[dict]:
     ]
 
 
+def _aggregate_diseases_doid(conn, pmids: list[int]) -> Counter | None:
+    """Count cohort diseases from t_hdo by DOID class, or None if unavailable.
+
+    Diseases were read from t_biosummary.hdo_term, a comma-joined varchar, so
+    they were matched as text and could not be rolled up. t_hdo carries the real
+    DOID per annotation (7,213 distinct over 19.5M rows) and was queried
+    nowhere; this uses it.
+
+    Classifier terms are excluded STRUCTURALLY, by transitive descendant count,
+    rather than by the _HDO_GENERIC_TERMS name list. That list named "disease"
+    (DOID:4, the ontology root) but missed DOID:162 "cancer" (1.3M annotations)
+    and "carcinoma" (244k), which are equally unspecific. Depth cannot do this
+    job either: "fibromyalgia" is level 2, the same depth as "cancer".
+
+    Returns None when the DOID tables are absent so callers can fall back --
+    they load separately from this code (scripts/build_doid_hierarchy.py).
+    """
+    counts: Counter = Counter()
+    try:
+        for placeholders, params in _chunk_params(pmids):
+            cursor = conn.cursor()
+            # try/finally: on the fallback path the query itself raises, and a
+            # bare close() after fetchall() would be skipped, leaking a cursor
+            # on every call.
+            try:
+                cursor.execute(
+                    f"""SELECT d.label, COUNT(DISTINCT h.pmid) AS cnt
+                        FROM t_hdo h
+                        JOIN t_doid_hierarchy d ON d.doid = h.hdo_id
+                        WHERE h.pmid IN ({placeholders})
+                          AND d.is_obsolete = 0
+                          AND d.descendant_count < {_DOID_CLASSIFIER_MIN_DESCENDANTS}
+                          AND d.label IS NOT NULL
+                        GROUP BY d.label""",
+                    params,
+                )
+                # Chunks partition the PMID space, so per-chunk DISTINCT-pmid
+                # counts sum to the cohort-wide count per class.
+                for label, cnt in cursor.fetchall():
+                    counts[label] += int(cnt)
+            finally:
+                cursor.close()
+    except Exception:
+        logger.warning(
+            "DOID tables unavailable; falling back to t_biosummary disease terms",
+            exc_info=True,
+        )
+        return None
+    return counts
+
+
 def _chunk_params(pmids: list[int]):
     """Yield (placeholders, params) for each PMID chunk of a cohort."""
     for i in range(0, len(pmids), _PMID_CHUNK):
@@ -910,6 +967,12 @@ def _aggregate_entities(
                 continue
             vaccine_counts[phrase] += int(cnt)
         cursor.close()
+
+    # Prefer ontology-derived diseases (real DOIDs + structural classifier
+    # filter); fall back to the free-text hdo_term counts gathered above.
+    doid_counts = _aggregate_diseases_doid(conn, pmids)
+    if doid_counts:
+        disease_counts = doid_counts
 
     return (
         _top_terms(drug_counts),

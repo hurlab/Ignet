@@ -14,8 +14,14 @@ The concrete symptom is api/routes/dignet.py:
 
 Those are ontology classes, not arbitrary stopwords: "disease" is DOID:4, the
 ROOT of the Disease Ontology. Filtering the root by name is both ad hoc and
-incomplete -- it misses DOID:162 "cancer" (1.3M rows), which is just as broad.
-With a hierarchy the same job is done by depth, which generalises.
+incomplete -- it misses DOID:162 "cancer" (1.3M rows) and DOID:4947 "carcinoma"
+(244k), which are just as broad.
+
+Depth alone does NOT replace it -- that was the first hypothesis and the data
+refuted it. "fibromyalgia" is level 2, the same depth as "cancer", but is a
+specific disease. The signal that does separate them is the transitive
+DESCENDANT COUNT (see descendant_counts), which this table materialises so the
+API can filter classifiers by structure rather than by a hand-written list.
 
 Sibling of scripts/build_ino_hierarchy.py; same contract (additive SQL on
 stdout, never ALTERs or DROPs an existing table). The INO script parses OWL
@@ -85,6 +91,43 @@ def parse_obo(path: str) -> dict[str, dict]:
     return terms
 
 
+def descendant_counts(terms: dict[str, dict]) -> dict[str, int]:
+    """Transitive descendant count per class.
+
+    This is the signal that separates a CLASSIFIER from a specific disease, and
+    it is why depth alone is not enough: "fibromyalgia" sits at level 2 -- the
+    same depth as "cancer" -- but has 0 descendants, while cancer has 2,160.
+    Measured on the classes actually annotated, the split is unambiguous:
+
+        disease 12,220 | cancer 2,160 | syndrome 1,043 | carcinoma 622
+        ---- threshold ----
+        heart disease 269 | lymphoma 143 | breast cancer 86 | lung cancer 53
+
+    DOID is a DAG, so descendants are collected as a set (a term reachable by
+    two paths is counted once).
+    """
+    children: dict[str, set[str]] = {}
+    for doid, info in terms.items():
+        for parent in info["parents"]:
+            children.setdefault(parent, set()).add(doid)
+
+    memo: dict[str, set[str]] = {}
+
+    def walk(node: str, stack: frozenset[str]) -> set[str]:
+        if node in memo:
+            return memo[node]
+        if node in stack:  # cycle guard
+            return set()
+        out: set[str] = set()
+        for child in children.get(node, ()):
+            out.add(child)
+            out |= walk(child, stack | {node})
+        memo[node] = out
+        return out
+
+    return {doid: len(walk(doid, frozenset())) for doid in terms}
+
+
 def compute_level(doid: str, terms: dict[str, dict], _seen: frozenset[str] = frozenset()) -> int:
     """Depth from a root. Cycles and dangling parents terminate at current depth."""
     if doid in _seen:
@@ -111,6 +154,8 @@ def main() -> int:
         print("ERROR: no [Term] stanzas parsed", file=sys.stderr)
         return 1
 
+    descendants = descendant_counts(terms)
+
     obsolete = sum(1 for t in terms.values() if t["obsolete"])
     roots = [d for d, t in terms.items() if not t["parents"] and not t["obsolete"]]
 
@@ -122,10 +167,12 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
   label          VARCHAR(255) DEFAULT NULL,
   parent_doid    VARCHAR(32)  DEFAULT NULL,
   level          INT          NOT NULL DEFAULT 0,
+  descendant_count INT        NOT NULL DEFAULT 0,
   is_obsolete    TINYINT(1)   NOT NULL DEFAULT 0,
   PRIMARY KEY (doid),
   KEY idx_parent (parent_doid),
-  KEY idx_level (level)
+  KEY idx_level (level),
+  KEY idx_descendants (descendant_count)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 """)
 
@@ -137,16 +184,17 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
         # several parents. Depth uses the deepest path (see compute_level).
         parent = parents[0] if parents else None
         rows.append(
-            "({}, {}, {}, {}, {})".format(
+            "({}, {}, {}, {}, {}, {})".format(
                 sql_escape(doid),
                 sql_escape(info["name"]),
                 sql_escape(parent),
                 compute_level(doid, terms),
+                descendants.get(doid, 0),
                 1 if info["obsolete"] else 0,
             )
         )
 
-    print(f"REPLACE INTO {TABLE} (doid, label, parent_doid, level, is_obsolete) VALUES")
+    print(f"REPLACE INTO {TABLE} (doid, label, parent_doid, level, descendant_count, is_obsolete) VALUES")
     # Chunked so a single statement does not exceed max_allowed_packet.
     chunk = 2000
     for i in range(0, len(rows), chunk):
@@ -154,7 +202,7 @@ CREATE TABLE IF NOT EXISTS {TABLE} (
         terminator = ";" if i + chunk >= len(rows) else ";"
         print(",\n".join(block) + terminator)
         if i + chunk < len(rows):
-            print(f"REPLACE INTO {TABLE} (doid, label, parent_doid, level, is_obsolete) VALUES")
+            print(f"REPLACE INTO {TABLE} (doid, label, parent_doid, level, descendant_count, is_obsolete) VALUES")
     return 0
 
 

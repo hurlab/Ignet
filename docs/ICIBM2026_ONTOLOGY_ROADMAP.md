@@ -4,7 +4,7 @@ Working plan for deepening ontology use in Ignet 2.0 / Vignet, written for the
 ICIBM 2026 Ontology Applications talk: *"From Biomedical Ontologies to Knowledge
 Discovery: Ontology-Driven Applications in Ignet 2.0 and Vignet."*
 
-Status: **E and A in progress; B and C specified, not started.**
+Status: **E and A complete and live-verified; B and C specified, not started.**
 Rollback point for all of this work: tag `pre-icibm-baseline`.
 
 ---
@@ -52,7 +52,7 @@ substance by A's materialised summary.
 
 ---
 
-## A — Make INO actually ontological (in progress)
+## A — Make INO actually ontological (complete, live-verified)
 
 **Key enabler:** `t_ino.ino_id` is already populated on all 54,756,870 rows. No
 re-annotation is needed; the ontology identifiers were simply never used.
@@ -83,12 +83,42 @@ excluded by namespace. An earlier draft filtered on "absent from the merged
 OWL", which was wrong — that also drops 19 legitimate `GO_*` classes (e.g.
 `GO_0006468` protein phosphorylation) that INO references without importing.
 
-**Remaining**
-- Rewrite `/ino/terms` to serve ontology classes (label, id, ontology, parent).
-- Replace `api/utils/ino_classifier.py` keyword sets with hierarchy lookup, so
-  subsumption comes from the ontology rather than substring matching.
-- INO Explorer UI: show class label + id + parent; optional roll-up to parent.
-- Nightly refresh hook for `t_ino_class_summary`.
+**Also delivered**
+- `/ino/terms` serves ontology classes (label, id, source ontology, parent).
+- `/ino/terms/<term>/genes?ino_id=` selects a whole class rather than one
+  phrase; ids validated against a namespace pattern.
+- INO Explorer passes the class id and shows provenance (id, ontology, parent).
+- `idx_ino_id_sentence (ino_id, sentence_id)` on `t_ino`. `t_ino` had no index
+  leading with `ino_id`, and its composite index leads with `pmid`, so the
+  legacy phrase lookup could not use it either — the drill-down was already
+  slow before class selection existed. Built online in 1 min 44 s with no
+  service degradation. Reversible: `DROP INDEX idx_ino_id_sentence ON t_ino`.
+- 24 h caching on the drill-down + `scripts/warm_ino_cache.sh` to pre-warm.
+
+**Measured (production)**
+
+| Endpoint | Before | After |
+|---|---|---|
+| `/ino/terms` cold | 16.6 s | 0.21 s |
+| `/ino/terms` warm | — | 0.03 s |
+| class drill-down | >300 s (timeout) | 19–26 s cold, 0.07 s warm |
+
+Biology check: `ubiquitination reaction` (MI_0220) → TP53~MDM2 (p53's canonical
+E3 ligase); `phosphorylation` (GO_0016310) → AKT1~PIK3CA. Browser-verified: the
+listing reads as an interaction taxonomy, "including"/"through" are gone, and
+the detail panel shows `INO_0000157 · INO · subclass of association`.
+
+**Remaining (deliberately deferred)**
+- Replace `api/utils/ino_classifier.py` keyword sets with hierarchy lookup. The
+  hierarchy already yields `positive regulation` / `negative regulation` as real
+  parent classes, which is exactly what the keyword lists approximate. Deferred
+  because `classify_ino` feeds Dignet's network edge colouring — the primary
+  demo surface — so the swap should be deliberate, not a drive-by.
+- Nightly refresh hook for `t_ino_class_summary` (currently built once).
+- Cosmetic: the drill-down lists each unordered pair twice (AKT1~PIK3CA and
+  PIK3CA~AKT1) because both orders are stored. Visible in a demo. Canonicalising
+  the order would also halve the reported `total`, so it is a semantic change,
+  not just display.
 
 **Data-quality note for the talk:** 6 of the 23 referenced GO classes are
 **obsolete** (e.g. `GO_0016572` obsolete histone phosphorylation). Worth

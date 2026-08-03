@@ -11,6 +11,7 @@ import TrendChart from '../components/TrendChart.jsx'
 import { cleanTermLabel } from '../termUtils.js'
 import { getCollisionWarning, collisionTooltip } from '../speciesUtils.js'
 import { renderMarkdown } from '../markdownUtils.jsx'
+import { extractSummaryText } from '../summaryText.js'
 
 function buildMiniNetwork(gene, neighbors, reportData) {
   if (!gene || !neighbors?.length) return []
@@ -242,7 +243,11 @@ function AiSummarySection({ gene }) {
     setError(null)
     try {
       const res = await api.summarize([gene])
-      setSummary(res?.summary ?? res?.data ?? JSON.stringify(res))
+      const text = extractSummaryText(res)
+      // Showing an error beats the old behaviour of stringifying the envelope,
+      // which rendered the prompt and entity counts as if they were the summary.
+      if (!text) throw new Error('The summary service returned no readable text.')
+      setSummary(text)
     } catch (err) {
       setError(err.message)
     } finally {

@@ -325,3 +325,6 @@ frontend/.playwright/
 
 # Presentation material (local-only; main is deployed to the web root)
 presentations/
+
+# No-paste resume prompt (machine-local, per-session)
+/NEXT_SESSION.md

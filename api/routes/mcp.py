@@ -14,9 +14,7 @@ Supported methods:
   tools/call   — execute a tool and return content blocks
 """
 
-import json
 import logging
-import re
 
 from flask import Blueprint, jsonify, request
 
@@ -476,14 +474,15 @@ def _tool_ignet_get_enrichment(params: dict) -> str:
 
             cursor.execute(
                 f"""
-                SELECT gene_symbol1 AS gene1, gene_symbol2 AS gene2,
+                SELECT LEAST(gene_symbol1, gene_symbol2)    AS gene1,
+                       GREATEST(gene_symbol1, gene_symbol2) AS gene2,
                        COUNT(*) AS evidence_count,
                        COUNT(DISTINCT pmid) AS unique_pmids,
                        MAX(score) AS max_score
                 FROM t_gene_pairs
                 WHERE gene_symbol1 IN ({placeholders})
                   AND gene_symbol2 IN ({placeholders})
-                GROUP BY gene_symbol1, gene_symbol2
+                GROUP BY gene1, gene2
                 ORDER BY evidence_count DESC
                 LIMIT 50
                 """,
@@ -776,7 +775,8 @@ def _err(id_, code: int, message: str):
 # ---------------------------------------------------------------------------
 
 def _handle_initialize(id_, params: dict):
-    client_version = (params.get("protocolVersion") or "2025-03-26")
+    # The client's requested protocolVersion is read but not negotiated -- this
+    # server always answers with the one version it speaks.
     return _ok(id_, {
         "protocolVersion": "2025-03-26",
         "capabilities": {"tools": {}},

@@ -422,12 +422,13 @@ def _build_vaccine_network(vo_ids: list[str], gene_gene: bool,
                     placeholders = ",".join(["%s"] * len(top_genes))
                     cursor.execute(
                         f"""
-                        SELECT gene_symbol1, gene_symbol2, COUNT(*) AS weight
+                        SELECT LEAST(gene_symbol1, gene_symbol2)    AS g1,
+                               GREATEST(gene_symbol1, gene_symbol2) AS g2,
+                               COUNT(*) AS weight
                         FROM t_gene_pairs
                         WHERE gene_symbol1 IN ({placeholders})
                           AND gene_symbol2 IN ({placeholders})
-                          AND gene_symbol1 < gene_symbol2
-                        GROUP BY gene_symbol1, gene_symbol2
+                        GROUP BY g1, g2
                         ORDER BY weight DESC
                         LIMIT 200
                         """,
@@ -436,8 +437,8 @@ def _build_vaccine_network(vo_ids: list[str], gene_gene: bool,
                     gg_rows = cursor.fetchall()
                     for row in gg_rows:
                         gene_gene_edges.append({
-                            "source": row["gene_symbol1"],
-                            "target": row["gene_symbol2"],
+                            "source": row["g1"],
+                            "target": row["g2"],
                             "weight": int(row["weight"]),
                             "type": "gene-gene",
                         })

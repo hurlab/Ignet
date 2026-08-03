@@ -21,8 +21,11 @@ _TERMS_CACHE_KEY = "ignet:ino:terms:limit:{limit}"
 _INO_ID_RE = re.compile(r"[A-Za-z]+_[A-Za-z0-9]+")
 
 # Per-class gene-pair pages. Keyed by selector + pagination.
+# v2: pair grouping now canonicalises orientation, so unversioned entries hold
+# the old split rows (A,B) and (B,A). The version segment retires them without
+# a flush; bump it again if the pair aggregation changes shape.
 _GENES_CACHE_TTL = 24 * 60 * 60
-_GENES_CACHE_KEY = "ignet:ino:genes:{sel}:{page}:{per_page}"
+_GENES_CACHE_KEY = "ignet:ino:genes:v2:{sel}:{page}:{per_page}"
 
 
 @ino_bp.route("/ino/terms", methods=["GET"])
@@ -168,13 +171,14 @@ def genes_by_ino_term(term: str):
             # Aggregated gene pairs
             cursor.execute(
                 """
-                SELECT h.gene_symbol1 AS gene1, h.gene_symbol2 AS gene2,
+                SELECT LEAST(h.gene_symbol1, h.gene_symbol2)    AS gene1,
+                       GREATEST(h.gene_symbol1, h.gene_symbol2) AS gene2,
                        COUNT(*) AS evidence_count,
                        COUNT(DISTINCT h.pmid) AS unique_pmids
                 FROM t_ino ino
                 JOIN t_gene_pairs h ON ino.sentence_id = h.sentence_id
                 WHERE {selector}
-                GROUP BY h.gene_symbol1, h.gene_symbol2
+                GROUP BY gene1, gene2
                 ORDER BY evidence_count DESC
                 LIMIT %s OFFSET %s
                 """.format(selector=selector_sql),

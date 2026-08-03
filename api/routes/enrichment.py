@@ -17,7 +17,9 @@ enrichment_bp = Blueprint("enrichment", __name__)
 # 24h cache is safe. The example gene set (and any repeated query) then returns
 # instantly without touching the database.
 _CACHE_TTL = 86400
-_CACHE_VERSION = "v1"
+# v2: pair grouping now canonicalises orientation, so v1 entries hold the old
+# split rows (A,B) and (B,A). Bumping the version retires them without a flush.
+_CACHE_VERSION = "v2"
 
 # Ordered section names streamed to the client (drives the progress indicator).
 _STAGES = ["interactions", "ino_distribution", "drugs", "diseases"]
@@ -93,11 +95,12 @@ def _enrichment_sections(conn, genes):
 
         # 1. Pairwise interactions among the input genes
         cursor.execute("""
-            SELECT gene_symbol1 AS gene1, gene_symbol2 AS gene2,
+            SELECT LEAST(gene_symbol1, gene_symbol2)    AS gene1,
+                   GREATEST(gene_symbol1, gene_symbol2) AS gene2,
                    COUNT(*) AS evidence_count, COUNT(DISTINCT pmid) AS unique_pmids,
                    CAST(MAX(score) AS DOUBLE) AS max_score
             FROM tmp_enrich
-            GROUP BY gene_symbol1, gene_symbol2
+            GROUP BY gene1, gene2
         """)
         interactions = cursor.fetchall()
         found_genes = set()

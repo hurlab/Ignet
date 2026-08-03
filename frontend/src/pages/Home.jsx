@@ -229,7 +229,7 @@ export default function Home() {
             <code className="text-[11px] text-blue-600 mt-2 block">/api/v1/genes/search?q=BRCA1</code>
           </Link>
           <Link
-            to="/api-docs#mcp"
+            to="/mcp"
             className="bg-white border border-gray-200 rounded-lg p-4 hover:border-purple-400 hover:shadow-md transition-all group"
           >
             <h3 className="font-semibold text-navy group-hover:text-purple-700 text-sm mb-1">MCP for AI Assistants</h3>

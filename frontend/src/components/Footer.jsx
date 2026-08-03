@@ -23,7 +23,7 @@ export default function Footer() {
                 { label: 'About', href: '/about' },
                 { label: 'API Docs', href: '/api-docs' },
                 { label: 'Links', href: '/links' },
-                { label: 'MCP for AI', href: '/api-docs#mcp' },
+                { label: 'MCP for AI', href: '/mcp' },
                 { label: 'FAQs', href: '/faqs' },
                 { label: 'Contact Us', href: '/contact' },
                 { label: 'User Manual', href: '/manual' },

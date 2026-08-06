@@ -2,104 +2,16 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../api.js'
 import { formatLong } from '../hooks/useDataLastUpdated.js'
+import { HOME_TOOL_GROUPS } from '../data/tools.js'
 
-// Ordered and tinted by the same three groups as the header nav (Header.jsx
-// navGroups). They were previously interleaved -- the three AI tools sat at
-// positions 4, 5 and 10 -- so the grid order carried no meaning.
+// Tool cards, their names, their order and their group tints all come from the
+// shared catalogue (src/data/tools.js) -- the same list the header nav renders.
+// This page used to keep its own copy, which is how four tools ended up with
+// two names each and the AI group was labelled "AI" here but "AI Tools" there.
 //
-// Groups deliberately straddle rows: 4 + 4 + 3 cannot align to a 3-column grid,
-// and colour + tag carry the grouping instead of row breaks.
-const TOOL_GROUPS = {
-  explore: { label: 'Explore', card: 'bg-blue-50 border-blue-200 hover:border-blue-400',
-             tag: 'bg-blue-100 text-blue-800' },
-  analyze: { label: 'Analyze', card: 'bg-emerald-50 border-emerald-200 hover:border-emerald-400',
-             tag: 'bg-emerald-100 text-emerald-800' },
-  ai:      { label: 'AI', card: 'bg-violet-50 border-violet-200 hover:border-violet-400',
-             tag: 'bg-violet-100 text-violet-800' },
-}
+// Groups deliberately straddle rows: the group sizes do not align to a
+// 3-column grid, and colour + tag carry the grouping instead of row breaks.
 
-const coreTools = [
-  // --- Explore
-  {
-    title: 'Dignet',
-    description: 'Search PubMed for gene co-occurrence networks with interactive graph visualization.',
-    to: '/dignet',
-    icon: '🔬',
-    group: 'explore',
-  },
-  {
-    title: 'Gene',
-    description: 'Look up a gene symbol to find its top interacting partners and co-occurrence scores.',
-    to: '/gene',
-    icon: '🧬',
-    group: 'explore',
-  },
-  {
-    title: 'GenePair',
-    description: 'Query a pair of genes to assess their interaction probability and co-occurrence evidence.',
-    to: '/genepair',
-    icon: '🔗',
-    group: 'explore',
-  },
-  {
-    title: 'Explore',
-    description: 'Browse the most connected genes and explore interaction networks.',
-    to: '/explore',
-    icon: '🌐',
-    group: 'explore',
-  },
-  // --- Analyze
-  {
-    title: 'Enrichment',
-    description: 'Paste a gene list to analyze pairwise interactions, INO types, and associated drugs and diseases.',
-    to: '/enrichment',
-    icon: '📊',
-    group: 'analyze',
-  },
-  {
-    title: 'Compare Networks',
-    description: 'Compare two PubMed-driven gene networks side by side with overlap analysis.',
-    to: '/compare',
-    icon: '⚖️',
-    group: 'analyze',
-  },
-  {
-    title: 'INO Explorer',
-    description: 'Browse 800+ interaction types from the Interaction Network Ontology.',
-    to: '/ino',
-    icon: '🔖',
-    group: 'analyze',
-  },
-  {
-    title: 'Analysis Report',
-    description: 'Generate a downloadable report summarizing gene set interactions, enrichment, and literature context.',
-    to: '/report',
-    icon: '📄',
-    group: 'analyze',
-  },
-  // --- AI Tools
-  {
-    title: 'BioSummarAI',
-    description: 'AI-powered summarization of gene interactions from biomedical literature.',
-    to: '/biosummarai',
-    icon: '🤖',
-    group: 'ai',
-  },
-  {
-    title: 'Analyze Text',
-    description: 'Paste biomedical text to detect genes and predict interactions with BioBERT.',
-    to: '/analyze',
-    icon: '📝',
-    group: 'ai',
-  },
-  {
-    title: 'Literature Assistant',
-    description: "Ask questions about gene interactions and get answers grounded in Ignet's PubMed evidence database.",
-    to: '/assistant',
-    icon: '💬',
-    group: 'ai',
-  },
-]
 
 const apiInfo = {
   title: 'REST API',
@@ -190,9 +102,8 @@ export default function Home() {
       <section>
         <h2 className="text-base font-semibold text-gray-700 mb-3">Tools</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {coreTools.map(({ title, description, to, icon, group }) => {
-            const g = TOOL_GROUPS[group]
-            return (
+          {HOME_TOOL_GROUPS.flatMap(g =>
+            g.tools.map(({ label, description, to, icon }) => (
               <Link
                 key={to}
                 to={to}
@@ -201,7 +112,7 @@ export default function Home() {
                 <div className="text-xl flex-shrink-0 mt-0.5">{icon}</div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-baseline gap-2">
-                    <h3 className="font-semibold text-navy text-sm">{title}</h3>
+                    <h3 className="font-semibold text-navy text-sm">{label}</h3>
                     {/* Non-colour cue: tint alone would be invisible to
                         colourblind users and on washed-out projectors. */}
                     <span className={`${g.tag} text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-0.5 flex-shrink-0`}>
@@ -211,8 +122,8 @@ export default function Home() {
                   <p className="text-gray-600 text-xs leading-relaxed mt-0.5">{description}</p>
                 </div>
               </Link>
-            )
-          })}
+            ))
+          )}
         </div>
       </section>
 

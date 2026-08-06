@@ -3,6 +3,7 @@ import { Link, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../AuthContext.jsx'
 import { useGeneSet } from '../GeneSetContext.jsx'
 import GeneAutocomplete from './GeneAutocomplete.jsx'
+import { NAV_GROUPS } from '../data/tools.js'
 
 // Global gene quick-search with accessible autocomplete -> jumps to gene report from any page.
 function GeneSearch({ mobile = false, onDone }) {
@@ -37,37 +38,8 @@ function GeneSearch({ mobile = false, onDone }) {
   )
 }
 
-const navGroups = [
-  {
-    label: 'Explore',
-    items: [
-      { label: 'Dignet', to: '/dignet', desc: 'Full-text literature search' },
-      { label: 'Gene', to: '/gene', desc: 'Gene profile and network' },
-      { label: 'GenePair', to: '/genepair', desc: 'Pairwise gene evidence' },
-      { label: 'Explore', to: '/explore', desc: 'Browse top genes' },
-    ],
-  },
-  {
-    label: 'Analyze',
-    items: [
-      { label: 'Enrichment', to: '/enrichment', desc: 'Gene set enrichment' },
-      { label: 'Compare', to: '/compare', desc: 'Compare two gene sets' },
-      { label: 'INO', to: '/ino', desc: 'Interaction Network Ontology' },
-      { label: 'Report', to: '/report', desc: 'Generate analysis report' },
-    ],
-  },
-  {
-    label: 'AI Tools',
-    items: [
-      { label: 'BioSummarAI', to: '/biosummarai', desc: 'AI literature summary' },
-      { label: 'Analyze Text', to: '/analyze', desc: 'Extract genes from text' },
-      { label: 'Assistant', to: '/assistant', desc: 'AI research assistant' },
-    ],
-  },
-]
-
-const allLinks = navGroups.flatMap(g => g.items)
-
+// Nav groups come from the shared catalogue (src/data/tools.js) so the header
+// and the Home page cannot drift apart on names or grouping again.
 function Dropdown({ group }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
@@ -264,7 +236,7 @@ export default function Header() {
 
         {/* Nav dropdown groups */}
         <nav className="hidden md:flex items-center gap-1 flex-1">
-          {navGroups.map(group => (
+          {NAV_GROUPS.map(group => (
             <Dropdown key={group.label} group={group} />
           ))}
         </nav>
@@ -346,7 +318,7 @@ export default function Header() {
       {menuOpen && (
         <div className="md:hidden bg-navy border-t border-blue-800 px-4 py-3 flex flex-col gap-1">
           {/* Nav groups */}
-          {navGroups.map(group => (
+          {NAV_GROUPS.map(group => (
             <div key={group.label}>
               <div className="text-blue-400 text-xs font-semibold uppercase tracking-wider px-3 py-1 mt-2 first:mt-0">
                 {group.label}

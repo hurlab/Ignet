@@ -93,6 +93,17 @@ export default function Footer() {
 
         <div className="border-t border-gray-200 pt-4 space-y-2">
           <p className="text-center text-gray-400 text-xs leading-relaxed">
+            If you use Ignet in your research, please cite: Asaduzzaman S, Bansal B, Combs P, Zhang J, Rehana H, McGregor B, He Y, Hur J. Ignet 2.0 and Vignet: An Ontology-Driven Web Platform for Biomedical Gene Interaction Discovery and Visualization. bioRxiv. 2026.{' '}
+            <a
+              href="https://www.biorxiv.org/content/10.64898/2026.06.02.729682v1"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline hover:text-gray-600"
+            >
+              doi:10.64898/2026.06.02.729682
+            </a>
+          </p>
+          <p className="text-center text-gray-400 text-xs leading-relaxed">
             Supported by NIH/NIAID{' '}
             <a href="https://reporter.nih.gov/search/OGGoe17zsEypH0sHLem22g/project-details/11109428" target="_blank" rel="noopener noreferrer" className="underline hover:text-gray-600">U24AI171008</a>{' '}
             VIOLIN 2.0: Vaccine Information and Ontology LInked kNowledgebase.

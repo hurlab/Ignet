@@ -10,10 +10,12 @@ GET /api/v1/vaccine/network/<vo_id>   - network graph data for Cytoscape (single
 GET /api/v1/vaccine/pair              - co-occurrence evidence for a vaccine+gene pair (?vo_id=&gene=)
 GET /api/v1/vaccine/<vo_id>           - vaccine profile (info + top genes)
 GET /api/v1/vaccine/<vo_id>/sentences - sentences for a given VO ID
+GET /api/v1/vaccine/<vo_id>/papers    - source papers + identified sentences for a VO ID
 POST /api/v1/vaccine/enrichment       - rank vaccines by overlap with a gene list
 """
 
 import logging
+import re
 
 from flask import Blueprint, jsonify, request
 
@@ -859,6 +861,175 @@ def vaccine_sentences(vo_id: str):
         return jsonify({"error": "DatabaseError", "message": "Failed to retrieve sentences."}), 500
 
     return jsonify({"sentences": sentences, "total": total})
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/vaccine/<vo_id>/papers  (SPEC-VOPAPERS-001)
+# ---------------------------------------------------------------------------
+
+_MAX_SENTENCES_PER_PAPER = 5
+_PHRASE_SEP = "\x1f"
+
+
+def _select_matching_sentences(phrases, sentences, cap: int = _MAX_SENTENCES_PER_PAPER) -> list[str]:
+    """Sentences containing any phrase as a whole token (case-insensitive), deduped, in order."""
+    words = sorted({p.strip() for p in phrases if p and p.strip()}, key=len, reverse=True)
+    if not words:
+        return []
+    pattern = re.compile(
+        r"(?<![A-Za-z0-9])(?:" + "|".join(re.escape(w) for w in words) + r")(?![A-Za-z0-9])",
+        re.IGNORECASE,
+    )
+    kept, seen = [], set()
+    for s in sentences:
+        text = (s or "").strip()
+        if not text or text in seen or not pattern.search(text):
+            continue
+        seen.add(text)
+        kept.append(text)
+        if len(kept) == cap:
+            break
+    return kept
+
+
+def _dedupe_capped(sentences, cap: int = _MAX_SENTENCES_PER_PAPER) -> list[str]:
+    kept, seen = [], set()
+    for s in sentences:
+        text = (s or "").strip()
+        if text and text not in seen:
+            seen.add(text)
+            kept.append(text)
+            if len(kept) == cap:
+                break
+    return kept
+
+
+def _group_by_pmid(rows) -> dict[int, list[str]]:
+    grouped: dict[int, list[str]] = {}
+    for row in rows:
+        grouped.setdefault(int(row["pmid"]), []).append(row["sentence"])
+    return grouped
+
+
+_FALLBACK_TIMEOUT_S = 5
+
+
+def _fallback_sentences(cursor, pmids) -> dict[int, list[str]]:
+    """Candidate sentences for papers lacking identified text; best-effort.
+
+    `sentence` is ~141M rows and relies on idx_pmid; the statement timeout keeps a
+    missing or unusable index from turning one page view into a full scan. A
+    timeout or error here degrades those papers to "text not available".
+    """
+    marks = ",".join(["%s"] * len(pmids))
+    found: dict[int, list[str]] = {}
+    for table in ("sentence", "t_sentences"):
+        try:
+            cursor.execute(
+                f"SET STATEMENT max_statement_time={_FALLBACK_TIMEOUT_S} FOR "
+                f"SELECT pmid, sentence FROM {table} "
+                f"WHERE pmid IN ({marks}) ORDER BY sentence_id",
+                tuple(pmids),
+            )
+            for pmid, sents in _group_by_pmid(cursor.fetchall()).items():
+                found.setdefault(pmid, []).extend(sents)
+        except Exception:
+            logger.warning("Fallback sentence lookup on %s failed for %d papers", table, len(pmids),
+                           exc_info=True)
+    return found
+
+
+@vaccine_bp.route("/vaccine/<path:vo_id>/papers", methods=["GET"])
+def vaccine_papers(vo_id: str):
+    """
+    Papers in which a VO term was identified, newest PMID first, paged by paper.
+
+    Sentence text comes from t_vo_sentences (the pipeline's identified sentences).
+    Papers without it fall back to sentences of the same paper (legacy `sentence`,
+    then t_sentences) that contain one of the matched phrases. t_vo.sentence_id is
+    NOT used as a join key: it does not map into any sentence-text table.
+
+    Query params: limit (default 10, max 50), offset (default 0)
+
+    Response:
+      { "vo_id", "total_papers", "limit", "offset",
+        "papers": [{ "pmid", "matched_phrases", "sentences", "text_available",
+                     "text_source": "identified" | "phrase_match" | null }] }
+    """
+    limit, offset = _parse_limit_offset(request.args, default_limit=10, max_limit=50)
+
+    try:
+        with db_connection() as conn:
+            cursor = conn.cursor(dictionary=True)
+
+            cursor.execute(
+                "SELECT COUNT(DISTINCT pmid) AS total FROM t_vo WHERE vo_id = %s",
+                (vo_id,),
+            )
+            row = cursor.fetchone()
+            total = int(row["total"]) if row else 0
+
+            cursor.execute(
+                f"""
+                SELECT pmid,
+                       GROUP_CONCAT(DISTINCT matching_phrase ORDER BY matching_phrase
+                                    SEPARATOR '{_PHRASE_SEP}') AS phrases
+                FROM t_vo
+                WHERE vo_id = %s
+                GROUP BY pmid
+                ORDER BY pmid DESC
+                LIMIT %s OFFSET %s
+                """,
+                (vo_id, limit, offset),
+            )
+            page = cursor.fetchall()
+            pmids = [int(r["pmid"]) for r in page]
+            phrases = {
+                int(r["pmid"]): [p for p in (r["phrases"] or "").split(_PHRASE_SEP) if p]
+                for r in page
+            }
+
+            identified: dict[int, list[str]] = {}
+            fallback: dict[int, list[str]] = {}
+            if pmids:
+                marks = ",".join(["%s"] * len(pmids))
+                cursor.execute(
+                    f"SELECT pmid, sentence FROM t_vo_sentences "
+                    f"WHERE vo_id = %s AND pmid IN ({marks}) ORDER BY id",
+                    (vo_id, *pmids),
+                )
+                identified = _group_by_pmid(cursor.fetchall())
+
+                missing = [p for p in pmids if not identified.get(p)]
+                if missing:
+                    fallback = _fallback_sentences(cursor, missing)
+            cursor.close()
+    except Exception:
+        logger.exception("Error fetching papers for %s", vo_id)
+        return jsonify({"error": "DatabaseError", "message": "Failed to retrieve papers."}), 500
+
+    papers = []
+    for pmid in pmids:
+        sents = _dedupe_capped(identified.get(pmid, []))
+        source = "identified" if sents else None
+        if not sents:
+            sents = _select_matching_sentences(phrases[pmid], fallback.get(pmid, []))
+            source = "phrase_match" if sents else None
+        papers.append({
+            "pmid": pmid,
+            "matched_phrases": phrases[pmid],
+            "sentences": sents,
+            "text_available": bool(sents),
+            "text_source": source,
+        })
+
+    return jsonify({
+        "vo_id": vo_id,
+        "total_papers": total,
+        "limit": limit,
+        "offset": offset,
+        "papers": papers,
+    })
 
 
 # ---------------------------------------------------------------------------

@@ -2,7 +2,6 @@
 # MoAI-ADK Package Distribution .gitignore
 # ============================================
 # Version: 0.33.0
-# Updated: 2026-01-10
 # Purpose: Essential patterns for user projects
 # ============================================
 
@@ -240,6 +239,7 @@ dist-ssr/
 .vercel/
 .netlify/
 .firebase/
+
 # User Custom Patterns (preserved by moai update)
 *.env
 inc/adodb5/t1.php

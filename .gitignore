@@ -744,3 +744,14 @@ presentations/
 
 # No-paste resume prompt (machine-local, per-session)
 /NEXT_SESSION.md
+
+# MoAI-generated tooling files — kept local, never published (2026-09-30)
+/.agents/
+/.claudeignore
+/.git_hooks/
+/.github/actions/detect-language/action.yml
+/.github/branch-protection.json.gtmpl
+/.github/labels.yml
+/.github/workflows/label-sync.yml
+/.worktreeinclude
+/AGENTS.md

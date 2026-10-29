@@ -50,6 +50,14 @@ COLUMNS[t_cooccurrence_drug_gene]="drugbank_id=@c1, gene_symbol=@c2, shared_pmid
 COLUMNS[t_cooccurrence_drug_hdo]="drugbank_id=@c1, hdo_id=@c2, shared_pmids=@c3, drug_term=@c4, hdo_term=@c5"
 COLUMNS[t_cooccurrence_hdo_gene]="hdo_id=@c1, gene_symbol=@c2, shared_pmids=@c3, hdo_term=@c4, gene_term=@c5"
 
+# drug_term is utf8mb4 in these three tables (re-tagged 2026-10-29); the database
+# default is latin1, so their files must be read as UTF-8 or α loads as Î±.
+# The other columns of these tables and the other three tables are latin1 + ASCII.
+declare -A CHARSET
+CHARSET[t_cooccurrence_vo_drug]="CHARACTER SET utf8mb4"
+CHARSET[t_cooccurrence_drug_gene]="CHARACTER SET utf8mb4"
+CHARSET[t_cooccurrence_drug_hdo]="CHARACTER SET utf8mb4"
+
 TABLES=(t_cooccurrence_vo_gene t_cooccurrence_vo_drug t_cooccurrence_vo_hdo t_cooccurrence_drug_gene t_cooccurrence_drug_hdo t_cooccurrence_hdo_gene)
 
 # Verify all files exist
@@ -77,6 +85,7 @@ for tbl in "${TABLES[@]}"; do
     mysql -u "$DB_USER" "$DB_NAME" --local-infile=1 -e "
 LOAD DATA LOCAL INFILE '${f}'
 INTO TABLE ${tbl}
+${CHARSET[$tbl]:-}
 FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 ROWS
 (@c1, @c2, @c3, @c4, @c5)
 SET ${COLUMNS[$tbl]};

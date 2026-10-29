@@ -118,6 +118,7 @@ log "Step 3/4: Loading sentences..."
 mysql -u ignet $DB_NAME $MYSQL_OPTS -e "
 LOAD DATA LOCAL INFILE '$DATA_DIR/SciMiner-Host_${DATE_TAG}-TwoOrMorePerSentence_Sentences.txt'
 INTO TABLE t_sentences
+CHARACTER SET utf8mb4
 FIELDS TERMINATED BY '\t' LINES TERMINATED BY '\n' IGNORE 1 ROWS
 (@sentence_id, @pmid, @sentence)
 SET sentence_id=@sentence_id, pmid=@pmid, sentence=@sentence;

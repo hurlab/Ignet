@@ -1,66 +1,90 @@
 #!/usr/bin/env bash
-# Deploy the committed local main to the Ignet server.
+# Deploy origin/main ON the Ignet server (run it there, not from a laptop).
 #
-# Flow: assert a clean tree -> push origin/main -> realign the server working
-# tree to origin/main over SSH -> report the new HEAD and whether anything under
-# api/ changed (which requires a manual `sudo systemctl restart ignet-api`,
-# since the server has no passwordless sudo).
+# Before running: build + commit the frontend locally (scripts/build.sh; the
+# server serves the committed dist-react/ and has no node) and push to origin/main.
 #
-# Build + commit the frontend BEFORE running this (the server deploys the
-# committed dist-react/). Use scripts/deploy.sh --build to build first; it will
-# refuse to deploy if the build leaves dist-react/ uncommitted.
+# On the server (as juhur, not root; sudo is asked for only if api/ changed):
+#   bash ~/ignet_deploy.sh            # deploy
+#   bash ~/ignet_deploy.sh --check    # show what would be deployed, change nothing
 #
-# Usage:
-#   scripts/deploy.sh            # push + deploy what is already committed
-#   scripts/deploy.sh --build    # npm run build first, then deploy
-set -euo pipefail
+# Flow: refuse a server tree with modified tracked files -> fetch -> list incoming
+# commits -> reset to origin/main -> if api/ changed, sudo restart ignet-api and
+# poll its health -> verify the live page serves the new frontend bundle.
+# Log: ~/ignet-deploy-<timestamp>.log
+#
+# The body is one function so bash reads it whole before running: the reset may
+# rewrite this file when it is run from inside the repo.
+main() {
+  set -uo pipefail
+  # IGNET_DIR overrides the tree only for rehearsing on a scratch clone.
+  local SERVER_DIR="${IGNET_DIR:-/data/var/www/html/ignet}" BRANCH=main API=http://127.0.0.1:9637
+  local MODE="${1:-deploy}" TS LOG OLD NEW FAIL=0
+  TS="$(date +%Y%m%d-%H%M%S)"; LOG="$HOME/ignet-deploy-$TS.log"
+  exec > >(tee "$LOG") 2>&1
+  echo "== ignet deploy mode=$MODE $TS host=$(hostname) user=$(id -un)"
+  [ "$EUID" -ne 0 ] || { echo "RESULT: FAILED (run as juhur, not root/sudo)"; return 1; }
+  case "$MODE" in deploy|--check) ;; *) echo "RESULT: FAILED (unknown option $MODE)"; return 1 ;; esac
+  cd "$SERVER_DIR" || { echo "RESULT: FAILED (no $SERVER_DIR)"; return 1; }
 
-SERVER="juhur@134.129.255.147"
-SERVER_DIR="/data/var/www/html/ignet"
-BRANCH="main"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-cd "$REPO_ROOT"
+  # Untracked files (notes, docs) survive a reset; modified tracked files would be lost.
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "RESULT: FAILED (server has modified tracked files; inspect before deploying):"
+    git status --short --untracked-files=no; return 1
+  fi
 
-if [[ "${1:-}" == "--build" ]]; then
-  echo "==> Building frontend"
-  (cd frontend && npm run build)
-fi
+  OLD="$(git rev-parse HEAD)"
+  timeout 60 git fetch -q origin "$BRANCH" || { echo "RESULT: FAILED (git fetch)"; return 1; }
+  echo "== server HEAD $(git rev-parse --short HEAD) -> origin/$BRANCH $(git rev-parse --short "origin/$BRANCH")"
+  if [ "$OLD" = "$(git rev-parse "origin/$BRANCH")" ]; then echo "RESULT: SUCCESS (already up to date)"; return 0; fi
+  # A reset would silently drop commits that exist only on the server.
+  if [ -n "$(git rev-list HEAD --not "origin/$BRANCH")" ]; then
+    echo "RESULT: FAILED (server has commits not on origin/$BRANCH; push or drop them first):"
+    git log --oneline "origin/$BRANCH..HEAD" | sed 's/^/  /'; return 1
+  fi
+  echo "== incoming commits:"; git log --oneline "HEAD..origin/$BRANCH" | sed 's/^/  /'
+  echo "== changed areas:"; git diff --name-only HEAD "origin/$BRANCH" | cut -d/ -f1 | sort | uniq -c | sed 's/^/ /'
+  if [ "$MODE" = --check ]; then echo "RESULT: CHECK ONLY (nothing changed)"; return 0; fi
 
-# Refuse to deploy a dirty tree — the server resets to origin/main, so anything
-# uncommitted (including a fresh dist-react build) would NOT be deployed.
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  echo "ERROR: uncommitted changes present. Commit (incl. dist-react/) before deploying." >&2
-  git status --short >&2
-  exit 1
-fi
+  git reset -q --hard "origin/$BRANCH" || { echo "RESULT: FAILED (git reset)"; return 1; }
+  NEW="$(git rev-parse --short HEAD)"; echo "== server now at $NEW"
 
-BR="$(git rev-parse --abbrev-ref HEAD)"
-if [[ "$BR" != "$BRANCH" ]]; then
-  echo "ERROR: on branch '$BR', expected '$BRANCH'." >&2
-  exit 1
-fi
+  # `git diff --quiet` instead of `| grep -q`: under pipefail a long file list makes
+  # grep's early exit SIGPIPE git and read as "no change".
+  if ! git diff --quiet "$OLD" HEAD -- api/requirements.txt; then
+    echo "== api/requirements.txt changed: installing into api/venv before the restart"
+    timeout 900 api/venv/bin/pip install -q -r api/requirements.txt || { echo "RESULT: FAILED (pip install; API not restarted, old code still running)"; return 1; }
+  fi
+  if ! git diff --quiet "$OLD" HEAD -- api/; then
+    echo "== api/ changed: restarting ignet-api (sudo password prompt)"
+    # The old process keeps answering health checks if the restart never happened,
+    # so a restart counts only when the service start time moves.
+    local T0 T1 H=000 i
+    T0=$(systemctl show ignet-api -p ActiveEnterTimestamp --value)
+    if sudo systemctl restart ignet-api && T1=$(systemctl show ignet-api -p ActiveEnterTimestamp --value) && [ "$T1" != "$T0" ]; then
+      for i in $(seq 1 15); do
+        sleep 2; H=$(curl -s -m 5 -o /dev/null -w '%{http_code}' "$API/api/v1/health")
+        [ "$H" = 200 ] && { echo "  restarted at $T1, healthy after $((i*2)) s"; break; }
+      done
+      [ "$H" = 200 ] || { echo "  CHECK FAILED: health HTTP $H"; journalctl -u ignet-api -n 15 --no-pager 2>/dev/null; FAIL=1; }
+    else
+      echo "  CHECK FAILED: ignet-api was not restarted (still started at $T0); the old API code is still running"
+      echo "  fix: sudo systemctl restart ignet-api"
+      FAIL=1
+    fi
+  else
+    echo "== no api/ changes: no restart needed"
+  fi
 
-echo "==> Pushing $BRANCH to origin"
-git push origin "$BRANCH"
+  # The public hostname is not reachable from the server itself, so resolve it to localhost.
+  local WANT GOT
+  WANT=$(grep -o 'assets/index-[^"]*\.js' dist-react/index.html | head -1)
+  GOT=$(curl -sk -m 10 --resolve ignet.org:443:127.0.0.1 https://ignet.org/ignet/ | grep -o 'assets/index-[^"]*\.js' | head -1)
+  echo "== live page bundle: $GOT (committed: $WANT)"
+  [ -n "$WANT" ] && [ "$GOT" = "$WANT" ] || { echo "  CHECK FAILED: live page does not serve the committed bundle"; FAIL=1; }
 
-echo "==> Realigning server ($SERVER_DIR)"
-# The remote prints API_CHANGED (if any api/ file changed) and the new short HEAD.
-REMOTE_OUT="$(ssh -o ConnectTimeout=20 "$SERVER" "cd '$SERVER_DIR' && OLD=\$(git rev-parse HEAD) && git fetch origin -q && git reset --hard origin/$BRANCH -q && NEW=\$(git rev-parse --short HEAD) && { git diff --name-only \$OLD HEAD | grep -q '^api/' && echo API_CHANGED || true; } && echo HEAD=\$NEW")"
-
-echo "$REMOTE_OUT"
-SERVER_HEAD="$(echo "$REMOTE_OUT" | sed -n 's/^HEAD=//p')"
-LOCAL_HEAD="$(git rev-parse --short HEAD)"
-
-if [[ "$SERVER_HEAD" != "$LOCAL_HEAD" ]]; then
-  echo "WARNING: server HEAD ($SERVER_HEAD) != local HEAD ($LOCAL_HEAD)." >&2
-else
-  echo "==> 3-way aligned at $LOCAL_HEAD (local = origin = server)"
-fi
-
-if echo "$REMOTE_OUT" | grep -q API_CHANGED; then
-  echo ""
-  echo "!! api/ changed — restart the API (needs your sudo password):"
-  echo "   ssh $SERVER 'sudo systemctl restart ignet-api'"
-else
-  echo "==> No api/ changes; frontend is live immediately (no restart needed)."
-fi
+  [ "$FAIL" = 0 ] && echo "RESULT: SUCCESS ($NEW)" || echo "RESULT: FAILED"
+  echo "log: $LOG"
+  return "$FAIL"
+}
+main "$@"; exit

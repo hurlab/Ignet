@@ -14,6 +14,7 @@ const Login = lazy(() => import('./pages/Login.jsx'))
 const AnalyzeText = lazy(() => import('./pages/AnalyzeText.jsx'))
 const Explore = lazy(() => import('./pages/Explore.jsx'))
 const GeneSet = lazy(() => import('./pages/GeneSet.jsx'))
+const Workspaces = lazy(() => import('./pages/Workspaces.jsx'))
 const ApiDocs = lazy(() => import('./pages/ApiDocs.jsx'))
 const Mcp = lazy(() => import('./pages/Mcp.jsx'))
 const Compare = lazy(() => import('./pages/Compare.jsx'))
@@ -56,6 +57,7 @@ function App() {
             <Route path="analyze" element={<AnalyzeText />} />
             <Route path="explore" element={<Explore />} />
             <Route path="geneset" element={<GeneSet />} />
+            <Route path="workspace" element={<Workspaces />} />
             <Route path="compare" element={<Compare />} />
             <Route path="enrichment" element={<Enrichment />} />
             <Route path="ino" element={<InoExplorer />} />

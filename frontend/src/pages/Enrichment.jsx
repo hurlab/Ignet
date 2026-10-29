@@ -8,6 +8,7 @@ import EvidencePopup from '../components/EvidencePopup.jsx'
 import AddToSetButton from '../components/AddToSetButton.jsx'
 import PathwayPanel from '../components/PathwayPanel.jsx'
 import { useGeneSet } from '../GeneSetContext.jsx'
+import { useWorkspace } from '../WorkspaceContext.jsx'
 
 const EXAMPLE_GENES = 'TNF, IL6, IFNG, IL1B, IL10'
 
@@ -20,10 +21,10 @@ const STAGE_DEFS = [
 ]
 
 function parseGeneInput(text) {
-  return text
+  return [...new Set(text
     .split(/[\n,\t ]+/)
     .map((g) => g.trim().toUpperCase())
-    .filter((g) => g.length > 0)
+    .filter((g) => g.length > 0))]
 }
 
 function downloadCSV(data) {
@@ -234,9 +235,15 @@ const EMPTY_META = { coverage: 0, coverage_pct: 0, total_interactions: 0, input_
 const ALL_PENDING = Object.fromEntries(STAGE_DEFS.map(({ key }) => [key, 'pending']))
 
 export default function Enrichment() {
+  const { experiment, recipe, setRecipe, restoreToken } = useWorkspace()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
-  const [input, setInput] = useState('')
+  const [input, setInput] = useState(() => {
+    if (searchParams.get('genes')) return searchParams.get('genes').replace(/,/g, ', ')
+    if (restoreToken || experiment) return recipe.genes.join('\n')
+    if (searchParams.get('from') === 'geneset') return (localStorage.getItem('ignet_geneset_transfer') || '').replace(/,/g, '\n')
+    return (searchParams.get('genes') || recipe.genes.join('\n')).replace(/,/g, ', ')
+  })
 
   // Streaming state
   const [streaming, setStreaming]     = useState(false)   // true while stream is in-flight
@@ -252,28 +259,62 @@ export default function Enrichment() {
   const [evidencePair, setEvidencePair] = useState(null)
 
   const abortRef = useRef(null)
-  const didAutoAnalyze = useRef(false)
+  const generation = useRef(0)
+  const previousContext = useRef({ restoreToken, experiment })
   const geneSet = useGeneSet()
 
   // Cancel any in-flight stream on unmount
   useEffect(() => {
-    return () => { abortRef.current?.abort() }
+    const counter = generation
+    return () => { counter.current++; abortRef.current?.abort() }
   }, [])
 
   // Load genes transferred from the Gene Set page
   useEffect(() => {
     const transferred = localStorage.getItem('ignet_geneset_transfer')
     if (searchParams.get('from') === 'geneset' && transferred) {
-      setInput(transferred.replace(/,/g, '\n'))
       localStorage.removeItem('ignet_geneset_transfer')
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Restore/replacement cancels both streaming and non-abortable fallback work.
+  useEffect(() => {
+    const previous = previousContext.current
+    previousContext.current = { restoreToken, experiment }
+    if (previous.restoreToken === restoreToken && previous.experiment === experiment) return
+    generation.current++
+    abortRef.current?.abort()
+    // External workspace restoration intentionally hydrates the controlled input.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInput(recipe.genes.join('\n'))
+    setData(null); setSections(EMPTY_SECTIONS); setMeta(EMPTY_META)
+    setInputGenes([]); setError(null); setStreaming(false); setStageStatus({})
+    setEvidencePair(null)
+  }, [restoreToken, experiment]) // eslint-disable-line react-hooks/exhaustive-deps
+
   // @MX:ANCHOR: [AUTO] Core analysis entry point — called by example button, auto-analyze effect, and handleAnalyze
   // @MX:REASON: fan_in >= 3; streaming/fallback branching logic must remain stable across callers
   const runAnalysis = useCallback(async (genes) => {
-    // Cancel any previous in-flight stream
+    const requestGeneration = ++generation.current
+    const current = () => generation.current === requestGeneration
+    // Cancel previous work even when the replacement recipe cannot be accepted.
     abortRef.current?.abort()
+    const invalid = genes.filter(g => !/^[A-Z0-9._-]{1,60}$/.test(g))
+    if (invalid.length) {
+      setError(`Unsupported gene symbols (letters, digits, . _ - only, max 60 chars): ${invalid.slice(0, 10).join(', ')}${invalid.length > 10 ? ', …' : ''}`)
+      setStreaming(false)
+      return
+    }
+    if (genes.length > 500) {
+      setError(`At most 500 genes per analysis (got ${genes.length}).`)
+      setStreaming(false)
+      return
+    }
+    if (setRecipe({ genes }) === false) {
+      setError('Analysis was not started because workspace inputs could not be updated. Check gene symbols and workspace size; your input is preserved.')
+      setStreaming(false)
+      return
+    }
     const controller = new AbortController()
     abortRef.current = controller
 
@@ -303,6 +344,7 @@ export default function Enrichment() {
       await enrichmentStream(genes, {
         signal: controller.signal,
         onEvent(evt) {
+          if (!current()) return
           if (evt.type === 'start') {
             setInputGenes(evt.input_genes ?? [])
             // Mark the first stage as loading immediately
@@ -346,9 +388,11 @@ export default function Enrichment() {
         },
       })
 
+      if (!current()) return
       // Stream finished cleanly without a 'done' event (should not happen, but guard)
       setStreaming(false)
     } catch (err) {
+      if (!current()) return
       // AbortError from our own cancel — silently ignore
       if (err.name === 'AbortError') {
         setStreaming(false)
@@ -359,8 +403,10 @@ export default function Enrichment() {
       if (!gotAnySection) {
         try {
           const result = await api.enrichment(genes)
+          if (!current()) return
           setData(result)
         } catch (fallbackErr) {
+          if (!current()) return
           setError(fallbackErr.message)
         }
       } else {
@@ -369,22 +415,20 @@ export default function Enrichment() {
       }
       setStreaming(false)
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [setRecipe])
 
-  // Auto-analyze if ?genes= URL param is provided (from Compare page).
-  // Declared after runAnalysis so the callback is initialized before this effect references it.
+  // Explicit public links remain usable after clean-path workspace restoration.
+  // This effect intentionally replays under StrictMode after its first request is aborted.
+  const genesQuery = searchParams.get('genes')
   useEffect(() => {
-    const genesParam = searchParams.get('genes')
-    if (genesParam && !didAutoAnalyze.current) {
-      didAutoAnalyze.current = true
-      const geneText = genesParam.replace(/,/g, ', ')
-      setInput(geneText)
-      const genes = parseGeneInput(geneText)
-      if (genes.length >= 2) {
-        runAnalysis(genes)
-      }
-    }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!genesQuery) return
+    const geneText = genesQuery.replace(/,/g, ', ')
+    // URL navigation is an explicit input adapter, separate from clean-path restore.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInput(geneText)
+    const genes = parseGeneInput(geneText)
+    if (genes.length >= 2 && genes.length <= 500) runAnalysis(genes)
+  }, [genesQuery]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleAnalyze() {
     setError(null)
@@ -512,8 +556,15 @@ export default function Enrichment() {
           {cyElements.length > 0 && (
             <div>
               <h2 className="text-sm font-semibold text-gray-700 mb-2">Subnetwork</h2>
+              {experiment && <div className="flex gap-4 items-center flex-wrap mb-2 text-sm">
+                <label><input type="checkbox" checked={recipe.display.colorScheme === 'experiment'} onChange={e => setRecipe({ display: { ...recipe.display, colorScheme: e.target.checked ? 'experiment' : 'none' } })} /> Color genes by experimental log2FC</label>
+                <label>log2FC color limit <input aria-label="log2FC color limit" type="number" min="0.01" max="100" step="0.1" value={recipe.display.log2FCMax} onChange={e => { const value = Number(e.target.value); if (value >= 0.01 && value <= 100) setRecipe({ display: { ...recipe.display, log2FCMax: value } }) }} className="border rounded w-20 px-2" /></label>
+              </div>}
               <NetworkGraph
                 elements={cyElements}
+                experiment={experiment}
+                colorScheme={experiment ? recipe.display.colorScheme : 'none'}
+                experimentRange={recipe.display.log2FCMax}
                 onNodeClick={(node) => {
                   window.open(`/ignet/gene?q=${encodeURIComponent(node.label)}`, '_blank')
                 }}

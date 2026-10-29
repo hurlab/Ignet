@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useGeneSet } from '../GeneSetContext.jsx'
+import ExperimentImport from '../components/ExperimentImport.jsx'
 
 const MAX_IMPORT_BYTES = 5 * 1024 * 1024 // 5 MB
 
@@ -115,6 +116,8 @@ export default function GeneSet() {
           )}
         </div>
       </div>
+
+      <ExperimentImport />
 
       {/* Save dialog */}
       {showSave && (

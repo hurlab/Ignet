@@ -6,6 +6,9 @@ import ErrorMessage from '../components/ErrorMessage.jsx'
 import GeneAutocomplete from '../components/GeneAutocomplete.jsx'
 import TrendChart from '../components/TrendChart.jsx'
 import NetworkGraph from '../components/NetworkGraph.jsx'
+import EvidenceWorkbench from '../components/EvidenceWorkbench.jsx'
+import WorkspaceControls from '../components/WorkspaceControls.jsx'
+import { useWorkspace } from '../WorkspaceContext.jsx'
 
 // A focused two-node graph for the queried pair: both genes plus a single edge
 // whose thickness encodes the evidence count. Matches the element shape the
@@ -19,22 +22,6 @@ function buildPairElements(g1, g2, total) {
   ]
 }
 
-function downloadCSV(interactions, gene1, gene2) {
-  if (!interactions?.length) return
-  const header = 'Gene1,Gene2,PMID,Sentence,BioBERT_Score,INO_Term\n'
-  const rows = interactions.map(row =>
-    [gene1, gene2, row.pmid || '', `"${(row.sentence_text || '').replace(/"/g, '""')}"`,
-     row.score ?? '', row.ino_term || row.matching_phrase || ''].join(',')
-  ).join('\n')
-  const blob = new Blob([header + rows], { type: 'text/csv' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `ignet-pair-${gene1}-${gene2}.csv`
-  a.click()
-  URL.revokeObjectURL(url)
-}
-
 export default function GenePair() {
   const [gene1, setGene1] = useState('')
   const [gene2, setGene2] = useState('')
@@ -43,128 +30,150 @@ export default function GenePair() {
   const [pairData, setPairData] = useState(null)
   const [predicting, setPredicting] = useState(false)
   const [predictResult, setPredictResult] = useState(null)
-  const [sortBy, setSortBy] = useState('score') // 'score' or 'pmid'
-  const [showCount, setShowCount] = useState(20)
-  const [pairTrends, setPairTrends] = useState(null)   // null = not yet fetched, [] = empty
+  const [sortBy, setSortBy] = useState('score')
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [pairTrends, setPairTrends] = useState(null)
   const [pairTrendsLoading, setPairTrendsLoading] = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
-  // Guard against stale pair-trends responses when the user quickly switches pairs
-  const trendsRequestRef = useRef({ g1: '', g2: '' })
+  const { recipe, setRecipe, restoreToken } = useWorkspace()
+  const generation = useRef(0)
+  const restored = useRef(restoreToken)
+  const entryRestoreToken = useRef(restoreToken)
+  if (restored.current !== restoreToken) {
+    restored.current = restoreToken
+    generation.current += 1
+  }
 
-  // Non-blocking trends fetch with stale-response guard
-  function fetchPairTrends(g1, g2) {
-    trendsRequestRef.current = { g1, g2 }
+  function resetRequests() {
+    generation.current += 1
+    setLoading(false)
+    setLoadingMore(false)
+    setPredicting(false)
+    setPairTrendsLoading(false)
+    setError(null)
+    setPredictResult(null)
+    return generation.current
+  }
+
+  function flatten(raw, g1, g2) {
+    return { ...raw?.data, gene1: g1, gene2: g2, page: raw?.data?.page ?? 1, interactions: raw?.interactions ?? [], total: raw?.total ?? 0, prediction_summary: raw?.prediction_summary ?? null, fetchedAt: new Date().toISOString() }
+  }
+
+  function fetchPairTrends(g1, g2, requestId) {
     setPairTrends(null)
     setPairTrendsLoading(true)
     api.pairTrends(g1, g2)
-      .then((res) => {
-        // Ignore if a newer pair request has started
-        if (trendsRequestRef.current.g1 !== g1 || trendsRequestRef.current.g2 !== g2) return
-        setPairTrends(res?.trends ?? [])
-      })
-      .catch(() => {
-        if (trendsRequestRef.current.g1 !== g1 || trendsRequestRef.current.g2 !== g2) return
-        setPairTrends([])
-      })
-      .finally(() => {
-        if (trendsRequestRef.current.g1 === g1 && trendsRequestRef.current.g2 === g2) {
-          setPairTrendsLoading(false)
-        }
-      })
+      .then(res => { if (generation.current === requestId) setPairTrends(res?.trends ?? []) })
+      .catch(() => { if (generation.current === requestId) setPairTrends([]) })
+      .finally(() => { if (generation.current === requestId) setPairTrendsLoading(false) })
   }
 
-  // Auto-fill and auto-search from URL parameters on mount
-  useEffect(() => {
-    const g1 = searchParams.get('gene1')
-    const g2 = searchParams.get('gene2')
-    if (g1) setGene1(g1.toUpperCase())
-    if (g2) setGene2(g2.toUpperCase())
-    if (g1 && g2) {
-      // Auto-submit using param values directly to avoid stale state closure
-      const upper1 = g1.toUpperCase()
-      const upper2 = g2.toUpperCase()
-      setLoading(true)
-      setError(null)
-      setPairData(null)
-      setPredictResult(null)
-      api.genePair(upper1, upper2).then((raw) => {
-        const interactions = raw?.interactions ?? []
-        const total = raw?.total ?? 0
-        const prediction_summary = raw?.prediction_summary ?? null
-        const meta = raw?.data ?? {}
-        setPairData({ ...meta, interactions, total, prediction_summary })
-      }).catch((err) => {
-        setError(err.message)
-      }).finally(() => {
-        setLoading(false)
-      })
-      fetchPairTrends(upper1, upper2)
+  async function runPair(g1, g2, orderBy = sortBy) {
+    const requestId = resetRequests()
+    setPairData(null)
+    try {
+      if (setRecipe({ pair: [g1, g2] }) === false) {
+        setError('The pair could not be saved to the workspace. Check the workspace error and correct the gene symbols.')
+        return
+      }
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    catch (err) { setError(err.message); return }
+    setLoading(true)
+    setSearchParams({ gene1: g1, gene2: g2 }, { replace: true })
+    fetchPairTrends(g1, g2, requestId)
+    try {
+      const raw = await api.genePair(g1, g2, { page: 1, perPage: 50, sortBy: orderBy })
+      if (generation.current === requestId) setPairData(flatten(raw, g1, g2))
+    } catch (err) {
+      if (generation.current === requestId) setError(err.message)
+    } finally {
+      if (generation.current === requestId) setLoading(false)
+    }
+  }
 
-  async function handleSubmit(e, explicitGene1, explicitGene2) {
-    if (e) e.preventDefault()
+  useEffect(() => {
+    if (restoreToken > 0 && (restoreToken !== entryRestoreToken.current || !searchParams.get('gene1') || !searchParams.get('gene2'))) {
+      resetRequests()
+      setGene1(recipe.pair?.[0] ?? '')
+      setGene2(recipe.pair?.[1] ?? '')
+      setPairData(null)
+      setPairTrends(null)
+      setSearchParams({}, { replace: true })
+    } else {
+      const g1 = searchParams.get('gene1')?.toUpperCase() ?? ''
+      const g2 = searchParams.get('gene2')?.toUpperCase() ?? ''
+      setGene1(g1)
+      setGene2(g2)
+      if (g1 && g2) runPair(g1, g2)
+    }
+    return () => { generation.current += 1 }
+  }, [restoreToken]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function handleSubmit(e, explicitGene1, explicitGene2) {
+    e?.preventDefault()
     const g1 = (explicitGene1 ?? gene1).trim().toUpperCase()
     const g2 = (explicitGene2 ?? gene2).trim().toUpperCase()
-    if (!g1 || !g2) return
-    setLoading(true)
-    setError(null)
-    setPairData(null)
-    setPredictResult(null)
-
-    // Reflect the pair in the URL so it is shareable and swap is bookmarkable.
-    setSearchParams({ gene1: g1, gene2: g2 }, { replace: true })
-
-    // Kick off trends fetch immediately (non-blocking)
-    fetchPairTrends(g1, g2)
-
-    try {
-      const raw = await api.genePair(g1, g2)
-      // Flatten: backend wraps in { data: {...}, interactions, total, prediction_summary }
-      const interactions = raw?.interactions ?? []
-      const total = raw?.total ?? 0
-      const prediction_summary = raw?.prediction_summary ?? null
-      const meta = raw?.data ?? {}
-      setPairData({ ...meta, interactions, total, prediction_summary })
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    if (g1 && g2) runPair(g1, g2)
   }
 
-  // Swap gene 1 and gene 2, re-running the search if a result is already shown.
+  function editGene(setter, value) {
+    resetRequests()
+    setPairData(null)
+    setPairTrends(null)
+    setter(value)
+  }
+
   function handleSwap() {
-    const g1 = gene2
-    const g2 = gene1
+    const g1 = gene2.trim().toUpperCase()
+    const g2 = gene1.trim().toUpperCase()
     setGene1(g1)
     setGene2(g2)
-    if (pairData || (g1.trim() && g2.trim())) {
-      handleSubmit(null, g1, g2)
+    if (g1 && g2) runPair(g1, g2)
+    else resetRequests()
+  }
+
+  async function loadMore() {
+    if (!pairData || loadingMore || pairData.interactions.length >= 500) return
+    const requestId = generation.current
+    const data = pairData
+    setLoadingMore(true)
+    setError(null)
+    try {
+      const raw = await api.genePair(data.gene1, data.gene2, { page: data.page + 1, perPage: 50, sortBy, includeSummary: false })
+      if (generation.current === requestId) {
+        // fetchedAt tracks the newest fetch so snapshots are never older than the latest row
+        setPairData({ ...data, page: raw?.data?.page ?? data.page + 1, interactions: [...data.interactions, ...(raw?.interactions ?? [])].slice(0, 500), fetchedAt: new Date().toISOString() })
+      }
+    } catch (err) {
+      if (generation.current === requestId) setError(err.message)
+    } finally {
+      if (generation.current === requestId) setLoadingMore(false)
     }
   }
 
   async function handlePredict() {
-    const g1 = gene1.trim().toUpperCase()
-    const g2 = gene2.trim().toUpperCase()
-    if (!g1 || !g2) return
+    if (!pairData) return
+    const { gene1: g1, gene2: g2 } = pairData
+    const requestId = resetRequests()
     setPredicting(true)
-    setPredictResult(null)
     try {
       const result = await api.predictPair(g1, g2)
+      if (generation.current !== requestId) return
       setPredictResult(result)
-      // Refresh pair data to reflect newly scored sentences
-      const raw = await api.genePair(g1, g2)
-      const interactions = raw?.interactions ?? []
-      const total = raw?.total ?? 0
-      const prediction_summary = raw?.prediction_summary ?? null
-      const meta = raw?.data ?? {}
-      setPairData({ ...meta, interactions, total, prediction_summary })
+      // Refresh every page the user had loaded, not just page 1
+      const loaded = pairData.page
+      let merged = flatten(await api.genePair(g1, g2, { page: 1, perPage: 50, sortBy }), g1, g2)
+      for (let page = 2; page <= loaded && merged.interactions.length < 500; page++) {
+        if (generation.current !== requestId) return
+        const raw = await api.genePair(g1, g2, { page, perPage: 50, sortBy, includeSummary: false })
+        merged = { ...merged, page: raw?.data?.page ?? page, interactions: [...merged.interactions, ...(raw?.interactions ?? [])].slice(0, 500), fetchedAt: new Date().toISOString() }
+      }
+      if (generation.current === requestId) setPairData(merged)
     } catch (err) {
-      setPredictResult({ error: err.message })
+      if (generation.current === requestId) setPredictResult({ error: err.message })
     } finally {
-      setPredicting(false)
+      if (generation.current === requestId) setPredicting(false)
     }
   }
 
@@ -182,8 +191,8 @@ export default function GenePair() {
           <GeneAutocomplete
             label="Gene 1"
             value={gene1}
-            onChange={(e) => setGene1(e.target.value)}
-            onSelect={(sym) => setGene1(sym)}
+            onChange={(e) => editGene(setGene1, e.target.value)}
+            onSelect={(sym) => editGene(setGene1, sym)}
             placeholder="e.g. IFNG"
             inputClassName="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
             debounceMs={300}
@@ -202,8 +211,8 @@ export default function GenePair() {
           <GeneAutocomplete
             label="Gene 2"
             value={gene2}
-            onChange={(e) => setGene2(e.target.value)}
-            onSelect={(sym) => setGene2(sym)}
+            onChange={(e) => editGene(setGene2, e.target.value)}
+            onSelect={(sym) => editGene(setGene2, sym)}
             placeholder="e.g. TNF"
             inputClassName="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:border-blue-500"
             debounceMs={300}
@@ -218,6 +227,7 @@ export default function GenePair() {
         </button>
       </form>
 
+      <WorkspaceControls />
       <ErrorMessage message={error} />
 
       {loading && <LoadingSpinner message="Running interaction prediction..." />}
@@ -248,11 +258,11 @@ export default function GenePair() {
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-navy">{pairData.total ?? 0}</div>
-                <div className="text-xs text-gray-500">Evidence Sentences</div>
+                <div className="text-xs text-gray-500">Base evidence records</div>
               </div>
               <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-navy">{pmids.length}</div>
-                <div className="text-xs text-gray-500">Unique PMIDs</div>
+                <div className="text-xs text-gray-500">Unique loaded PMIDs</div>
               </div>
               <div className="bg-white border border-gray-200 rounded-lg p-4 text-center">
                 <div className="text-2xl font-bold text-navy">
@@ -297,7 +307,7 @@ export default function GenePair() {
             {/* BioBERT Prediction Summary */}
             {pairData?.prediction_summary && (
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
-                <h3 className="font-semibold text-navy text-sm">BioBERT Prediction Summary</h3>
+                <h3 className="font-semibold text-navy text-sm">Whole-pair BioBERT summary</h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
                   <div>
                     <div className="text-lg font-bold text-navy">{pairData.prediction_summary.scored_sentences}</div>
@@ -306,14 +316,14 @@ export default function GenePair() {
                   <div>
                     <div className="text-lg font-bold text-navy">
                       {pairData.prediction_summary.avg_confidence != null
-                        ? (pairData.prediction_summary.avg_confidence * 100).toFixed(1) + '%'
+                        ? pairData.prediction_summary.avg_confidence.toFixed(3)
                         : 'N/A'}
                     </div>
-                    <div className="text-xs text-gray-500">Avg Confidence</div>
+                    <div className="text-xs text-gray-500">Avg model score</div>
                   </div>
                   <div>
                     <div className="text-lg font-bold text-accent">{pairData.prediction_summary.high_confidence_count}</div>
-                    <div className="text-xs text-gray-500">High Confidence ({'>'} 80%)</div>
+                    <div className="text-xs text-gray-500">Model score ({'>'} 0.8)</div>
                   </div>
                   <div>
                     <div className="text-lg font-bold text-gray-600">{pairData.prediction_summary.total_sentences}</div>
@@ -346,104 +356,7 @@ export default function GenePair() {
               </div>
             )}
 
-            {/* Evidence table */}
-            {pairData.interactions?.length > 0 && (() => {
-              const sorted = [...(pairData?.interactions || [])].sort((a, b) => {
-                if (sortBy === 'score') return (b.score ?? -1) - (a.score ?? -1)
-                return (b.pmid ?? 0) - (a.pmid ?? 0)
-              })
-              return (
-              <div className="bg-white border border-gray-200 rounded-lg p-4 overflow-x-auto">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="text-xs font-medium text-gray-600">Evidence Sentences</div>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handlePredict}
-                      disabled={predicting}
-                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
-                    >
-                      {predicting ? 'Predicting...' : 'Re-predict Unscored'}
-                    </button>
-                    <button
-                      onClick={() => downloadCSV(pairData.interactions, pairData.gene1, pairData.gene2)}
-                      className="bg-navy hover:bg-navy-dark text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
-                    >
-                      Download CSV
-                    </button>
-                  </div>
-                </div>
-                {predictResult && (
-                  <div className={`text-xs mb-2 px-2 py-1 rounded ${predictResult.error ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'}`}>
-                    {predictResult.error ? predictResult.error : predictResult.message}
-                  </div>
-                )}
-                <div className="flex gap-2 text-xs mb-2">
-                  <span className="text-gray-500">Sort by:</span>
-                  <button onClick={() => setSortBy('score')} className={sortBy === 'score' ? 'font-bold text-navy' : 'text-gray-400'}>Confidence</button>
-                  <button onClick={() => setSortBy('pmid')} className={sortBy === 'pmid' ? 'font-bold text-navy' : 'text-gray-400'}>PMID</button>
-                </div>
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-left text-gray-500 border-b">
-                      <th className="py-1 pr-2">Score</th>
-                      <th className="py-1 pr-2">PMID</th>
-                      <th className="py-1 pr-2">Sentence</th>
-                      <th className="py-1">INO Term</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sorted.slice(0, showCount).map((row, i) => (
-                      <tr key={i} className="border-b border-gray-50">
-                        <td className="py-1 pr-2 font-mono whitespace-nowrap">
-                          {typeof row.score === 'number' ? (
-                            <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
-                              row.score > 0.8
-                                ? 'bg-green-100 text-green-700'
-                                : row.score > 0.5
-                                  ? 'bg-yellow-100 text-yellow-700'
-                                  : 'bg-gray-100 text-gray-600'
-                            }`}>
-                              {(row.score * 100).toFixed(0)}%
-                            </span>
-                          ) : '—'}
-                        </td>
-                        <td className="py-1 pr-2">
-                          <a
-                            href={`https://pubmed.ncbi.nlm.nih.gov/${row.pmid}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:underline"
-                          >
-                            {row.pmid}
-                          </a>
-                        </td>
-                        <td className="py-1 pr-2 max-w-md">
-                          <span className="truncate block">{row.sentence_text ?? '—'}</span>
-                          {row.matching_phrase && (
-                            <span className="text-xs bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded mt-0.5 inline-block">
-                              {row.matching_phrase}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-1">{row.ino_term ?? row.matching_phrase ?? '—'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {pairData.total > showCount && (
-                  <div className="flex items-center gap-3 mt-2">
-                    <span className="text-xs text-gray-400">Showing {Math.min(showCount, sorted.length)} of {pairData.total} results</span>
-                    <button
-                      onClick={() => setShowCount(prev => prev + 20)}
-                      className="text-xs text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      Load more
-                    </button>
-                  </div>
-                )}
-              </div>
-              )
-            })()}
+            <EvidenceWorkbench key={`${pairData.gene1}:${pairData.gene2}`} data={pairData} loadingMore={loadingMore} onLoadMore={loadMore} sortBy={sortBy} onSort={value => { setSortBy(value); runPair(pairData.gene1, pairData.gene2, value) }} predicting={predicting} onPredict={handlePredict} predictResult={predictResult} />
           </div>
         )
       })()}

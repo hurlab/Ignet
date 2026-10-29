@@ -59,7 +59,14 @@ export const api = {
   geneNeighbors: (sym) => request(`/genes/${encodeURIComponent(sym)}/neighbors`),
   geneReport: (sym) => request(`/genes/${encodeURIComponent(sym)}/report`, { timeout: 60000 }),
   geneTrends: (sym) => request(`/genes/${encodeURIComponent(sym)}/trends`),
-  genePair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}?include_summary=true`),
+  genePair: (s1, s2, options = {}) => {
+    const params = new URLSearchParams({ include_summary: String(options.includeSummary ?? true) })
+    if (options.page != null) params.set('page', String(options.page))
+    if (options.perPage != null) params.set('per_page', String(options.perPage))
+    if (options.sortBy) params.set('sort_by', options.sortBy)
+    if (options.order) params.set('order', options.order)
+    return request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}?${params}`)
+  },
   pairTrends: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}/trends`),
   predictPair: (s1, s2) => request(`/pairs/${encodeURIComponent(s1)}/${encodeURIComponent(s2)}/predict`, { method: 'POST' }),
 

@@ -5,13 +5,16 @@ import './index.css'
 import App from './App.jsx'
 import { AuthProvider } from './AuthContext.jsx'
 import { GeneSetProvider } from './GeneSetContext.jsx'
+import { WorkspaceProvider } from './WorkspaceContext.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter basename="/ignet">
       <AuthProvider>
         <GeneSetProvider>
-          <App />
+          <WorkspaceProvider>
+            <App />
+          </WorkspaceProvider>
         </GeneSetProvider>
       </AuthProvider>
     </BrowserRouter>

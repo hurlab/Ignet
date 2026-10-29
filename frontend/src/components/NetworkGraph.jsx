@@ -3,6 +3,7 @@ import CytoscapeComponent from 'react-cytoscapejs'
 import cytoscape from 'cytoscape'
 import fcose from 'cytoscape-fcose'
 import { api } from '../api.js'
+import { experimentColor } from '../experimentData.js'
 import {
   SPECIES_COLORS, DEGREE_LOW, DEGREE_HIGH, INO_FALLBACK, FUNC_FALLBACK,
   isGeneNodeData, geneNodeIds, degreeColor,
@@ -38,7 +39,7 @@ function dominantInoColor(node) {
 }
 
 // Apply node background colors imperatively (no relayout) for the active scheme.
-function applyNodeColors(cy, scheme, funcColorByGene) {
+function applyNodeColors(cy, scheme, funcColorByGene, experimentMap, experimentRange) {
   if (!cy) return
   const degrees = cy.nodes().filter(n => isGeneNodeData(n.data())).map(n => n.degree())
   const minDeg = degrees.length ? Math.min(...degrees) : 0
@@ -56,7 +57,8 @@ function applyNodeColors(cy, scheme, funcColorByGene) {
       // function / ino / degree only recolor gene nodes; entity nodes keep their type color.
       if (d.nodeType) { node.removeStyle('background-color'); return }
       let color = null
-      if (scheme === 'function') color = (funcColorByGene && funcColorByGene[node.id()]) || FUNC_FALLBACK
+      if (scheme === 'experiment') color = experimentColor(experimentMap.get(node.id())?.log2FC, experimentRange)
+      else if (scheme === 'function') color = (funcColorByGene && funcColorByGene[node.id()]) || FUNC_FALLBACK
       else if (scheme === 'ino') color = dominantInoColor(node)
       else if (scheme === 'degree') color = degreeColor(node.degree(), minDeg, maxDeg)
       if (color) node.style('background-color', color)
@@ -296,7 +298,9 @@ function isGeneGeneEdge(edge) {
   return !srcNodeType && !tgtNodeType
 }
 
-export default function NetworkGraph({ elements, onNodeClick, onEdgeClick, onCyReady, colorScheme = 'none' }) {
+export default function NetworkGraph({ elements, onNodeClick, onEdgeClick, onCyReady, colorScheme = 'none', experiment = null, experimentRange = 2 }) {
+  const experimentMap = useMemo(() => new Map((experiment?.rows || []).map(row => [row.gene, row])), [experiment])
+  const displayedMeasurements = useMemo(() => (elements || []).filter(e => isGeneNodeData(e.data)).map(e => ({ gene: e.data.id, ...experimentMap.get(e.data.id) })), [elements, experimentMap])
   const [tooltip, setTooltip] = useState(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [cyReady, setCyReady] = useState(false)
@@ -356,11 +360,26 @@ export default function NetworkGraph({ elements, onNodeClick, onEdgeClick, onCyR
   // Recolor nodes (imperative, no relayout) whenever the scheme, data, or fetched
   // classes change and the cytoscape instance is ready.
   useEffect(() => {
-    if (cyRef.current && cyReady) applyNodeColors(cyRef.current, colorScheme, funcColorByGene)
-  }, [colorScheme, funcColorByGene, elements, cyReady])
+    if (cyRef.current && cyReady) applyNodeColors(cyRef.current, colorScheme, funcColorByGene, experimentMap, experimentRange)
+  }, [colorScheme, funcColorByGene, elements, cyReady, experimentMap, experimentRange])
+
+  useEffect(() => {
+    if (!cyReady || !cyRef.current) return
+    cyRef.current.batch(() => cyRef.current.nodes().forEach(node => {
+      const row = !node.data('nodeType') && experimentMap.get(node.id())
+      if (row) node.data({ experimentLog2FC: row.log2FC, experimentPadj: row.padj })
+      else node.removeData('experimentLog2FC experimentPadj')
+    }))
+  }, [cyReady, elements, experimentMap])
 
   // Legend entries for the active scheme (null = no legend, e.g. 'none').
   const schemeLegend = useMemo(() => {
+    if (colorScheme === 'experiment') return [
+      { label: `log2FC ≤ −${experimentRange}`, color: experimentColor(-experimentRange, experimentRange) },
+      { label: 'Measured zero', color: experimentColor(0, experimentRange) },
+      { label: `log2FC ≥ ${experimentRange}`, color: experimentColor(experimentRange, experimentRange) },
+      { label: 'Missing log2FC', color: experimentColor(null, experimentRange) },
+    ]
     if (colorScheme === 'function') {
       const present = new Set(funcClasses ? Object.values(funcClasses) : [])
       const items = funcLegend.filter(e => present.has(e.bucket)).map(e => ({ label: e.bucket, color: e.color }))
@@ -389,7 +408,7 @@ export default function NetworkGraph({ elements, onNodeClick, onEdgeClick, onCyR
       return items
     }
     return null
-  }, [colorScheme, funcClasses, funcLegend, elements])
+  }, [colorScheme, funcClasses, funcLegend, elements, experimentRange])
 
   // Handle ESC to exit fullscreen
   useEffect(() => {
@@ -514,7 +533,7 @@ ${edges.join('\n')}
         const degree = node.degree()
         const label = node.data('label')
         const renderedPos = evt.renderedPosition
-        setTooltip({ x: renderedPos.x, y: renderedPos.y, label: `${label} (${degree} connections)` })
+        setTooltip({ x: renderedPos.x, y: renderedPos.y, label: `${label} (${degree} connections)${node.data('experimentLog2FC') !== undefined ? ` | log2FC: ${node.data('experimentLog2FC') ?? 'Missing'}; adjusted p: ${node.data('experimentPadj') ?? 'Missing'}` : ''}` })
       })
 
       cyInstance.on('mouseout', 'node', () => setTooltip(null))
@@ -536,6 +555,12 @@ ${edges.join('\n')}
 
   return (
     <div ref={containerRef} className={wrapperClass}>
+      {experiment && <details className="text-xs bg-white border rounded p-2 mb-2">
+        <summary>Experimental values for displayed genes</summary>
+        <p>{displayedMeasurements.filter(row => row.inputSymbol).length} measured genes in this network; {experiment.rows.length - displayedMeasurements.filter(row => row.inputSymbol).length} imported genes not in this displayed network. Colors show fold changes, not interaction direction; node size remains connectivity.</p>
+        <p>{displayedMeasurements.filter(row => row.log2FC != null && Math.abs(row.log2FC) > experimentRange).length} displayed values clipped to the color range; numeric values below are unchanged.</p>
+        <div className="max-h-48 overflow-auto"><table><caption>Experimental measurements (missing is not zero)</caption><thead><tr><th>Gene</th><th>log2FC</th><th>Adjusted p</th></tr></thead><tbody>{displayedMeasurements.map(row => <tr key={row.gene}><td className="pr-4">{row.gene}</td><td className="pr-4">{row.log2FC ?? 'Missing'}</td><td>{row.padj ?? 'Missing'}</td></tr>)}</tbody></table></div>
+      </details>}
       {/* Visually-hidden text alternative for screen readers */}
       <div className="sr-only">
         <p>{graphAriaLabel}</p>

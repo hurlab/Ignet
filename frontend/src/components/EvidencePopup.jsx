@@ -13,7 +13,7 @@ function ScoreBadge({ score }) {
       : 'bg-gray-100 text-gray-600'
   return (
     <span className={`text-xs font-medium px-1.5 py-0.5 rounded whitespace-nowrap ${cls}`}>
-      {(score * 100).toFixed(0)}%
+      {score.toFixed(3)}
     </span>
   )
 }
@@ -95,20 +95,25 @@ export default function EvidencePopup({ gene1, gene2, onClose }) {
   // Fetch evidence on mount (and if gene1/gene2 change)
   useEffect(() => {
     if (!gene1 || !gene2) return
-    setLoading(true)
-    setError(null)
-    setPairData(null)
-
-    api.genePair(gene1, gene2)
+    let active = true
+    Promise.resolve().then(() => {
+      if (!active) return
+      setLoading(true)
+      setError(null)
+      setPairData(null)
+      return api.genePair(gene1, gene2)
+    })
       .then((raw) => {
+        if (!active) return
         const interactions = raw?.interactions ?? []
         const total = raw?.total ?? 0
         const prediction_summary = raw?.prediction_summary ?? null
         const meta = raw?.data ?? {}
         setPairData({ ...meta, interactions, total, prediction_summary })
       })
-      .catch((err) => setError(err.message))
-      .finally(() => setLoading(false))
+      .catch((err) => { if (active) setError(err.message) })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
   }, [gene1, gene2])
 
   // Top 10 interactions sorted by score desc
@@ -145,7 +150,7 @@ export default function EvidencePopup({ gene1, gene2, onClose }) {
             </h2>
             {pairData != null && (
               <p className="text-xs text-gray-500 mt-0.5">
-                {pairData.total} sentence{pairData.total !== 1 ? 's' : ''} found
+                {pairData.total} base evidence records; preview shows at most 10 of the first 50 loaded records.
               </p>
             )}
           </div>
@@ -190,18 +195,20 @@ export default function EvidencePopup({ gene1, gene2, onClose }) {
               </span>
               {pairData.prediction_summary.avg_confidence != null && (
                 <span>
-                  Avg confidence:{' '}
+                  Avg model score:{' '}
                   <span className="font-medium text-navy">
-                    {(pairData.prediction_summary.avg_confidence * 100).toFixed(1)}%
+                    {pairData.prediction_summary.avg_confidence.toFixed(3)}
                   </span>
                 </span>
               )}
               <span>
-                High confidence:{' '}
+                Model score above 0.8:{' '}
                 <span className="font-medium text-accent">{pairData.prediction_summary.high_confidence_count}</span>
               </span>
             </div>
           )}
+
+          <p className="text-xs text-gray-500">Model scores are not calibrated probabilities or experimental validation. Source origin and revision are unknown.</p>
 
           {/* Evidence rows — top 10 by score */}
           {!loading && !error && topInteractions.length > 0 && (
@@ -249,7 +256,7 @@ export default function EvidencePopup({ gene1, gene2, onClose }) {
             className="text-xs text-blue-600 hover:underline font-medium"
             onClick={onClose}
           >
-            View full pair &rarr;
+            Review evidence for this pair &rarr;
           </Link>
         </div>
       </div>

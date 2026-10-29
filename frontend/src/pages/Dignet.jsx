@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '../api.js'
+import { useWorkspace } from '../WorkspaceContext.jsx'
 import { COHORT_COLORS, mergeCohortEdges, buildCohortDiffElements, mergeCohorts, buildNCohortElements, sharedCountColor } from '../cohortDiff.js'
 import LoadingSpinner from '../components/LoadingSpinner.jsx'
 import ErrorMessage from '../components/ErrorMessage.jsx'
@@ -306,6 +307,7 @@ export default function Dignet() {
   const [entnetData, setEntnetData] = useState(null)
   const [entnetLoading, setEntnetLoading] = useState(false)
   const [evidencePair, setEvidencePair] = useState(null)
+  const { experiment, recipe } = useWorkspace()
   const [colorScheme, setColorScheme] = useState('none') // node color scheme (SPEC-COHORT-002)
   // Two-cohort differential mode (SPEC-COHORT-003)
   // 2..5 cohorts (SPEC-COHORT-004)
@@ -321,6 +323,11 @@ export default function Dignet() {
   // runSearch without widening its dependency list).
   const filterStateRef = useRef({})
   filterStateRef.current = { limit, inoFilter, vaccineOnly, yearMin, yearMax }
+
+  // The 'experiment' color scheme has no option once the experiment is cleared
+  useEffect(() => {
+    if (!experiment && colorScheme === 'experiment') setColorScheme('none')
+  }, [experiment, colorScheme])
 
   // Apply highlight/fade to Cytoscape graph when entity is selected
   useEffect(() => {
@@ -1149,13 +1156,14 @@ export default function Dignet() {
                   className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:border-blue-500"
                 >
                   <option value="none">None (default)</option>
+                  {experiment && <option value="experiment">Experimental log2FC</option>}
                   <option value="function">Functional class</option>
                   <option value="ino">INO interaction category</option>
                   <option value="degree">Connectivity (degree)</option>
                   <option value="species">Host vs pathogen</option>
                 </select>
               </div>
-              <NetworkGraph elements={elements} colorScheme={colorScheme} onNodeClick={setSelectedNode} onEdgeClick={setEvidencePair} onCyReady={(cy) => { cyInstanceRef.current = cy }} />
+              <NetworkGraph elements={elements} experiment={experiment} experimentRange={recipe.display.log2FCMax} colorScheme={colorScheme === 'experiment' && !experiment ? 'none' : colorScheme} onNodeClick={setSelectedNode} onEdgeClick={setEvidencePair} onCyReady={(cy) => { cyInstanceRef.current = cy }} />
               {evidencePair && (
                 <EvidencePopup
                   gene1={evidencePair.gene1}

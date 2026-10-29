@@ -67,6 +67,13 @@ export const TOOL_GROUPS = [
     tag: 'bg-emerald-100 text-emerald-800',
     tools: [
       {
+        label: 'Workspaces',
+        to: '/workspace',
+        tagline: 'Save inputs and selected evidence',
+        description: 'Save experiment inputs, overlay settings and selected evidence locally, or transfer them as a JSON file.',
+        icon: '📁',
+      },
+      {
         label: 'Enrichment',
         to: '/enrichment',
         tagline: 'Gene set enrichment',

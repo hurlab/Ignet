@@ -179,25 +179,42 @@ def get_pair_interactions(sym1: str, sym2: str):
             row = cursor.fetchone()
             total = int(row["total"]) if row else 0
 
-            # Data with LEFT JOIN for sentence text and INO terms
-            # t_ino uses sentence_id (int) and columns: id, matching_phrase
+            # Page base records before hydrating one-to-many annotations. The
+            # primary id tie-breaker makes equal-score pages deterministic.
             data_sql = f"""
-                SELECT
-                    h.*,
-                    sp.sentence AS sentence_text,
-                    ino.ino_id AS ino_id,
-                    ino.matching_phrase AS matching_phrase
+                SELECT h.*
                 FROM t_gene_pairs h
-                LEFT JOIN t_sentences sp
-                       ON h.sentence_id = sp.sentence_id
-                LEFT JOIN t_ino ino
-                       ON h.sentence_id = ino.sentence_id
                 WHERE {pair_sql} {extra_sql}
-                ORDER BY h.{sort_col} {sort_order}
+                ORDER BY h.{sort_col} {sort_order}, h.id ASC
                 LIMIT %s OFFSET %s
             """
             cursor.execute(data_sql, pair_params + extra_params + [per_page, offset])
             interactions = cursor.fetchall()
+            sentence_ids = sorted({row["sentence_id"] for row in interactions
+                                   if row.get("sentence_id") is not None})
+            texts, annotations = {}, {}
+            if sentence_ids:
+                placeholders = ",".join(["%s"] * len(sentence_ids))
+                cursor.execute(
+                    f"SELECT sentence_id, sentence FROM t_sentences WHERE sentence_id IN ({placeholders})",
+                    sentence_ids,
+                )
+                texts = {row["sentence_id"]: row["sentence"] for row in cursor.fetchall()}
+                cursor.execute(
+                    f"SELECT DISTINCT sentence_id, ino_id, matching_phrase FROM t_ino "
+                    f"WHERE sentence_id IN ({placeholders}) ORDER BY ino_id, matching_phrase",
+                    sentence_ids,
+                )
+                for row in cursor.fetchall():
+                    annotations.setdefault(row["sentence_id"], []).append({
+                        "ino_id": row["ino_id"], "matching_phrase": row["matching_phrase"],
+                    })
+            for row in interactions:
+                row["sentence_text"] = texts.get(row.get("sentence_id"))
+                row["ino_annotations"] = annotations.get(row.get("sentence_id"), [])
+                first = row["ino_annotations"][0] if row["ino_annotations"] else {}
+                row["ino_id"] = first.get("ino_id")
+                row["matching_phrase"] = first.get("matching_phrase")
 
             # Optional BioBERT prediction summary aggregate
             prediction_summary = None
